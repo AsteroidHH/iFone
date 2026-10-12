@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildMap, pack, proseHistory, ragBaseline, ragTopK, rawDump, savings } from './packer';
 import { synthGraph } from './synth';
 import { estimateTokens } from './tokens';
+import parity from '../../../backend/tests/fixtures/token_parity.json';
 
 describe('estimateTokens', () => {
   it('is zero for empty text and grows with length', () => {
@@ -11,6 +12,13 @@ describe('estimateTokens', () => {
   it('counts punctuation-heavy JSON higher than the same words as prose', () => {
     const prose = 'refund window thirty days';
     expect(estimateTokens(JSON.stringify({ refund: { window: 'thirty', days: 30 } }))).toBeGreaterThan(estimateTokens(prose));
+  });
+});
+
+describe('estimator parity with the backend', () => {
+  it('counts the same tokens as backend/app/services/context_pack.py on every shared case', () => {
+    expect(parity.length).toBeGreaterThanOrEqual(20);
+    for (const c of parity) expect(estimateTokens(c.text), c.text.slice(0, 40)).toBe(c.tokens);
   });
 });
 

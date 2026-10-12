@@ -7,7 +7,10 @@ from fastapi.responses import StreamingResponse
 from app import db
 from app.auth import get_auth_context, AuthContext
 from app.config import settings
+from app.graph.queries import get_graph_store
+from app.services import workspace as ws
 from app.services.event_bus import event_bus
+from app.services.event_scope import event_visible
 
 router = APIRouter()
 
@@ -20,6 +23,8 @@ async def sse_events(
 ):
     effective_last_id = last_event_id if last_event_id is not None else query_last_id
     buf = event_bus.get_tenant_buffer(auth.tenant)
+    store = get_graph_store(auth.tenant)
+    viewer = ws.viewer_for(store, auth.member_id)
 
     async def event_generator():
         # Flush the response headers right away so clients can tell the stream is open before the first real event.
@@ -32,6 +37,8 @@ async def sse_events(
                 yield f"event: resync_required\ndata: {{}}\n\n"
             else:
                 for ev in missed:
+                    if not event_visible(store, viewer, ev):
+                        continue
                     yield f"id: {ev.seq}\nevent: {ev.type}\ndata: {json.dumps(ev.model_dump())}\n\n"
 
         queue = buf.subscribe()
@@ -39,6 +46,8 @@ async def sse_events(
             while True:
                 try:
                     ev = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    if not event_visible(store, viewer, ev):
+                        continue
                     yield f"id: {ev.seq}\nevent: {ev.type}\ndata: {json.dumps(ev.model_dump())}\n\n"
                 except asyncio.TimeoutError:
                     if settings.PERSISTENCE == "falkordb" and not db.check_health()["up"]:

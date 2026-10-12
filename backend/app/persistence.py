@@ -12,6 +12,7 @@ that happened since the last sync. `load()` rebuilds the in-memory view from Fal
 so a restart loses nothing. The Cypher shown in the console is the Cypher that actually ran.
 """
 import hashlib
+import json
 import re
 import time
 from typing import Any, Dict, List, Optional
@@ -39,6 +40,8 @@ class Persister:
         self.edges: Dict[str, str] = {}
         self.handoffs: Dict[str, str] = {}
         self.epoch: Optional[int] = None
+        self.workspace: Optional[str] = None
+        self.calls: Dict[int, str] = {}
 
     @property
     def graph(self):
@@ -49,7 +52,7 @@ class Persister:
         res = self.graph.query(cypher, params)
         rows = len(res.result_set) if res.result_set else 0
         written = (res.nodes_created or 0) + (res.properties_set or 0) + (res.relationships_created or 0) + (res.nodes_deleted or 0)
-        self.store.log_query(name, cypher.strip().replace("\n", " "), (time.time() - t0) * 1000, rows or written, request_id)
+        self.store.log_query(name, cypher.strip().replace("\n", " "), (time.time() - t0) * 1000, rows or written, request_id, real=True)
         return res
 
     def ensure_schema(self) -> None:
@@ -59,6 +62,7 @@ class Persister:
             "CREATE INDEX FOR (n:QNode) ON (n.status)",
             "CREATE INDEX FOR (h:QHandoff) ON (h.id)",
             "CREATE INDEX FOR (m:QMeta) ON (m.id)",
+            "CREATE INDEX FOR (c:QCall) ON (c.id)",
         ):
             try:
                 g.query(stmt)
@@ -74,6 +78,8 @@ class Persister:
         edges = self.graph.query("MATCH (:QNode)-[r]->(:QNode) WHERE r.id IS NOT NULL RETURN r.json").result_set
         hands = self.graph.query("MATCH (h:QHandoff) RETURN h.json").result_set
         meta = self.graph.query("MATCH (m:QMeta {id:'meta'}) RETURN m.epoch").result_set
+        ws = self.graph.query("MATCH (w:QWorkspace {id:'ws'}) RETURN w.json").result_set
+        calls = self.graph.query("MATCH (c:QCall) RETURN c.json ORDER BY c.id").result_set
         with store._lock:
             store.nodes.clear()
             store.edges.clear()
@@ -93,7 +99,16 @@ class Persister:
             if meta and meta[0][0] is not None:
                 store.epoch = int(meta[0][0])
                 self.epoch = store.epoch
-        return bool(nodes or edges or hands or meta)
+            if ws and ws[0][0]:
+                store.workspace = json.loads(ws[0][0])
+                self.workspace = _h(ws[0][0])
+            store.calls.clear()
+            for (js,) in calls:
+                c = json.loads(js)
+                store.calls.append(c)
+                self.calls[c["id"]] = _h(js)
+            store.call_seq = max([c["id"] for c in store.calls], default=0)
+        return bool(nodes or edges or hands or meta or ws or calls)
 
     # ---------- sync ----------
     def sync(self, request_id: Optional[str] = None) -> int:
@@ -104,6 +119,8 @@ class Persister:
             cur_edges = {e.id: e.model_dump_json() for e in store.edges}
             cur_hands = {h.id: h.model_dump_json() for h in store.handoffs}
             epoch = store.epoch
+            cur_ws = json.dumps(store.workspace, sort_keys=True)
+            cur_calls = {c["id"]: json.dumps(c, sort_keys=True) for c in store.calls}
             nodes_by_id = dict(store.nodes)
             edges_by_id = {e.id: e for e in store.edges}
 
@@ -114,7 +131,10 @@ class Persister:
         up_hands = [i for i, js in cur_hands.items() if self.handoffs.get(i) != _h(js)]
         del_hands = [i for i in self.handoffs if i not in cur_hands]
         epoch_changed = self.epoch != epoch
-        if not (up_nodes or del_nodes or up_edges or del_edges or up_hands or del_hands or epoch_changed):
+        ws_changed = self.workspace != _h(cur_ws)
+        up_calls = [i for i, js in cur_calls.items() if i not in self.calls]
+        del_calls = [i for i in self.calls if i not in cur_calls]
+        if not (up_nodes or del_nodes or up_edges or del_edges or up_hands or del_hands or epoch_changed or ws_changed or up_calls or del_calls):
             return 0
 
         n_stmts = 0
@@ -179,6 +199,16 @@ class Persister:
             )
             n_stmts += 1
 
+        if ws_changed:
+            self._q("save_workspace", "MERGE (w:QWorkspace {id:'ws'}) SET w.json = $js", {"js": cur_ws}, request_id)
+            n_stmts += 1
+        if up_calls:
+            rows = [{"id": i, "ts": json.loads(cur_calls[i])["ts"], "json": cur_calls[i]} for i in up_calls]
+            self._q("append_calls", "UNWIND $rows AS row MERGE (c:QCall {id: row.id}) SET c.ts = row.ts, c.json = row.json", {"rows": rows}, request_id)
+            n_stmts += 1
+        if del_calls:
+            self._q("trim_calls", "UNWIND $ids AS id MATCH (c:QCall {id:id}) DELETE c", {"ids": del_calls}, request_id)
+            n_stmts += 1
         if epoch_changed:
             self._q("save_epoch", "MERGE (m:QMeta {id:'meta'}) SET m.epoch = $e", {"e": epoch}, request_id)
             n_stmts += 1
@@ -188,6 +218,8 @@ class Persister:
         self.edges = {i: _h(js) for i, js in cur_edges.items()}
         self.handoffs = {i: _h(js) for i, js in cur_hands.items()}
         self.epoch = epoch
+        self.workspace = _h(cur_ws)
+        self.calls = {i: _h(js) for i, js in cur_calls.items()}
         return n_stmts
 
     def wipe(self) -> None:
@@ -196,4 +228,4 @@ class Persister:
             self.graph.delete()
         except Exception:
             pass
-        self.nodes, self.edges, self.handoffs, self.epoch = {}, {}, {}, None
+        self.nodes, self.edges, self.handoffs, self.epoch, self.workspace, self.calls = {}, {}, {}, None, None, {}

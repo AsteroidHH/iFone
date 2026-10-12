@@ -5,3 +5,16 @@ Unit tests run the API logic on the in-memory view. Persistence and the FalkorDB
 import os
 
 os.environ.setdefault("QUORUM_PERSISTENCE", "memory")
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def fixture_acme():
+    """Older tests expect the demo fixtures in tenant acme. Product code never loads them; tests ask for them here."""
+    from app.graph import queries
+    from app.services.fixtures import seed_store
+
+    queries.forget_stores()
+    seed_store(queries.get_graph_store("acme"))
+    yield

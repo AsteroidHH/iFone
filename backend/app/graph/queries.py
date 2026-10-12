@@ -33,6 +33,25 @@ class GraphStore:
         self.handoffs: List[Handoff] = []
         self.handoff_lock = threading.RLock()
         self.persister = None  # set by get_graph_store when persistence is FalkorDB
+        from app.services.workspace import default_workspace
+
+        self.workspace: Dict[str, Any] = default_workspace(tenant)
+        # Every MCP tool call, newest last. Presence, the feed, chats and token savings are all derived from this.
+        self.calls: List[Dict[str, Any]] = []
+        self.call_seq = 0
+        # What each agent has already been handed, so delta() can say what changed since its last read.
+        self.agent_state: Dict[str, Dict[str, Any]] = {}
+
+    MAX_CALLS = 1000
+
+    def record_call(self, rec: Dict[str, Any]) -> Dict[str, Any]:
+        with self._lock:
+            self.call_seq += 1
+            rec = {**rec, "id": self.call_seq, "ts": int(time.time() * 1000)}
+            self.calls.append(rec)
+            if len(self.calls) > self.MAX_CALLS:
+                del self.calls[: len(self.calls) - self.MAX_CALLS]
+            return rec
 
     def add_handoff(self, handoff: Handoff) -> Handoff:
         with self.handoff_lock:
@@ -45,7 +64,10 @@ class GraphStore:
             return 0
         return self.persister.sync(request_id)
 
-    def log_query(self, name: str, cypher: str, ms: float, rows: int, request_id: Optional[str] = None):
+    def log_query(self, name: str, cypher: str, ms: float, rows: int, request_id: Optional[str] = None, real: bool = False):
+        # With FalkorDB behind the store the log shows only Cypher that actually ran (persistence passes real=True).
+        if self.persister is not None and not real:
+            return
         entry = CypherLogEntry(
             ts=int(time.time() * 1000),
             request_id=request_id,
@@ -373,12 +395,6 @@ _stores: Dict[str, GraphStore] = {}
 _stores_lock = threading.Lock()
 
 
-def _seed_handoffs(store: GraphStore) -> None:
-    from app.services.fixtures import get_fixture_handoffs
-
-    store.handoffs.extend(get_fixture_handoffs())
-
-
 def get_graph_store(tenant: str = "acme") -> GraphStore:
     with _stores_lock:
         store = _stores.get(tenant)
@@ -391,14 +407,23 @@ def get_graph_store(tenant: str = "acme") -> GraphStore:
 
             db.require_db()  # raises FalkorUnavailable: no store is created, nothing is cached
             store.persister = Persister(store)
-            existed = store.persister.load()
-            if not existed:
-                _seed_handoffs(store)
+            if not store.persister.load():
                 store.persister.sync()
-        else:
-            _seed_handoffs(store)
         _stores[tenant] = store
         return store
+
+
+def tenant_exists(tenant: str) -> bool:
+    """Whether a tenant already has a graph, without creating one. Token checks use this so a forged token cannot mint tenants."""
+    with _stores_lock:
+        if tenant in _stores:
+            return True
+    if settings.PERSISTENCE != "falkordb":
+        return False
+    from app import db
+
+    db.require_db()
+    return f"quorum:{tenant}" in db.get_client().list_graphs()
 
 
 def sync_all(request_id: Optional[str] = None) -> int:

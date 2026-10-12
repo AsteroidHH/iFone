@@ -6,7 +6,10 @@ import { useStore } from '../state/store';
 import { useLive, type Activity } from '../workspace/live';
 import { copyText } from '../workspace/clipboard';
 import { agentRules, CLIENTS, DEFAULT_MCP_URL, DEFAULT_REPO, MCP_TOOLS, setupSnippet, WHO_LABEL, type ClientId } from '../workspace/mcp';
-import { useWorkspace } from '../workspace/store';
+import { useWs } from '../workspace/useWs';
+import { getActivity } from '../workspace/server';
+import { useQuery } from '@tanstack/react-query';
+import type { McpCall } from '../api/schemas';
 
 function ago(ts: number): string {
   const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
@@ -92,7 +95,10 @@ function Status() {
 }
 
 function Setup() {
-  const members = useWorkspace((s) => s.w.members);
+  const ws = useWs();
+  const members = ws.members;
+  // Laptops on other machines connect to the workspace hub; on this machine, localhost.
+  const mcpUrl = ws.hub ? `${ws.hub.replace(/\/+$/, '')}/mcp` : DEFAULT_MCP_URL;
   const [client, setClient] = useState<ClientId>('claude-code');
   const [transport, setTransport] = useState<'http' | 'stdio'>('http');
   const [memberId, setMemberId] = useState(members[0]?.id ?? '');
@@ -100,7 +106,7 @@ function Setup() {
   const info = CLIENTS.find((c) => c.id === client)!;
   const tr = info.transport === 'http' ? 'http' : info.transport === 'stdio' ? 'stdio' : transport;
   const member = members.find((m) => m.id === memberId) ?? members[0];
-  const snip = setupSnippet({ client, transport: tr, url: DEFAULT_MCP_URL, repoPath: repo });
+  const snip = setupSnippet({ client, transport: tr, url: mcpUrl, repoPath: repo });
   return (
     <section className="card wide" aria-label="Connect your AI">
       <header className="card-h">
@@ -141,7 +147,7 @@ function Setup() {
           <CopyBlock title={snip.file} body={snip.body} lang={snip.lang} />
         </li>
         <li>
-          <b>3. Give the agent its rules and token.</b> <span className="muted">The tools take your token as an argument, so tell the agent which one.</span>
+          <b>3. Give the agent its rules and token.</b> <span className="muted">The tools take your token as an argument, so tell the agent which one. Real tokens are shown once, when a member is added; use that one in place of &lt;YOUR_TOKEN&gt;.</span>
           <label className="field inline">
             <span>Member</span>
             <select value={member?.id ?? ''} onChange={(e) => setMemberId(e.target.value)}>
@@ -152,7 +158,7 @@ function Setup() {
               ))}
             </select>
           </label>
-          {member ? <CopyBlock title="Paste into the agent's rules (CLAUDE.md, .cursorrules, system prompt)" body={agentRules(member.token, member.role)} /> : <p className="muted">Add a member on the Team page first.</p>}
+          {member ? <CopyBlock title="Paste into the agent's rules (CLAUDE.md, .cursorrules, system prompt)" body={agentRules(member.token ?? '<YOUR_TOKEN>', member.role)} /> : <p className="muted">Add a member on the Team page first.</p>}
         </li>
       </ol>
     </section>
@@ -165,7 +171,7 @@ function Tools() {
       <header className="card-h">
         <h2>Tools your agent gets</h2>
         <span className="card-sub">
-          {MCP_TOOLS.filter((t) => !t.proposed).length} live, {MCP_TOOLS.filter((t) => t.proposed).length} proposed token savers
+          {MCP_TOOLS.length} tools, {MCP_TOOLS.filter((t) => !t.writes).length} of them read-only
         </span>
       </header>
       <div className="cn-table-wrap">
@@ -235,7 +241,7 @@ function Feeds() {
   const chats = useLive((s) => s.chats);
   const presence = useLive((s) => s.presence);
   const clear = useLive((s) => s.clear);
-  const members = useWorkspace((s) => s.w.members);
+  const members = useWs().members;
   const [tab, setTab] = useState<'feed' | 'chats'>('feed');
   const [who, setWho] = useState('all');
   const [tool, setTool] = useState('all');
@@ -287,7 +293,7 @@ function Feeds() {
               <span>Tool</span>
               <select value={tool} onChange={(e) => setTool(e.target.value)}>
                 <option value="all">All tools</option>
-                {[...MCP_TOOLS.filter((t) => !t.proposed).map((t) => t.name), 'delta'].map((n) => (
+                {MCP_TOOLS.map((t) => t.name).map((n) => (
                   <option key={n} value={n}>
                     {n}
                   </option>
@@ -353,47 +359,120 @@ function Feeds() {
   );
 }
 
-const GROUPS = ['all', 'graph', 'actions', 'handoffs', 'system'] as const;
+const toRow = (c: McpCall): Activity => ({
+  id: c.id,
+  ts: c.ts,
+  memberId: c.member_id ?? '',
+  member: c.agent_id ?? 'agent',
+  tool: c.tool,
+  summary: c.ok ? c.summary : `${c.summary} (${c.error ?? 'refused'})`,
+  used: c.tokens,
+  naive: c.baseline,
+  epoch: 0,
+});
 
-/** Live mode: the real event stream from the backend, not a simulation. */
-function BackendFeed() {
-  const feed = useStore((s) => s.feed);
-  const conn = useStore((s) => s.conn);
-  const [group, setGroup] = useState<(typeof GROUPS)[number]>('all');
-  const rows = feed.filter((f) => group === 'all' || f.group === group);
+/** Live mode: every MCP call the backend recorded, plus per-member tool-call transcripts. Nothing is simulated. */
+function LiveFeed() {
+  const ws = useWs();
+  const conn = useStore((st) => st.conn);
+  const [tab, setTab] = useState<'feed' | 'chats'>('feed');
+  const [who, setWho] = useState('all');
+  const [tool, setTool] = useState('all');
+  const [chatId, setChatId] = useState('');
+  const act = useQuery({ queryKey: ['activity'], queryFn: () => getActivity(), refetchInterval: 8000 });
+  const memberId = chatId || ws.members[0]?.id || '';
+  const chat = useQuery({ queryKey: ['activity', 'member', memberId], queryFn: () => getActivity(memberId), enabled: tab === 'chats' && !!memberId, refetchInterval: 8000 });
+  const rows = (act.data ?? []).filter((c) => (who === 'all' || c.member_id === who) && (tool === 'all' || c.tool === tool));
+  const turns = [...(chat.data ?? [])].reverse();
+  const m = ws.members.find((x) => x.id === memberId);
+
   return (
     <section className="card wide cn-feeds" aria-label="Live activity from the backend">
       <header className="card-h">
-        <h2>Live feed</h2>
-        <span className="chip" title="Every event the backend streams to this console, including writes made by agents over MCP">
+        <div className="seg" role="tablist" aria-label="Activity">
+          <button role="tab" aria-selected={tab === 'feed'} className={`seg-btn${tab === 'feed' ? ' on' : ''}`} onClick={() => setTab('feed')}>
+            Live feed
+          </button>
+          <button role="tab" aria-selected={tab === 'chats'} className={`seg-btn${tab === 'chats' ? ' on' : ''}`} onClick={() => setTab('chats')}>
+            Sessions
+          </button>
+        </div>
+        <span className="chip" title="Every MCP tool call the backend served, newest first. Real, not simulated.">
           From the backend · stream {conn}
         </span>
       </header>
-      <div className="cn-filters" role="group" aria-label="Event type">
-        {GROUPS.map((g) => (
-          <button key={g} className={`cn-client${group === g ? ' on' : ''}`} aria-pressed={group === g} onClick={() => setGroup(g)}>
-            {g}
-          </button>
-        ))}
-      </div>
-      {rows.length ? (
-        <ul className="cn-list" aria-live="polite" aria-relevant="additions">
-          {rows.slice(0, 80).map((f) => (
-            <li key={f.id} className="cn-row">
-              <span className={`avatar tone-${f.tone}`}>{f.group[0]?.toUpperCase()}</span>
-              <div className="cn-row-main">
-                <p>{f.text}</p>
-                <small className="muted">{f.group} · event {f.seq}</small>
-              </div>
-              <span />
-              <time className="muted small">{ago(f.ts)}</time>
-            </li>
-          ))}
-        </ul>
+      {tab === 'feed' ? (
+        <>
+          <div className="cn-filters">
+            <label className="field inline">
+              <span>Member</span>
+              <select value={who} onChange={(e) => setWho(e.target.value)}>
+                <option value="all">Everyone</option>
+                {ws.members.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field inline">
+              <span>Tool</span>
+              <select value={tool} onChange={(e) => setTool(e.target.value)}>
+                <option value="all">All tools</option>
+                {MCP_TOOLS.filter((t) => !t.proposed).map((t) => (
+                  <option key={t.name} value={t.name}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {rows.length ? (
+            <ul className="cn-list" aria-live="polite" aria-relevant="additions">
+              {rows.slice(0, 80).map((c) => (
+                <Row key={c.id} a={toRow(c)} />
+              ))}
+            </ul>
+          ) : (
+            <p className="muted cn-empty">No tool calls yet. Connect an AI (above) and its calls appear here as they happen, with the tokens each one cost.</p>
+          )}
+        </>
       ) : (
-        <p className="muted cn-empty">Nothing yet. Writes from agents, scenario steps and handoffs appear here as they happen.</p>
+        <div className="cn-chats">
+          <ul className="cn-people" aria-label="Members">
+            {ws.members.length === 0 && <li className="muted">Add a member on the Team page.</li>}
+            {ws.members.map((x) => (
+              <li key={x.id}>
+                <button className={memberId === x.id ? 'on' : ''} onClick={() => setChatId(x.id)}>
+                  <span className={`pres ${x.status === 'unknown' ? 'offline' : x.status}`} aria-label={x.status} />
+                  <span>
+                    {x.name}
+                    <small className="muted">{CLIENTS.find((c) => c.id === x.client)?.name ?? x.client}</small>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="cn-thread" aria-label={`Tool calls by ${m?.name ?? 'nobody'}`}>
+            <p className="cn-help">Quorum sees an agent&apos;s tool calls, not the conversation around them. This is the transcript of what {m?.name ?? 'this member'}&apos;s AI asked Quorum.</p>
+            {turns.length ? (
+              turns.map((c) => (
+                <div key={c.id} className={`cn-turn ${c.ok ? 'tool' : 'user'}`}>
+                  <small className="muted">
+                    {ago(c.ts)} · {c.tool}
+                  </small>
+                  <p className="mono">{c.summary || c.tool}</p>
+                  <small className="num ok-text">
+                    {fmt(c.tokens)} tokens{c.baseline > 0 ? ` vs ${fmt(c.baseline)} (${c.baseline >= c.tokens ? '−' : '+'}${Math.abs(pct(c.baseline - c.tokens, c.baseline))}%)` : ''}
+                  </small>
+                </div>
+              ))
+            ) : (
+              <p className="muted cn-empty">No calls from {m?.name ?? 'this member'} yet.</p>
+            )}
+          </div>
+        </div>
       )}
-      <p className="cn-help">Per-agent chats and presence need the workspace service, which the backend does not have yet (docs/CONTRACT_PROPOSALS.md).</p>
     </section>
   );
 }
@@ -410,7 +489,7 @@ export function Connect() {
       </header>
       <Status />
       <Setup />
-      {API_MODE === 'mock' ? <Feeds /> : <BackendFeed />}
+      {API_MODE === 'mock' ? <Feeds /> : <LiveFeed />}
       <Tools />
     </div>
   );

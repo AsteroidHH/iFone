@@ -70,7 +70,7 @@ interface Opts {
 
 export async function api<T>(
   schema: z.ZodType<T, z.ZodTypeDef, unknown>,
-  method: 'GET' | 'POST',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   path: string,
   opts: Opts = {},
 ): Promise<T> {

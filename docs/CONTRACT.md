@@ -250,4 +250,5 @@ Error body:
 | Version | Date | Change |
 |---|---|---|
 | 0.1.0 | draft | Initial proposal |
+- Added workspace, MCP activity, token-stats and context-preview endpoints, `mcp_call` and `workspace_changed` events, four MCP tools, and `scope_team` on nodes; see `docs/CONTRACT_PROPOSALS.md` for the list and rules.
 - Added `FALKORDB_UNAVAILABLE` (503) and `GET /api/health`. `GET /graph` `seq` is now the event stream's sequence number. Optional fields may be `null`. Unknown SSE event types are tolerated and keep `seq` contiguous. `GET /bench/results` returns the last recorded `bench/results.json` run, with `engine`, and baselines' `ms_to_containment` may be `null` (not measured).

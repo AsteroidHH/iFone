@@ -348,6 +348,60 @@ export const ErrorBody = z
   })
   .passthrough();
 
+/** One MCP tool call, as the backend records it. Presence, the feed, chats and token savings are all derived from these. */
+export const McpCall = z
+  .object({
+    id: z.number(),
+    ts: Ms,
+    tool: z.string(),
+    agent_id: z.string().nullish().transform((v) => v ?? undefined),
+    member_id: z.string().nullish().transform((v) => v ?? undefined),
+    role: z.string().nullish().transform((v) => v ?? undefined),
+    summary: z.string().nullish().transform((v) => v ?? ''),
+    tokens: z.number(),
+    baseline: z.number(),
+    ms: z.number().nullish().transform((v) => v ?? 0),
+    ok: z.boolean(),
+    error: z.string().nullish().transform((v) => v ?? undefined),
+  })
+  .passthrough();
+export type McpCall = z.infer<typeof McpCall>;
+
+export const TokenStats = z
+  .object({
+    calls: z.number(),
+    measured_calls: z.number(),
+    tokens: z.number(),
+    baseline: z.number(),
+    saved: z.number(),
+    saved_pct: z.number(),
+    by_tool: z.array(z.object({ name: z.string(), calls: z.number(), tokens: z.number(), baseline: z.number(), saved: z.number() }).passthrough()),
+    by_agent: z.array(z.object({ name: z.string(), calls: z.number(), tokens: z.number(), baseline: z.number(), saved: z.number() }).passthrough()),
+    method: z.string(),
+  })
+  .passthrough();
+export type TokenStats = z.infer<typeof TokenStats>;
+
+export const ContextPreview = z
+  .object({
+    nodes: z.number(),
+    healthy: z.number(),
+    query: z.string(),
+    budget: z.number(),
+    raw_json_tokens: z.number(),
+    prose_tokens: z.number(),
+    top8_tokens: z.number(),
+    packed_tokens: z.number(),
+    map_tokens: z.number(),
+    packed: z.string(),
+    map: z.string(),
+    included: z.number(),
+    dropped: z.number(),
+    stages: z.array(z.object({ label: z.string(), tokens: z.number(), note: z.string() })),
+  })
+  .passthrough();
+export type ContextPreview = z.infer<typeof ContextPreview>;
+
 /* SSE envelope + typed events */
 const base = { seq: z.number(), ts: Ms, epoch: z.number(), request_id: z.string().nullish().transform((v) => v ?? undefined) };
 const ev = <T extends string, D extends z.ZodTypeAny>(type: T, data: D) =>
@@ -401,6 +455,8 @@ export const SseEvent = z.discriminatedUnion('type', [
   ),
   ev('resync_required', z.object({}).passthrough()),
   ev('heartbeat', z.object({}).passthrough()),
+  ev('mcp_call', z.object({ call: McpCall }).passthrough()),
+  ev('workspace_changed', z.object({}).passthrough()),
   // A sequenced event this console does not know yet. It keeps seq contiguous so one new backend event type cannot stall the stream.
   ev('unknown', z.object({ original_type: z.string() }).passthrough()),
 ]);

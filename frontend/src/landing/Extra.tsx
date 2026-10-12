@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Icon } from '../components/Icon';
+import { Measured } from '../components/Measured';
 import { buildMap, pack, savings } from '../context/packer';
 import { synthGraph } from '../context/synth';
 import { fmt, pct } from '../context/tokens';
@@ -89,6 +90,7 @@ export function Savings() {
             </p>
           </div>
         </div>
+        <Measured />
         <details className="lp-sv-peek">
           <summary>See exactly what the agent receives</summary>
           <pre className="mono">{`${r.map}\n\n${r.p.text}`}</pre>

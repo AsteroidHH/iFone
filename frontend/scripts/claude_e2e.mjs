@@ -30,11 +30,11 @@ const cfg = join(dir, 'mcp.json');
 writeFileSync(cfg, JSON.stringify({ mcpServers: { quorum: { type: 'http', url: `${API}/mcp` } } }));
 
 /** Runs one fresh Claude session. Returns its answer and the Quorum tools it called. */
-function claude(prompt) {
+function claude(prompt, retry = true) {
   const r = spawnSync(
     'claude',
     ['-p', prompt, '--mcp-config', cfg, '--strict-mcp-config', '--allowedTools', 'mcp__quorum', '--output-format', 'stream-json', '--verbose', '--max-turns', '12', '--no-session-persistence'],
-    { encoding: 'utf8', timeout: 240000, maxBuffer: 20 * 1024 * 1024 },
+    { encoding: 'utf8', timeout: 240000, maxBuffer: 20 * 1024 * 1024, cwd: dir }, // an empty folder: no project context to second-guess the task
   );
   const tools = [];
   const results = []; // what the Quorum tools actually returned to Claude
@@ -55,6 +55,8 @@ function claude(prompt) {
     }
   }
   if (r.status !== 0 && !answer) console.error((r.stderr ?? '').slice(0, 500));
+  // An AI sometimes declines a task out of caution without touching the tools. That is not Quorum's doing, so try once more.
+  if (retry && tools.length === 0) return claude(prompt, false);
   return { answer, tools, cost, results: results.join('\n') };
 }
 
@@ -143,6 +145,7 @@ const C = claude(
 );
 check('after the revert, Quorum no longer hands it over', C.tools.some((t) => t.name === 'retrieve_context') && !C.results.includes('fact_e2e_bad90'));
 check('and the answer does not repeat it', !/fact_e2e_bad90/.test(C.answer) && !/\b90\b/.test(C.answer), C.answer.replace(/\s+/g, ' ').slice(0, 140));
+console.log('   after-revert tools:', C.tools.map((t) => t.name).join(',') || '(none)');
 console.log('   after-revert answer:', C.answer.replace(/\s+/g, ' ').slice(0, 400));
 check('and the right one is', /30/.test(C.answer));
 

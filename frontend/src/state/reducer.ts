@@ -326,9 +326,16 @@ export function applyEvent(prev: CoreState, ev: SseEvent): { state: CoreState; e
     case 'resync_required':
       effects.push({ kind: 'resync' });
       break;
+    case 'workspace_changed':
     case 'heartbeat':
     case 'unknown':
       break;
+    case 'mcp_call': {
+      const c = ev.data.call;
+      const saved = c.baseline > 0 ? ` (${c.baseline - c.tokens >= 0 ? '−' : '+'}${Math.abs(Math.round(((c.baseline - c.tokens) / c.baseline) * 100))}% vs a top-8 lookup)` : '';
+      s = pushFeed(s, ev, 'system', c.ok ? 'neutral' : 'warn', `${c.agent_id ?? 'An agent'} called ${c.tool}${c.summary ? ` “${c.summary}”` : ''}: ${c.tokens} tokens${saved}`);
+      break;
+    }
   }
   return { state: s, effects };
 }

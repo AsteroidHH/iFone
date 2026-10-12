@@ -391,7 +391,7 @@ await page.locator('.tm').waitFor({ timeout: 3000 }).catch(() => {});
 check('Team page shows seat usage', /\d+ \/ \d+/.test(await text('.tm-seats')));
 await page.locator('.tm-form input[placeholder="Customer success"]').fill('Support');
 await page.locator('.tm-form').first().getByRole('button', { name: 'Add team' }).click();
-check('duplicate team name is refused with a message', (await text('.tm-err')).toLowerCase().includes('already exists'));
+check('duplicate team name is refused with a message', (await page.locator('.tm-err', { hasText: 'already exists' }).count()) === 1);
 const linksBefore = await page.locator('.tm-links li').count();
 const sels = page.locator('.tm-mesh .tm-form select');
 await sels.nth(0).selectOption({ index: 3 });

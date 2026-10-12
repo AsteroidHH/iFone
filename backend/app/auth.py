@@ -1,3 +1,4 @@
+import re
 from typing import Optional, List
 from fastapi import Header, HTTPException, status, Depends
 from pydantic import BaseModel
@@ -9,9 +10,31 @@ class AuthContext(BaseModel):
     tenant: str
     role: str  # "agent" | "auditor" | "human"
     agent_id: Optional[str] = None
+    member_id: Optional[str] = None
+    team_id: Optional[str] = None
     token: str
 
 _ROLES = ("agent", "auditor", "human")
+
+
+def _member_token(token: str) -> Optional[dict]:
+    """qrm_<tenant>_<secret>: a token issued to a workspace member. Valid only if the tenant's workspace holds its hash."""
+    parts = token.split("_")
+    if len(parts) < 3:
+        return None
+    tenant = "_".join(parts[1:-1])
+    if not re.match(r"^[a-z0-9][a-z0-9_-]{0,40}$", tenant):
+        return None
+    from app.graph.queries import get_graph_store, tenant_exists
+    from app.services import workspace
+
+    if not tenant_exists(tenant):
+        return None  # never create a tenant (and a FalkorDB graph) on behalf of an unauthenticated caller
+    store = get_graph_store(tenant)  # raises FalkorUnavailable when the database is down: the caller answers 503
+    m = workspace.find_member_by_token(store, token)
+    if not m:
+        return None
+    return {"tenant": tenant, "role": m["role"], "agent_id": m["name"], "member_id": m["id"], "team_id": m["team_id"]}
 
 
 def resolve_token(token: str) -> Optional[dict]:
@@ -26,6 +49,8 @@ def resolve_token(token: str) -> Optional[dict]:
         return None
     if token in settings.DEMO_TOKENS:
         return dict(settings.DEMO_TOKENS[token])
+    if token.startswith("qrm_"):
+        return _member_token(token)
     if not settings.dynamic_tokens_allowed():
         return None
     parts = token.split("_")
@@ -53,7 +78,7 @@ def get_auth_context(authorization: Optional[str] = Header(None)) -> AuthContext
     token = authorization.split("Bearer ", 1)[1].strip()
     info = resolve_token(token)
     if info:
-        return AuthContext(tenant=info["tenant"], role=info["role"], agent_id=info.get("agent_id"), token=token)
+        return AuthContext(tenant=info["tenant"], role=info["role"], agent_id=info.get("agent_id"), token=token, member_id=info.get("member_id"), team_id=info.get("team_id"))
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

@@ -64,6 +64,8 @@ class GraphNode(BaseModel):
     asserted_by: Optional[AssertedBy] = None
     source: Optional[SourceInfo] = None
     owner_team: Optional[str] = None
+    # Private to one team (and to teams linked to it). None means the shared commons everyone in the tenant can read.
+    scope_team: Optional[str] = None
     action: Optional[ActionInfo] = None
     correction_notice: Optional[Dict[str, Any]] = None
 

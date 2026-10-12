@@ -33,11 +33,6 @@ class StageActionRequest(BaseModel):
 def list_actions(auth: AuthContext = Depends(get_auth_context)):
     store = get_graph_store(tenant=auth.tenant)
     actions = [n for n in store.nodes.values() if n.kind == NodeKind.ACTION]
-    if not actions:
-        # Fallback to fixtures if store is fresh
-        from app.services.fixtures import get_fixture_graph
-        graph = get_fixture_graph(tenant=auth.tenant)
-        actions = [n for n in graph.nodes if n.kind == NodeKind.ACTION]
     return actions
 
 

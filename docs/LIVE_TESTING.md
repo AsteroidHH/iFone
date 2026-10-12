@@ -7,8 +7,9 @@ Everything below runs against a real FalkorDB. Nothing here uses the in-browser 
 | `python -m pytest backend/tests tests` | Backend logic, persistence in FalkorDB, the FalkorDB gate, auth hardening, the graph layer | FalkorDB. The persistence and gate tests fail loudly without it. |
 | `cd frontend && npm run verify` | Types, lint, 66 unit tests, contrast, contract, live and sample builds | nothing running |
 | `cd frontend && npm run qa` | The console on sample data (88 checks) | `npm run build:mock && npm run preview:mock` |
-| `cd frontend && npm run qa:live` | The console against the live backend with an outside MCP client acting as an agent (31 checks) | the stack below |
+| `cd frontend && npm run qa:live` | The console against the live backend: an MCP client as an agent, the 14 tools, teams, member tokens, team scope and links, presence, token savings, the feed and sessions (50 checks) | the stack below |
 | `cd frontend && node scripts/resilience.mjs [BASE] [API]` | FalkorDB stopped under a running product: lock screen, 503s, MCP refused, automatic recovery, data intact (15 checks) | the stack, Docker |
+| `cd frontend && node scripts/token_bench.mjs [API] [RUNS] [short or long]` | The measured token comparison: fresh Claude Code sessions with a typical top-8 retrieval vs Quorum's compact format. Writes `bench/token_bench_<scenario>.json`, which the Context and landing pages read. Costs a few dollars of Claude usage. | the stack, the `claude` CLI logged in |
 | `cd frontend && node scripts/claude_e2e.mjs [API] [BASE]` | Real Claude Code sessions use Quorum as shared memory: write, read from a fresh session, revert a wrong fact (17 checks). Costs a little Claude usage (about $0.70 as reported by the CLI). | the stack, the `claude` CLI logged in |
 | `python bench/run.py` | The benchmark on FalkorDB. Refuses to run without it (`--memory` runs the model and labels the results so). | FalkorDB |
 

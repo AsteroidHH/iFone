@@ -68,6 +68,10 @@ function flush() {
   let core = st;
   const effects: Effect[] = [];
   for (const ev of plan.apply) {
+    if (ev.type === 'mcp_call') {
+      for (const key of ['activity', 'token-stats', 'workspace']) void queryClient.invalidateQueries({ queryKey: [key] });
+    }
+    if (ev.type === 'workspace_changed') void queryClient.invalidateQueries({ queryKey: ['workspace'] });
     const r = applyEvent(core, ev);
     core = { ...core, ...r.state };
     effects.push(...r.effects);

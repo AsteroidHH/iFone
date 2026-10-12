@@ -267,3 +267,18 @@ def get_fixture_procedures() -> List[ProcedureItem]:
             seeded=True,
         ),
     ]
+
+
+def seed_store(store) -> None:
+    """
+    Loads the fixture graph and handoffs into a store. For tests and local experiments only: no product code path
+    calls this, so a real tenant never shows demo data.
+    """
+    g = get_fixture_graph(tenant=store.tenant)
+    with store._lock:
+        for n in g.nodes:
+            store.nodes[n.id] = n
+        store.edges.extend(g.edges)
+        store.epoch = g.epoch
+    with store.handoff_lock:
+        store.handoffs.extend(get_fixture_handoffs())

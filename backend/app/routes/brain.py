@@ -32,11 +32,6 @@ def ask_brain(
             if n.kind == NodeKind.FACT and n.status == Status.HEALTHY
         ]
 
-    if not facts:
-        from app.services.fixtures import get_fixture_graph
-        graph = get_fixture_graph(tenant=auth.tenant)
-        facts = [n for n in graph.nodes if n.kind == NodeKind.FACT and n.status == Status.HEALTHY]
-
     # Look for refund policy matching keywords
     if "refund" in q or "window" in q or "policy" in q:
         # Prioritize non-stale facts, newest valid_from

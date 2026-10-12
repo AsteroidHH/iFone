@@ -54,7 +54,7 @@ const problems = [];
 page.on('pageerror', (e) => problems.push(`pageerror ${e}`));
 page.on('console', (m) => m.type() === 'error' && !/Failed to load resource/.test(m.text()) && problems.push(`console ${m.text()}`));
 const bad = [];
-page.on('response', (r) => r.status() >= 400 && !r.url().includes('/mcp') && bad.push(`${r.status()} ${r.url().replace(BASE, '')}`));
+page.on('response', (r) => r.status() >= 400 && !r.url().includes('/mcp') && !(r.status() === 409 && r.url().includes('/api/workspace/teams')) && bad.push(`${r.status()} ${r.url().replace(BASE, '')}`));
 
 const btn = (n) => page.getByRole('button', { name: n });
 const text = (sel) => page.locator(sel).first().innerText();
@@ -74,7 +74,7 @@ await sleep(1500);
 /* ---- live mode, not sample mode ---- */
 check('no sample-data chip in live mode', (await page.locator('.pill.sample').count()) === 0);
 check('event stream connected', (await page.locator('.pill.conn.live').count()) === 1);
-check('header does not claim simulated savings in live mode', (await page.locator('.pill.saved').count()) === 0);
+check('header shows real savings, not a simulation', (await page.locator('.pill.saved').getAttribute('title'))?.includes('real read calls') === true);
 
 /* ---- Connect page: real handshake with the real server ---- */
 await page.keyboard.press('7');
@@ -88,7 +88,7 @@ check('live feed is labelled as coming from the backend, not simulated', !(await
 await rpc('initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'live-qa', version: '1' } });
 await rpc('notifications/initialized', undefined, true);
 const listed = (await rpc('tools/list', {})).result.tools.map((t) => t.name);
-check('MCP server lists the ten tools', listed.length === 10 && listed.includes('retrieve_context'), listed.join(','));
+check('MCP server lists all fourteen tools, the four token savers included', listed.length === 14 && ['get_map', 'get_node', 'find_path', 'delta'].every((n) => listed.includes(n)), listed.join(','));
 await page.keyboard.press('1');
 await sleep(500);
 await page.getByRole('button', { name: 'List view' }).click();
@@ -134,6 +134,109 @@ await sleep(1200);
 check('Actions and handoffs lists real handoffs', (await page.locator('.ledger, .handoff, .board li').count()) > 0);
 await page.getByRole('tab', { name: 'Graph' }).click();
 
+/* ---- enterprise: teams, members with real tokens, team scope, links, presence, token savings ---- */
+const run = Date.now().toString(36).slice(-5);
+const alpha = `Alpha ${run}`;
+const beta = `Beta ${run}`;
+await page.keyboard.press('8');
+await page.locator('.tm').waitFor({ timeout: 4000 });
+for (const name of [alpha, beta]) {
+  await page.locator('.tm-form input[placeholder="Customer success"]').fill(name);
+  await page.locator('.tm-form').first().getByRole('button', { name: 'Add team' }).click();
+  await sleep(500);
+}
+check('teams are created on the server and listed', (await page.locator('.tm-team', { hasText: alpha }).count()) === 1 && (await page.locator('.tm-team', { hasText: beta }).count()) === 1);
+await page.locator('.tm-form input[placeholder="Customer success"]').fill(alpha);
+await page.locator('.tm-form').first().getByRole('button', { name: 'Add team' }).click();
+await sleep(400);
+check('a duplicate team is refused by the server', (await page.locator('.tm-err', { hasText: 'already exists' }).count()) === 1);
+
+async function addMember(name, teamName, role = 'agent') {
+  const form = page.locator('.tm-form').nth(1);
+  await form.getByLabel('Name').fill(name);
+  await form.getByLabel('Team').selectOption({ label: teamName });
+  await form.getByLabel('Role').selectOption({ value: role });
+  await form.getByRole('button', { name: 'Add member' }).click();
+  await page.locator('.tm-issued code').waitFor({ timeout: 4000 });
+  const token = (await text('.tm-issued code')).trim();
+  await page.getByRole('button', { name: 'I have saved it' }).click();
+  return token;
+}
+const miraName = `Mira${run}`;
+const aishaName = `Aisha${run}`;
+const miraToken = await addMember(miraName, alpha);
+const aishaToken = await addMember(aishaName, beta);
+check('adding a member shows a real token once', miraToken.startsWith('qrm_acme_') && miraToken !== aishaToken);
+check('the token is not shown again after reload', !(await page.locator('.tm').innerText()).includes(miraToken));
+
+const memberCall = (token, name, args) => tool(name, { token, ...args });
+const teamWrite = await memberCall(miraToken, 'remember_fact', { key: 'floor', value: '40', text: `Alpha-only pricing floor ${run} is 40 percent`, id: `f_priv_${run}`, scope: 'team' });
+check('a member token writes a team-private fact', teamWrite.fact_id === `f_priv_${run}`, JSON.stringify(teamWrite).slice(0, 80));
+const seeAisha = await memberCall(aishaToken, 'retrieve_context', { query: `pricing floor ${run}`, format: 'compact' });
+check('another team cannot read it', !JSON.stringify(seeAisha).includes('40 percent'));
+const seeMira = await memberCall(miraToken, 'retrieve_context', { query: `pricing floor ${run}`, format: 'compact' });
+check('its own team can', JSON.stringify(seeMira).includes('40 percent'));
+
+const form = page.locator('.tm-mesh .tm-form');
+await form.getByLabel('From').selectOption({ label: miraName });
+await form.getByLabel('To').selectOption({ label: aishaName });
+await form.getByRole('button', { name: 'Link' }).click();
+await sleep(600);
+const linked = await memberCall(aishaToken, 'retrieve_context', { query: `pricing floor ${run}`, format: 'compact' });
+check('linking the two members shares the team fact across laptops', JSON.stringify(linked).includes('40 percent'));
+await page.locator('.tm-links li').first().getByRole('button', { name: 'Pause' }).click();
+await sleep(600);
+check('pausing the link ends access at once', !JSON.stringify(await memberCall(aishaToken, 'retrieve_context', { query: `pricing floor ${run}`, format: 'compact' })).includes('40 percent'));
+await page.locator('.tm-links li').first().getByRole('button', { name: 'Unlink' }).click();
+await sleep(400);
+
+// Token savings need something to save: a few dozen facts, then compact reads against them.
+for (let i = 0; i < 40; i++) {
+  await tool('remember_fact', { key: `refund_${i}`, value: String(10 + i), text: `Ticket ${1000 + i} says the refund window for region R${i % 5} is ${10 + i} days, confirmed by email.`, token: 'token_agent_scout', id: `f_sav_${run}_${i}` });
+}
+for (let i = 0; i < 3; i++) await tool('retrieve_context', { query: 'refund window days', token: 'token_agent_scout', format: 'compact', budget_tokens: 250 });
+await sleep(1500);
+const stats = await fetch(`${API}/api/token-stats`, { headers: human }).then((r) => r.json());
+check('the backend measured real savings on those reads', stats.saved > 0 && stats.measured_calls >= 3, `${stats.saved} tokens, ${stats.saved_pct}% fewer than a top-8 retriever`);
+const full = await tool('retrieve_context', { query: 'refund window days', token: 'token_agent_scout', k: 8 });
+const compact = await tool('retrieve_context', { query: 'refund window days', token: 'token_agent_scout', format: 'compact', budget_tokens: 250 });
+check('compact format costs under 60% of the full format for the same question', compact.tokens < full.tokens * 0.6, `${compact.tokens} vs ${full.tokens} tokens`);
+const mp = await tool('get_map', { token: 'token_agent_scout' });
+check('get_map is a small index', mp.map.includes('## areas') && mp.tokens < 300 && mp.tokens < mp.tokens_baseline / 4, `${mp.tokens} tokens vs ${mp.tokens_baseline} to paste the graph`);
+const nd = await tool('get_node', { id: 'F1', token: 'token_agent_scout' });
+check('get_node answers by short id', nd.success === true && nd.text.length > 0);
+await tool('retrieve_context', { query: 'refund window days', token: 'token_agent_scout', format: 'compact' });
+await fetch(`${API}/api/scenario/reset`, { method: 'POST', headers: human });
+await sleep(1200);
+const dl = await tool('delta', { token: 'token_agent_scout' });
+check('delta tells an agent what stopped being true', dl.invalidated.length > 0, dl.text.split('\n').slice(0, 2).join(' | '));
+
+await page.keyboard.press('8');
+await sleep(1500);
+const row = page.locator('.tm-table tbody tr', { hasText: miraName });
+check('presence comes from real calls', /online|idle/.test(await row.innerText()), (await row.innerText()).replace(/\s+/g, ' ').slice(0, 90));
+check('per-member call counts are real', Number((await row.locator('td').nth(3).innerText()).replace(/[^0-9]/g, '')) >= 2);
+await page.keyboard.press('7');
+await sleep(1500);
+check('the Connect feed lists real tool calls with their tokens', (await page.locator('.cn-row').count()) >= 3 && /tokens|tok/.test(await text('.cn-list')));
+await page.getByRole('tab', { name: 'Sessions' }).click();
+await page.locator('.cn-people button', { hasText: miraName }).click();
+await sleep(1200);
+check("a member's session shows their tool calls", (await page.locator('.cn-turn').count()) >= 2);
+await page.keyboard.press('6');
+await sleep(2000);
+check('the Context page shows the backend numbers', /\d+/.test(await text('.ctx-pct')) && Number((await text('.ctx-session .ctx-pct')).replace(/\D/g, '')) > 0);
+
+// leave the workspace as we found it
+for (const m of (await fetch(`${API}/api/workspace`, { headers: human }).then((r) => r.json())).members.filter((x) => x.name.endsWith(run))) {
+  await fetch(`${API}/api/workspace/members/${m.id}`, { method: 'DELETE', headers: human });
+}
+for (const tm of (await fetch(`${API}/api/workspace`, { headers: human }).then((r) => r.json())).teams.filter((x) => x.name.endsWith(run))) {
+  await fetch(`${API}/api/workspace/teams/${tm.id}`, { method: 'DELETE', headers: human });
+}
+await page.keyboard.press('1');
+await sleep(500);
+
 /* ---- the other views, on real data ---- */
 await page.keyboard.press('2');
 await sleep(1500);
@@ -155,7 +258,7 @@ await sleep(1500);
 check('Context page works on the live graph', /\d+/.test(await text('.ctx-pct')));
 await page.keyboard.press('8');
 await sleep(800);
-check('Team page renders', (await page.locator('.tm-table tbody tr').count()) > 0);
+check('Team page renders', (await page.locator('.tm-org').count()) === 1);
 
 /* ---- health ---- */
 await page.getByText('Dev console').click();

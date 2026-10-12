@@ -1,6 +1,9 @@
 import { useDeferredValue, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { getContextPreview, getTokenStats } from '../workspace/server';
 import { API_MODE } from '../api/client';
 import { Icon } from '../components/Icon';
+import { Measured } from '../components/Measured';
 import { MindMap } from '../components/MindMap';
 import { useCountUp } from '../components/ui';
 import { buildMap, pack, savings } from '../context/packer';
@@ -57,15 +60,37 @@ export function Context() {
   const live = useMemo(() => ({ nodes: Object.values(nodesMap), edges: Object.values(edgesMap) }), [nodesMap, edgesMap]);
   const graph = useMemo(() => (source === 'live' ? live : synthGraph(Number(source))), [source, live]);
 
-  const packed = useMemo(() => pack(graph, { query: dq, budget }), [graph, dq, budget]);
-  const mapText = useMemo(() => buildMap(graph, { tenant, epoch }), [graph, tenant, epoch]);
-  const sv = useMemo(() => savings(graph, packed, { tenant, epoch }, dq), [graph, packed, tenant, epoch, dq]);
+  const packedLocal = useMemo(() => pack(graph, { query: dq, budget }), [graph, dq, budget]);
+  const mapLocal = useMemo(() => buildMap(graph, { tenant, epoch }), [graph, tenant, epoch]);
+  const svLocal = useMemo(() => savings(graph, packedLocal, { tenant, epoch }, dq), [graph, packedLocal, tenant, epoch, dq]);
+
+  // Live graph on a live backend: show what the backend computes, with the same code the agents call.
+  const server = API_MODE === 'live' && source === 'live';
+  const preview = useQuery({ queryKey: ['ctx-preview', dq, budget], queryFn: () => getContextPreview(dq, budget), enabled: server, refetchInterval: 15_000 });
+  const stats = useQuery({ queryKey: ['token-stats'], queryFn: getTokenStats, enabled: API_MODE === 'live', refetchInterval: 10_000 });
+  const p = server ? preview.data : undefined;
+  const packed = p
+    ? ({ text: p.packed, tokens: p.packed_tokens, included: new Array<string>(p.included).fill(''), dropped: p.dropped, truncated: p.dropped > 0, delta: null, stages: p.stages } as typeof packedLocal)
+    : packedLocal;
+  const mapText = p ? p.map : mapLocal;
+  const sv = p
+    ? {
+        rawTokens: p.raw_json_tokens,
+        proseTokens: p.prose_tokens,
+        ragTokens: p.top8_tokens,
+        vsRag: p.top8_tokens - p.packed_tokens,
+        packedTokens: p.packed_tokens,
+        mapTokens: p.map_tokens,
+        vsRaw: p.raw_json_tokens - p.packed_tokens - p.map_tokens,
+        vsProse: p.prose_tokens - p.packed_tokens - p.map_tokens,
+      }
+    : svLocal;
 
   const sentTokens = sv.packedTokens + sv.mapTokens;
   const cut = pct(sv.ragTokens - sentTokens, sv.ragTokens);
   const shown = useCountUp(cut);
   const max = Math.max(sv.rawTokens, sv.proseTokens, 1);
-  const saved = API_MODE === 'mock' ? Math.max(0, totals.naive - totals.used) : 0;
+  const saved = API_MODE === 'mock' ? Math.max(0, totals.naive - totals.used) : (stats.data?.saved ?? 0);
 
   const copy = (text: string, what: string) => {
     void copyText(text).then((ok) => pushToast(ok ? `${what} copied` : 'Copy was blocked by the browser', ok ? 'good' : 'warn'));
@@ -139,10 +164,16 @@ export function Context() {
           {API_MODE === 'mock' ? (
             <p className="muted">tokens saved across {fmt(totals.calls)} tool calls in the live feed. Counted per call against a typical top-8 RAG lookup, so it is the conservative number.</p>
           ) : (
-            <p className="muted">Per-call token counts need the backend to report them (docs/CONTRACT_PROPOSALS.md). The sizes above are computed from the live graph.</p>
+            <p className="muted">
+              tokens not sent, measured on {fmt(stats.data?.measured_calls ?? 0)} real read calls ({stats.data?.saved_pct ?? 0}% fewer than a typical top-8 retriever would have sent for the same calls). Calls that used the full format count against it.
+            </p>
           )}
         </section>
       </div>
+
+      <section className="card wide" aria-label="Measured with a real AI">
+        <Measured />
+      </section>
 
       <section className="card wide" aria-label="Where the savings come from">
         <header className="card-h">

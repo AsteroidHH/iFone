@@ -18,6 +18,10 @@ TOOLS = (
     "restore",
     "explain_blast_radius",
     "review_handoff",
+    "get_map",
+    "get_node",
+    "find_path",
+    "delta",
 )
 
 

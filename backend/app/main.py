@@ -40,6 +40,8 @@ from app.routes import (
     brain,
     system,
     health,
+    workspace as workspace_routes,
+    mcp_info,
 )
 
 _mcp_app = None
@@ -185,6 +187,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 api_prefix = settings.API_PREFIX
 
 app.include_router(health.router, prefix=api_prefix, tags=["Health"])
+app.include_router(workspace_routes.router, prefix=api_prefix, tags=["Workspace"])
+app.include_router(mcp_info.router, prefix=api_prefix, tags=["MCP"])
 app.include_router(meta.router, prefix=api_prefix, tags=["Meta"])
 app.include_router(graph.router, prefix=api_prefix, tags=["Graph"])
 app.include_router(events.router, prefix=api_prefix, tags=["Events"])

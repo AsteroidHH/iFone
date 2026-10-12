@@ -1,3 +1,4 @@
+import json
 import os
 import time
 import uuid
@@ -21,6 +22,8 @@ from app.services.auditor import auditor_service
 from app.config import settings
 from app.auth import resolve_token
 from app.services.event_bus import event_bus
+from app.services import context_pack as cp, workspace
+from app.services.context_pack import estimate_tokens
 
 
 def _emit(tenant: str, nodes: List[GraphNode] = (), edges: List[GraphEdge] = ()) -> None:
@@ -42,12 +45,52 @@ def _get_auth(token: str) -> Dict[str, Any]:
     return info
 
 
+def _summary(tool: str, bound: Dict[str, Any]) -> str:
+    for key in ("query", "id", "ref", "root_id", "key", "text", "label", "from_id"):
+        v = bound.get(key)
+        if isinstance(v, str) and v:
+            if tool == "find_path":
+                return f"{bound.get('from_id')} to {bound.get('to_id')}"
+            return v if len(v) <= 70 else v[:69] + "…"
+    return ""
+
+
+def _record(tool: str, bound: Dict[str, Any], out: Any, ms: float) -> None:
+    """Every tool call becomes a row: who, what, how many tokens it cost, and what a typical retriever would have sent."""
+    token = bound.get("token")
+    info = resolve_token(token) if isinstance(token, str) else None
+    if not info:
+        return
+    store = get_graph_store(info["tenant"])
+    ok = not (isinstance(out, dict) and out.get("success") is False)
+    tokens = out.get("tokens") if isinstance(out, dict) and isinstance(out.get("tokens"), int) else estimate_tokens(json.dumps(out, default=str))
+    baseline = out.get("tokens_baseline", 0) if isinstance(out, dict) and isinstance(out.get("tokens_baseline"), int) else 0
+    rec = store.record_call(
+        {
+            "tool": tool,
+            "agent_id": info.get("agent_id"),
+            "member_id": info.get("member_id"),
+            "role": info["role"],
+            "summary": _summary(tool, bound),
+            "tokens": tokens,
+            "baseline": baseline,
+            "ms": round(ms, 1),
+            "ok": ok,
+            "error": (out.get("error") if isinstance(out, dict) and not ok else None),
+        }
+    )
+    event_bus.publish(info["tenant"], "mcp_call", {"call": rec})
+
+
 def guarded(fn):
     """
-    Wraps an MCP tool: refuses to run without FalkorDB, turns a bad token into a clear error, and persists the
-    tool's writes before returning. The signature is preserved so MCP can still describe the tool.
+    Wraps an MCP tool: refuses to run without FalkorDB, turns a bad token into a clear error, records the call, and
+    persists the tool's writes before returning. The signature is preserved so MCP can still describe the tool.
     """
     import functools
+    import inspect
+
+    sig = inspect.signature(fn)
 
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
@@ -63,7 +106,13 @@ def guarded(fn):
                     from app.graph.queries import forget_stores
 
                     forget_stores()
+            t0 = time.time()
             out = fn(*args, **kwargs)
+            try:
+                bound = dict(sig.bind(*args, **kwargs).arguments)
+                _record(fn.__name__, bound, out, (time.time() - t0) * 1000)
+            except AuthError:
+                pass
             if settings.PERSISTENCE == "falkordb":
                 sync_all()
             return out
@@ -75,6 +124,10 @@ def guarded(fn):
     return wrapper
 
 
+def _viewer(auth: Dict[str, Any], store):
+    return workspace.viewer_for(store, auth.get("member_id"))
+
+
 def remember_fact(
     key: str,
     value: str,
@@ -83,13 +136,21 @@ def remember_fact(
     id: Optional[str] = None,
     quote: Optional[str] = None,
     origin: Optional[str] = None,
+    scope: str = "commons",
 ) -> Dict[str, Any]:
-    """Stores an episodic/semantic Fact node into the commons causal graph."""
+    """Stores a Fact. scope="commons" (default) is readable by everyone in the tenant; scope="team" only by your team and teams linked to it."""
     auth = _get_auth(token)
     store = get_graph_store(auth["tenant"])
     fact_id = id or f"fact_{uuid.uuid4().hex[:6]}"
 
     tier_val = Tier.ROOT if "root" in auth.get("agent_id", "") else Tier.NEW
+    scope_team = None
+    if scope == "team":
+        if not auth.get("team_id"):
+            return {"error": "scope=team needs a member token that belongs to a team.", "success": False}
+        scope_team = auth["team_id"]
+    elif scope != "commons":
+        return {"error": "scope must be commons or team.", "success": False}
 
     fact = GraphNode(
         id=fact_id,
@@ -102,6 +163,7 @@ def remember_fact(
         text=text,
         quote=quote,
         origin=origin or f"agent:{auth.get('agent_id', 'unknown')}",
+        scope_team=scope_team,
         asserted_by=AssertedBy(
             id=auth.get("agent_id", "agent_scout"),
             name=auth.get("agent_id", "Agent"),
@@ -134,9 +196,11 @@ def derive(
     auth = _get_auth(token)
     store = get_graph_store(auth["tenant"])
 
+    viewer = _viewer(auth, store)
+
     # Atomic derivation check
     with store._lock:
-        parents = [store.nodes.get(pid) for pid in parent_ids if store.nodes.get(pid)]
+        parents = [store.nodes.get(pid) for pid in parent_ids if store.nodes.get(pid) and viewer.can_see(store.nodes.get(pid))]
         if len(parents) != len(parent_ids) or any(p.status != Status.HEALTHY for p in parents):
             return {
                 "epoch": store.epoch,
@@ -154,6 +218,7 @@ def derive(
             stale=False,
             text=text,
             owner_team=owner_team,
+            scope_team=next((p.scope_team for p in parents if p.scope_team), None),
         )
         store.add_node(conc)
 
@@ -177,34 +242,143 @@ def derive(
         }
 
 
-def retrieve_context(query: str, token: str, k: int = 5) -> Dict[str, Any]:
-    """Retrieves healthy, unsuperseded context from the causal graph."""
+def _agent_key(auth: Dict[str, Any]) -> str:
+    return auth.get("member_id") or auth.get("agent_id") or "agent"
+
+
+def _remember_delivery(store, auth: Dict[str, Any], ids: List[str], query: Optional[str] = None) -> None:
+    with store._lock:
+        st = store.agent_state.setdefault(_agent_key(auth), {"ids": set(), "query": "", "epoch": store.epoch})
+        st["ids"].update(ids)
+        st["epoch"] = store.epoch
+        if query is not None:
+            st["query"] = query
+
+
+def retrieve_context(
+    query: str,
+    token: str,
+    k: int = 5,
+    format: str = "full",
+    budget_tokens: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Healthy, unsuperseded, in-scope context for a question, best match first.
+    format="full" returns the matching facts as JSON (the default, for existing callers).
+    format="compact" returns one line per node with short ids and the ancestors that prove each one, within
+    budget_tokens (default 400). It costs a fraction of the tokens: prefer it, and cite the ids it gives you.
+    Every response carries `tokens` (its size) and `tokens_baseline` (what a typical top-8 retriever would have sent).
+    """
     auth = _get_auth(token)
     store = get_graph_store(auth["tenant"])
+    viewer = _viewer(auth, store)
 
-    # Healthy-only context
-    healthy_facts = [
-        n for n in store.nodes.values()
-        if n.kind == NodeKind.FACT and n.status == Status.HEALTHY and not n.stale
+    if format == "compact":
+        p = cp.pack(store, query, budget=max(60, int(budget_tokens or 400)), viewer=viewer)
+        _remember_delivery(store, auth, p["ids"], query)
+        out = {
+            "epoch": store.epoch,
+            "format": "compact",
+            "count": len(p["ids"]),
+            "matched": p["matched"],
+            "truncated": p["truncated"],
+            "packed": p["text"],
+            "ids": p["short_ids"],
+        }
+        out["tokens"] = estimate_tokens(json.dumps(out))
+        out["tokens_baseline"] = p["tokens_baseline"]
+        return out
+
+    with store._lock:
+        nodes = [n for n in store.nodes.values() if viewer.can_see(n)]
+    qw = set(cp._words(query))
+    candidates = [n for n in nodes if n.kind == NodeKind.FACT and n.status == Status.HEALTHY and not n.stale]
+    idf = cp.idf_weights(candidates)
+    ranked = sorted(((n, cp._relevance(n, qw, idf)) for n in candidates), key=lambda x: -x[1])
+    matched = [
+        {
+            "id": f.id,
+            "key": f.key,
+            "value": f.value,
+            "text": f.text,
+            "quote": f.quote,
+            "asserted_by": f.asserted_by.model_dump() if f.asserted_by else None,
+        }
+        for f, score in ranked
+        if score > 0
     ]
+    out = {"epoch": store.epoch, "count": len(matched), "context": matched[: max(1, k)]}
+    _remember_delivery(store, auth, [m["id"] for m in out["context"]], query)
+    out["tokens"] = estimate_tokens(json.dumps(out))
+    out["tokens_baseline"] = cp.baseline_tokens(nodes, query)
+    return out
 
-    matched = []
-    q_lower = query.lower()
-    for f in healthy_facts:
-        if any(w in (f.text or "").lower() or w in (f.key or "").lower() for w in q_lower.split()):
-            matched.append({
-                "id": f.id,
-                "key": f.key,
-                "value": f.value,
-                "text": f.text,
-                "quote": f.quote,
-                "asserted_by": f.asserted_by.model_dump() if f.asserted_by else None,
-            })
 
+def get_map(token: str) -> Dict[str, Any]:
+    """A small index of the shared memory: areas, hubs and how to ask. Read it once per session instead of loading the graph."""
+    auth = _get_auth(token)
+    store = get_graph_store(auth["tenant"])
+    m = cp.build_map(store, _viewer(auth, store))
+    return {"epoch": m["epoch"], "map": m["text"], "tokens": m["tokens"], "tokens_baseline": m["tokens_baseline"]}
+
+
+def get_node(id: str, token: str) -> Dict[str, Any]:
+    """One node, its parents and its children, by short id (F3, C2) or full id. A few lines instead of a document."""
+    auth = _get_auth(token)
+    store = get_graph_store(auth["tenant"])
+    v = cp.node_view(store, id, _viewer(auth, store))
+    if v.get("success"):
+        _remember_delivery(store, auth, [v["id"]])
+    return v
+
+
+def find_path(from_id: str, to_id: str, token: str) -> Dict[str, Any]:
+    """The shortest causal chain between two nodes: provenance without the whole subgraph."""
+    auth = _get_auth(token)
+    store = get_graph_store(auth["tenant"])
+    return cp.find_path(store, from_id, to_id, _viewer(auth, store))
+
+
+def delta(token: str) -> Dict[str, Any]:
+    """
+    What changed since you last read: facts you were given that are no longer valid (drop them), and new matches for
+    your last question. Call it when the epoch in any response changes, instead of re-reading everything.
+    """
+    auth = _get_auth(token)
+    store = get_graph_store(auth["tenant"])
+    viewer = _viewer(auth, store)
+    with store._lock:
+        st = store.agent_state.get(_agent_key(auth))
+        delivered = set(st["ids"]) if st else set()
+        last_query = st["query"] if st else ""
+    if not st:
+        text = "nothing read yet: call retrieve_context first"
+        return {"epoch": store.epoch, "text": text, "invalidated": [], "tokens": estimate_tokens(text), "tokens_baseline": 0}
+    with store._lock:
+        nodes = {n.id: n for n in store.nodes.values()}
+    ids = cp.short_ids(nodes.values())
+    gone: List[str] = []
+    for i in sorted(delivered):
+        n = nodes.get(i)
+        if n is None or not viewer.can_see(n) or n.status != Status.HEALTHY or n.stale:
+            why = "removed" if n is None else (n.status.value.lower() if n.status != Status.HEALTHY else "stale")
+            gone.append(f"✗ {ids.get(i, i)} no longer valid ({why})")
+    still = {i for i in delivered if i in nodes and nodes[i].status == Status.HEALTHY and not nodes[i].stale and viewer.can_see(nodes[i])}
+    p = cp.pack(store, last_query, budget=300, viewer=viewer, have_ids=still)
+    body = [f"# delta · epoch {store.epoch}"] + gone + ([l for l in p["text"].split("\n")[1:]] if p["ids"] else [])
+    if len(body) == 1:
+        body.append("no changes")
+    text = "\n".join(body)
+    _remember_delivery(store, auth, p["ids"])
+    with store._lock:
+        store.agent_state[_agent_key(auth)]["ids"] = still | set(p["ids"])
     return {
         "epoch": store.epoch,
-        "count": len(matched),
-        "context": matched[:k],
+        "text": text,
+        "invalidated": [g.split(" ")[1] for g in gone],
+        "new": p["short_ids"],
+        "tokens": estimate_tokens(text),
+        "tokens_baseline": p["tokens_baseline"],
     }
 
 
@@ -224,9 +398,11 @@ def stage_action(
 
     rev_enum = getattr(Reversibility, reversibility.upper(), Reversibility.COMPENSABLE)
 
+    viewer = _viewer(auth, store)
+
     # 1. Atomic derivation check
     with store._lock:
-        parents = [store.nodes.get(pid) for pid in parent_ids if store.nodes.get(pid)]
+        parents = [store.nodes.get(pid) for pid in parent_ids if store.nodes.get(pid) and viewer.can_see(store.nodes.get(pid))]
         if len(parents) != len(parent_ids) or any(p.status != Status.HEALTHY for p in parents):
             return {
                 "epoch": store.epoch,
@@ -241,6 +417,7 @@ def stage_action(
             label=label[:60],
             status=Status.HEALTHY,
             stale=False,
+            scope_team=next((p.scope_team for p in parents if p.scope_team), None),
             action=ActionInfo(
                 type=action_type,
                 reversibility=rev_enum,

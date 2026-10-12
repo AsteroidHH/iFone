@@ -35,6 +35,14 @@ claude mcp add --transport http quorum http://localhost:8000/mcp
 
 Every tool takes your token as the `token` argument. Give the agent its rules from the Connect page so it passes the right one.
 
+## 4. Teams, members and tokens
+
+Open **Team** in the console (you need a `human` token). Add a team, then add a member to it: you get that person's token **once** (`qrm_<tenant>_<secret>`); only its hash is stored, and rotating or removing the member invalidates it. They paste it into their AI's rules (the Connect page generates the text) and connect their own laptop to the same backend URL.
+
+- Plans set the seat and team limits; teams set their own seats. The server enforces both.
+- A fact saved with `scope="team"` is private to that team. **Link** two members and each sees the other's team facts, from any laptop and any AI; pause or unlink and access ends at once.
+- Presence, call counts and "tokens saved" per member come from their real MCP calls.
+
 ## What happens when FalkorDB goes away
 
 | Moment | What you see |
@@ -51,7 +59,7 @@ Every tool takes your token as the `token` argument. Give the agent its rules fr
 | `QUORUM_FALKORDB_URL` | `redis://localhost:6379` | Where FalkorDB is. `FALKORDB_HOST` and `FALKORDB_PORT` are also read. |
 | `QUORUM_EMBED_MCP` | off | Serve MCP from the API process at `/mcp` so agents and the console share one graph. Needs `mcp>=2`. |
 | `QUORUM_ENV` | `development` | `production` turns off the built-in demo tokens and ad-hoc tokens. |
-| `QUORUM_TOKENS_JSON` | empty | `{"<token>": {"tenant": "acme", "role": "agent", "agent_id": "scout"}}`. The only tokens accepted in production. |
+| `QUORUM_TOKENS_JSON` | empty | `{"<token>": {"tenant": "acme", "role": "agent", "agent_id": "scout"}}`. With member tokens issued from the Team page, the only tokens accepted in production. |
 | `QUORUM_ALLOW_DYNAMIC_TOKENS` | on outside production | Accept ad-hoc `token_<tenant>_<role>` tokens. Anyone can forge these, so keep it off in production. |
 | `QUORUM_CORS_ORIGINS` | localhost only | Comma separated origins allowed to call the API from a browser. |
 | `QUORUM_PERSISTENCE` | `falkordb` | `memory` exists for unit tests only and shows a warning banner. Never use it for real work. |

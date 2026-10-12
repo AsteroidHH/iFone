@@ -3,10 +3,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.auth import get_auth_context, AuthContext
 from app.models.graph import GraphResponse, NodeDetailResponse, StatusHistoryEntry
 from app.models.common import ErrorCode, Status
-from app.services.fixtures import get_fixture_graph
 
 from app.graph.queries import get_graph_store
 from app.config import settings
+from app.services import workspace as ws
 from app.services.event_bus import event_bus
 import time
 
@@ -16,15 +16,14 @@ router = APIRouter()
 @router.get("/graph", response_model=GraphResponse)
 def get_graph(as_of: Optional[int] = None, auth: AuthContext = Depends(get_auth_context)):
     store = get_graph_store(tenant=auth.tenant)
-    if not store.nodes:
-        return get_fixture_graph(tenant=auth.tenant, as_of=as_of)
-
     now_ms = int(time.time() * 1000)
     if as_of is not None:
         nodes = store.get_as_of(as_of)
     else:
         nodes = list(store.nodes.values())
 
+    viewer = ws.viewer_for(store, auth.member_id)
+    nodes = [n for n in nodes if viewer.can_see(n)]
     node_ids = {n.id for n in nodes}
     edges = [e for e in store.edges if e.source in node_ids and e.target in node_ids]
 
@@ -45,18 +44,15 @@ def get_graph(as_of: Optional[int] = None, auth: AuthContext = Depends(get_auth_
 @router.get("/node/{node_id}", response_model=NodeDetailResponse)
 def get_node(node_id: str, auth: AuthContext = Depends(get_auth_context)):
     store = get_graph_store(tenant=auth.tenant)
+    viewer = ws.viewer_for(store, auth.member_id)
+    target = None
     with store._lock:
-        if node_id in store.nodes:
-            target = store.nodes[node_id]
+        cand = store.nodes.get(node_id)
+        if cand is not None and viewer.can_see(cand):
+            target = cand
             edges = list(store.edges)
-            all_nodes = dict(store.nodes)
+            all_nodes = {i: n for i, n in store.nodes.items() if viewer.can_see(n)}
             base_ts = target.valid_from or int(time.time() * 1000)
-        else:
-            graph = get_fixture_graph(tenant=auth.tenant)
-            target = next((n for n in graph.nodes if n.id == node_id), None)
-            edges = graph.edges
-            all_nodes = {n.id: n for n in graph.nodes}
-            base_ts = graph.generated_at
 
     if not target:
         raise HTTPException(

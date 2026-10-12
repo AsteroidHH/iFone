@@ -6,7 +6,7 @@
 export function estimateTokens(text: string): number {
   if (!text) return 0;
   let tokens = 0;
-  const re = /[A-Za-z0-9À-ɏ]+|\s+|[^\sA-Za-z0-9À-ɏ]/g;
+  const re = /[A-Za-z0-9À-ɏ]+|\s+|[^\sA-Za-z0-9À-ɏ]/gu; // u: an emoji is one symbol, as in Python
   for (const m of text.matchAll(re)) {
     const s = m[0];
     if (/^\s+$/.test(s)) {

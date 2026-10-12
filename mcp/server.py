@@ -23,6 +23,10 @@ mcp_server.tool()(mcp_tools.guarded(mcp_tools.quarantine))
 mcp_server.tool()(mcp_tools.guarded(mcp_tools.restore))
 mcp_server.tool()(mcp_tools.guarded(mcp_tools.explain_blast_radius))
 mcp_server.tool()(mcp_tools.guarded(mcp_tools.review_handoff))
+mcp_server.tool()(mcp_tools.guarded(mcp_tools.get_map))
+mcp_server.tool()(mcp_tools.guarded(mcp_tools.get_node))
+mcp_server.tool()(mcp_tools.guarded(mcp_tools.find_path))
+mcp_server.tool()(mcp_tools.guarded(mcp_tools.delta))
 
 
 def main():

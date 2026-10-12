@@ -233,7 +233,8 @@ def test_cypher_log_and_denied_demo(client):
     """
     headers = {"Authorization": "Bearer token_auditor"}
 
-    # Cypher log
+    # Cypher log (a write first, so there is something to log)
+    assert client.post("/api/scenario/reset", headers=headers).status_code == 200
     res_log = client.get("/api/cypher-log", headers=headers)
     assert res_log.status_code == 200
     log_items = res_log.json()

@@ -11,6 +11,7 @@ import { rememberFocus } from './focus';
 import { Icon } from './Icon';
 import { Skeleton } from './ui';
 import { fmt } from '../context/tokens';
+import { getTokenStats } from '../workspace/server';
 import { useLive } from '../workspace/live';
 
 const VIEWS: { id: View; icon: string }[] = [
@@ -28,9 +29,15 @@ function SavedPill() {
   const naive = useLive((s) => s.totals.naive);
   const used = useLive((s) => s.totals.used);
   const set = useStore((s) => s.set);
-  const saved = Math.max(0, naive - used);
+  const loaded = useStore((s) => s.loaded);
+  const stats = useQuery({ queryKey: ['token-stats'], queryFn: getTokenStats, enabled: API_MODE === 'live' && loaded, refetchInterval: 10_000 });
+  const saved = API_MODE === 'live' ? (stats.data?.saved ?? 0) : Math.max(0, naive - used);
+  const title =
+    API_MODE === 'live'
+      ? `Tokens not sent to agents, measured on ${stats.data?.measured_calls ?? 0} real read calls against a typical top-8 retriever. Open Context for the breakdown.`
+      : 'Estimated tokens not sent to agents in this session (simulated). Open Context for the breakdown.';
   return (
-    <button className="pill saved" onClick={() => set({ view: 'context' })} title="Estimated tokens not sent to agents in this session. Open Context for the breakdown.">
+    <button className="pill saved" onClick={() => set({ view: 'context' })} title={title}>
       <Icon name="sparkle" size={13} />
       <span className="num">{fmt(saved)}</span> <span className="saved-w">saved</span>
     </button>
@@ -141,7 +148,7 @@ export function Header() {
         <span className={`pill mode ${mode}`} title={copy.modeHint[mode] ?? ''}>
           {copy.mode[mode] ?? mode}
         </span>
-        {API_MODE === 'mock' && <SavedPill />}
+        <SavedPill />
         <EpochBadge />
         <InvariantLight />
         <span className={`pill conn ${conn}`} role="status">
