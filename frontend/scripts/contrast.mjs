@@ -2,7 +2,9 @@
 // Translucent tints (--ok-dim etc.) are composited over the surface they sit on.
 import { readFileSync } from 'node:fs';
 
-const css = readFileSync(new URL('../src/styles/tokens.css', import.meta.url), 'utf8');
+const css =
+  readFileSync(new URL('../src/styles/tokens.css', import.meta.url), 'utf8') +
+  readFileSync(new URL('../src/landing/landing.css', import.meta.url), 'utf8');
 const hex = Object.fromEntries([...css.matchAll(/--([a-z0-9-]+):\s*(#[0-9a-f]{6})/gi)].map((m) => [m[1], m[2]]));
 const rgba = Object.fromEntries(
   [...css.matchAll(/--([a-z0-9-]+):\s*rgb\((\d+) (\d+) (\d+) \/ (\d+)%\)/gi)].map((m) => [m[1], [+m[2], +m[3], +m[4], +m[5] / 100]]),
@@ -50,6 +52,22 @@ const pairs = [
   ['ok', '#0e2423', null, 3, 'healthy node ring'],
   ['bad', '#2b1614', null, 3, 'quarantined node ring'],
   ['ghost', 'bg-2', null, 3, 'superseded ring'],
+  // landing page (light stock, dark product window)
+  ['lp-ink', 'lp-bg', null, 4.5, 'landing body text'],
+  ['lp-ink2', 'lp-bg', null, 4.5, 'landing secondary text'],
+  ['lp-ink2', 'lp-bg2', null, 4.5, 'landing hover and band text'],
+  ['lp-ink2', '#ffffff', null, 4.5, 'landing text on white cards'],
+  ['lp-teal', 'lp-bg', null, 4.5, 'landing accent text'],
+  ['lp-teal', 'lp-tealwash', null, 4.5, 'landing check mark'],
+  ['#ffffff', 'lp-ink', null, 4.5, 'landing dark pill'],
+  ['lp-ink', 'lp-redfill', null, 4.5, 'landing red pill'],
+  ['#8c2112', 'lp-redwash', null, 4.5, 'landing quarantined node'],
+  ['lp-text', 'lp-dark', null, 4.5, 'landing dark band text'],
+  ['lp-text2', 'lp-dark', null, 4.5, 'landing dark band secondary text'],
+  ['lp-mint', 'lp-dark', null, 4.5, 'landing dark band accent'],
+  ['lp-text2', 'lp-dark2', null, 4.5, 'landing window footer'],
+  ['#ffb7aa', '#2b1614', null, 4.5, 'landing quarantined label in dark graph'],
+  ['lp-ink', 'lp-tealwash', null, 4.5, 'landing playground node'],
 ];
 hex.badText = '#ffb7aa';
 

@@ -1,6 +1,6 @@
 # Quorum Formal Verification & Proof Pack (`docs/PROOF.md`)
 
-**Generated:** 2026-10-12 08:53:20 UTC  
+**Generated:** 2026-10-12 08:57:09 UTC  
 **Commit/Branch:** `p2-backend-agents` (Milestone 5 Full-Stack Integration)  
 **Authors:** Team Quorum (Person 1: Janani, Person 2: Aaditya, Person 3: Hamza)
 
@@ -34,10 +34,10 @@ Quorum provides cryptographic and causal **Git revert for agent beliefs**:
 ### 3.1 30-Agent High Concurrency (70% Reads, 30% Writes)
 - **Concurrent Workers:** 30 threads
 - **Total Operations:** 1200
-- **Throughput:** **37692.0 ops/sec**
+- **Throughput:** **33965.4 ops/sec**
 - **p50 Latency:** 0.02 ms
-- **p95 Latency:** 0.05 ms
-- **p99 Latency:** 0.11 ms
+- **p95 Latency:** 0.06 ms
+- **p99 Latency:** 0.09 ms
 - **Zero Orphans Invariant:** `PASSED` (0 healthy nodes under quarantined parents)
 
 ### 3.2 Handoff Claim Race (100 Handoffs x 30 Concurrent Claimers)
@@ -49,8 +49,8 @@ Quorum provides cryptographic and causal **Git revert for agent beliefs**:
 
 ### 3.3 Atomic Execute Guard Hammer (50 Actions Racing with Quarantine)
 - **Total Actions Staged:** 50
-- **Actions Executed Before Quarantine:** 0
-- **Actions Refused After Quarantine:** 50
+- **Actions Executed Before Quarantine:** 2
+- **Actions Refused After Quarantine:** 48
 - **Actions Executed with Quarantined Ancestor:** **0 (Invariant Violations: 0)**
 - **Race Invariant Passed:** `PASSED`
 

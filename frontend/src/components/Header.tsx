@@ -5,6 +5,7 @@ import { copy } from '../copy';
 import { getInvariants } from '../state/endpoints';
 import { switchTenant } from '../state/pipeline';
 import { useStore, type View } from '../state/store';
+import { go } from '../landing/hooks';
 import { Icon } from './Icon';
 import { Skeleton } from './ui';
 
@@ -84,12 +85,12 @@ export function Header() {
 
   return (
     <header className="header">
-      <div className="brand">
+      <button className="brand" onClick={() => go('landing')} aria-label="Quorum home" title="Back to the landing page">
         <span className="brand-mark">
           <Icon name="logo" size={20} />
         </span>
         <span className="brand-name">{copy.appName}</span>
-      </div>
+      </button>
       <nav aria-label={copy.header.menu} className="nav">
         {VIEWS.map((v) => (
           <button key={v.id} className={`navbtn${view === v.id ? ' on' : ''}`} aria-current={view === v.id ? 'page' : undefined} onClick={() => set({ view: v.id })}>

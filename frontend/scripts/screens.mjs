@@ -23,7 +23,7 @@ const shot = async (name) => {
 const click = (name) => page.getByRole('button', { name, exact: false }).first().click();
 const wait = (ms) => page.waitForTimeout(ms);
 
-await page.goto(base);
+await page.goto(base.replace(/\/?$/, '/') + '#/app');
 await page.waitForSelector('.cy canvas', { timeout: 15000 });
 await wait(800);
 await shot('01-seed');

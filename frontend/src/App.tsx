@@ -4,7 +4,10 @@ import { Header } from './components/Header';
 import { Banners, DevConsole, LoadError, Shortcuts, Toasts, VersionBlock } from './components/Overlays';
 import { graphBus } from './graph/bus';
 import { queryClient } from './state/queries';
-import { startSession } from './state/pipeline';
+import { startSession, stopSession } from './state/pipeline';
+import { startAutopilot } from './state/autopilot';
+import { Landing } from './landing/Landing';
+import { useRoute } from './landing/hooks';
 import { useStore } from './state/store';
 import { Benchmark } from './views/Benchmark';
 import { Brain } from './views/Brain';
@@ -54,14 +57,44 @@ function useShortcuts() {
 }
 
 export function App() {
+  const route = useRoute();
   const view = useStore((s) => s.view);
   const vs = useStore((s) => s.versionState);
   const presentation = useStore((s) => s.presentation);
   const demo = useStore((s) => s.demo);
+  const loaded = useStore((s) => s.loaded);
   useShortcuts();
+
   useEffect(() => {
-    void startSession();
-  }, []);
+    document.body.classList.toggle('on-landing', route === 'landing');
+  }, [route]);
+
+  useEffect(() => {
+    if (route === 'app') void startSession();
+    else stopSession();
+  }, [route]);
+
+  useEffect(() => {
+    if (route !== 'app' || !loaded) return;
+    let want = false;
+    try {
+      want = sessionStorage.getItem('quorum:autoplay') === '1';
+    } catch {
+      /* storage can be unavailable */
+    }
+    if (!want) return;
+    const t = setTimeout(() => {
+      try {
+        sessionStorage.removeItem('quorum:autoplay');
+      } catch {
+        /* ignore */
+      }
+      void startAutopilot();
+    }, 900);
+    return () => clearTimeout(t);
+  }, [route, loaded]);
+
+  if (route === 'landing') return <Landing />;
 
   return (
     <QueryClientProvider client={queryClient}>
