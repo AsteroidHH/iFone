@@ -37,6 +37,7 @@ class ActionInfo(BaseModel):
     confirmed: bool = False
     gate: GateStatus
     procedure_id: Optional[str] = None
+    idempotency_key: Optional[str] = None
     compensation: Optional[CompensationInfo] = None
 
 
