@@ -7,47 +7,78 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - falkordb_data:/data
+      - falkordb_data:/var/lib/falkordb/data
       - ./scripts/users.acl:/etc/redis/users.acl:ro
-    command: ["falkordb", "--aclfile", "/etc/redis/users.acl", "--save", "60", "1"]
+    command: ["--loadmodule", "/usr/lib/redis/modules/falkordb.so", "--aclfile", "/etc/redis/users.acl", "--save", "60", "1"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
+    restart: unless-stopped
 
-  mock_helpdesk:
+  falkordb-browser:
+    image: falkordb/falkordb-browser:latest
+    container_name: quorum-falkordb-browser
+    ports:
+      - "8080:8080"
+    environment:
+      - FALKORDB_HOST=falkordb
+      - FALKORDB_PORT=6379
+    depends_on:
+      falkordb:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mock-helpdesk:
     build:
       context: ./mock_helpdesk
       dockerfile: Dockerfile
     container_name: quorum-mock-helpdesk
     ports:
-      - "8001:8001"
+      - "8002:8002"
     environment:
-      - PORT=8001
+      - PORT=8002
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
       interval: 5s
       timeout: 3s
       retries: 5
+    restart: unless-stopped
 
   backend:
+    # Build context is repo root so COPY graph/ graph/ works (P1 integration)
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: quorum-backend
     ports:
       - "8000:8000"
     environment:
       - FALKORDB_HOST=falkordb
       - FALKORDB_PORT=6379
-      - MOCK_HELPDESK_URL=http://mock_helpdesk:8001
-      - PORT=8000
+      - HELPDESK_URL=http://mock-helpdesk:8002
+      - MCP_SERVER_URL=http://mcp-server:8001
+      - QUORUM_MODE=live
     depends_on:
       falkordb:
         condition: service_healthy
-      mock_helpdesk:
+      mock-helpdesk:
         condition: service_healthy
+    restart: unless-stopped
+
+  mcp-server:
+    build:
+      context: .
+      dockerfile: mcp/Dockerfile
+    container_name: quorum-mcp-server
+    ports:
+      - "8001:8001"
+    environment:
+      - API_URL=http://backend:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
 
   frontend:
     build:
@@ -55,11 +86,12 @@ services:
       dockerfile: Dockerfile
     container_name: quorum-frontend
     ports:
-      - "5173:5173"
+      - "3000:5173"
     environment:
       - VITE_API_URL=http://localhost:8000
     depends_on:
       - backend
+    restart: unless-stopped
 
 volumes:
   falkordb_data:
