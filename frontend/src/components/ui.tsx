@@ -62,14 +62,11 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
 }
 
 export function useCountUp(target: number, ms = 700): number {
+  const reduce = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   const [v, setV] = useState(0);
   const from = useRef(0);
   useEffect(() => {
-    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduce) {
-      setV(target);
-      return;
-    }
+    if (reduce) return;
     const start = performance.now();
     const a = from.current;
     let raf = 0;
@@ -82,8 +79,8 @@ export function useCountUp(target: number, ms = 700): number {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [target, ms]);
-  return Math.round(v);
+  }, [target, ms, reduce]);
+  return reduce ? Math.round(target) : Math.round(v);
 }
 
 export function fmtTime(ts: number): string {

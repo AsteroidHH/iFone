@@ -212,7 +212,6 @@ def seed_acme_commons(tenant_id: str = "acme"):
     })
     CREATE (dec)-[:LEADS_TO]->(act)
     """)
-
     print(f"[Seed] Successfully seeded Acme Commons graph for tenant '{tenant_id}'!")
 
 

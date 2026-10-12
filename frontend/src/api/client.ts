@@ -15,12 +15,26 @@ interface RuntimeConfig {
 let config: RuntimeConfig = { tokens: {}, tenants: [] };
 export const session = { tenant: 'acme', role: 'human' as Role };
 
+/** Throwaway tokens for the in-browser sample backend. They grant nothing anywhere else. */
+const MOCK_CONFIG: RuntimeConfig = {
+  tokens: {
+    acme: { human: 'mock-acme-human', auditor: 'mock-acme-auditor', agent: 'mock-acme-agent' },
+    globex: { human: 'mock-globex-human', auditor: 'mock-globex-auditor', agent: 'mock-globex-agent' },
+  },
+  tenants: ['acme', 'globex'],
+};
+
 export async function loadConfig(): Promise<RuntimeConfig> {
-  try {
-    const res = await fetch('/config.json', { cache: 'no-store' });
-    if (res.ok) config = (await res.json()) as RuntimeConfig;
-  } catch {
-    devLog('warn', 'Could not read /config.json; no tokens available.', true);
+  if (API_MODE === 'mock') {
+    config = MOCK_CONFIG;
+  } else {
+    try {
+      const res = await fetch('/config.json', { cache: 'no-store' });
+      if (res.ok) config = (await res.json()) as RuntimeConfig;
+      else devLog('warn', 'No /config.json found. Copy public/config.example.json and add tokens.', true);
+    } catch {
+      devLog('warn', 'Could not read /config.json; no tokens available.', true);
+    }
   }
   if (config.tenants.length === 0) config.tenants = Object.keys(config.tokens);
   const first = config.tenants[0];

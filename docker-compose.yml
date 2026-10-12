@@ -3,6 +3,7 @@ version: '3.8'
 services:
   falkordb:
     image: falkordb/falkordb:latest
+    container_name: quorum-falkordb
     ports:
       - "6379:6379"
     volumes:
@@ -63,8 +64,9 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    container_name: quorum-frontend
     ports:
-      - "3000:5173"
+      - "5173:5173"
     environment:
       - VITE_API_URL=http://localhost:8000
     depends_on:

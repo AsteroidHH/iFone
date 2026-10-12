@@ -1418,3 +1418,66 @@ body.on-landing {
   background: #f3f5f2;
   color-scheme: light;
 }
+
+/* ============ motion layer ============ */
+/* liquid cursor: ink blobs fused by a goo filter */
+.lq { position: fixed; inset: 0; z-index: 90; pointer-events: none; opacity: 0; transition: opacity 0.3s; }
+.lq.live { opacity: 1; }
+.lq-goo { position: absolute; inset: 0; filter: url(#lq-goo); mix-blend-mode: multiply; }
+.lq-dot { position: absolute; left: 0; top: 0; width: 34px; height: 34px; border-radius: 50%; background: #3ddbb0; will-change: transform; }
+.lq-on .lp, .lq-on .lp button, .lq-on .lp a { cursor: none; }
+@media (hover: none), (pointer: coarse), (prefers-reduced-motion: reduce) { .lq { display: none; } }
+
+/* scroll progress + section rail */
+.lp-progress { position: fixed; inset: 0 0 auto 0; height: 3px; z-index: 80; background: transparent; }
+.lp-progress i { display: block; height: 100%; background: var(--lp-ink, #0b1218); transform-origin: 0 50%; transform: scaleX(var(--sp, 0)); }
+.lp-rail { position: fixed; right: 14px; top: 50%; transform: translateY(-50%); z-index: 70; display: flex; flex-direction: column; gap: 4px; }
+.lp-rail button { all: unset; cursor: pointer; display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 5px 4px; }
+.lp-rail button i { width: 9px; height: 9px; border: 1.5px solid var(--lp-ink, #0b1218); background: #fff; transition: transform 0.25s, background 0.25s; }
+.lp-rail button.on i { background: #3ddbb0; transform: scale(1.35) rotate(45deg); }
+.lp-rail-t { font-size: 11px; background: var(--lp-ink, #0b1218); color: #fff; padding: 2px 7px; opacity: 0; transform: translateX(6px); transition: 0.2s; pointer-events: none; }
+.lp-rail button:hover .lp-rail-t, .lp-rail button:focus-visible .lp-rail-t { opacity: 1; transform: none; }
+.lp-rail button:focus-visible { outline: 2px solid #3b3fd1; outline-offset: 2px; }
+@media (max-width: 900px) { .lp-rail { display: none; } }
+
+/* hero backdrop + parallax shapes */
+.lp-hero { position: relative; }
+.lp-net { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; opacity: 0.55; }
+.lp-hero > *:not(.lp-net):not(.lp-float) { position: relative; z-index: 1; }
+.lp-float { position: absolute; z-index: 0; pointer-events: none; }
+.lp-float.h1 { right: 24%; top: 14%; } .lp-float.h2 { right: 8%; top: 30%; } .lp-float.h3 { right: 6%; top: 58%; }
+.lp-cta { position: relative; overflow: hidden; }
+.lp-float.f1 { left: 8%; top: 14%; } .lp-float.f2 { right: 10%; top: 22%; } .lp-float.f3 { right: 22%; bottom: 14%; }
+.lp-shape { display: block; border: 2px solid var(--lp-ink, #0b1218); }
+.lp-shape.sq { width: 54px; height: 54px; background: #ff6a55; box-shadow: 5px 5px 0 var(--lp-ink, #0b1218); transform: rotate(12deg); }
+.lp-shape.ci { width: 66px; height: 66px; border-radius: 50%; background: #3ddbb0; box-shadow: 5px 5px 0 var(--lp-ink, #0b1218); }
+.lp-shape.tr { width: 0; height: 0; border: 0; border-left: 28px solid transparent; border-right: 28px solid transparent; border-bottom: 50px solid #b8bcff; filter: drop-shadow(3px 3px 0 var(--lp-ink, #0b1218)); }
+.lp-cta > *:not(.lp-float) { position: relative; z-index: 1; }
+
+/* word-by-word reveal */
+.split .split-w { display: inline-block; margin-right: 0.26em; overflow: hidden; vertical-align: top; padding-bottom: 0.12em; margin-bottom: -0.12em; }
+.split .split-i { display: inline-block; transform: translateY(110%) rotate(4deg); transition: transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.split.on .split-i { transform: none; }
+
+/* card tilt */
+.tilt { transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); transition: transform 0.2s ease-out; position: relative; }
+.tilt-glare { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.25s; background: radial-gradient(240px circle at var(--gx, 50%) var(--gy, 50%), rgba(255, 255, 255, 0.35), transparent 60%); }
+.tilt:hover .tilt-glare { opacity: 1; }
+
+/* marquee speeds up with scroll velocity */
+.lp-marquee-track { transform: translateX(calc(var(--vel, 0) * -1px)); }
+
+/* latency chart (real recorded numbers) */
+.lp-chart { margin: 48px 0 0; max-width: 620px; }
+.lp-chart svg { width: 100%; height: auto; overflow: visible; }
+.lp-chart .grid { stroke: rgba(255, 255, 255, 0.16); stroke-dasharray: 3 4; }
+.lp-chart .tick, .lp-chart .lab, .lp-chart .val { font: 12px 'JetBrains Mono', monospace; fill: #cfd6d3; }
+.lp-chart .val { fill: #fff; opacity: 0; transition: opacity 0.4s; }
+.lp-chart .bar { fill: #3ddbb0; stroke: #fff; stroke-width: 1.5; transform-box: fill-box; transform-origin: 0 50%; transform: scaleX(0); transition: transform 1s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.lp-chart.in .bar { transform: scaleX(1); }
+.lp-chart.in .val { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .split .split-i, .lp-chart .bar, .lp-chart .val { transition: none; transform: none; opacity: 1; }
+  .tilt, .lp-marquee-track { transform: none; }
+}

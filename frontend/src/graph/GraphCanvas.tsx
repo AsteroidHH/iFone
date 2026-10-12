@@ -194,6 +194,7 @@ export function GraphCanvas({ active }: { active: boolean }) {
   const [dryShown, setDryShown] = useState<typeof dry>(undefined);
   useEffect(() => {
     if (hover && dry && dry.node_ids.length > 1 && !asOf) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- mirrors a query result so it can linger after hover ends
       setDryShown(dry);
       return;
     }
@@ -202,11 +203,8 @@ export function GraphCanvas({ active }: { active: boolean }) {
   }, [hover, dry, asOf]);
 
   // The welcome strip goes away on first interaction, not on a timer.
-  useEffect(() => {
-    if (selectedId) setWelcomeGone(true);
-  }, [selectedId]);
-
-  const showWelcome = !started && !welcomeGone && !asOf && nodeCount > 0;
+  const hasSelected = useStore((s) => s.navStack.length > 0);
+  const showWelcome = !started && !welcomeGone && !hasSelected && !asOf && nodeCount > 0;
   const showMini = useStore((s) => s.showMini);
 
   // One status line at a time, in priority order, so overlays never stack on the graph.

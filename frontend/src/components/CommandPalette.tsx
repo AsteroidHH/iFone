@@ -43,6 +43,10 @@ const KIND_ICON: Record<string, string> = { source: 'doc', fact: 'fact', conclus
 
 export function CommandPalette() {
   const open = useStore((s) => s.paletteOpen);
+  return open ? <PaletteBody /> : null;
+}
+
+function PaletteBody() {
   const nodes = useStore((s) => s.nodes);
   const autopilot = useStore((s) => s.autopilot);
   const asOf = useStore((s) => s.asOf);
@@ -52,13 +56,6 @@ export function CommandPalette() {
   const [idx, setIdx] = useState(0);
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLUListElement>(null);
-
-  useEffect(() => {
-    if (!open) {
-      setQ('');
-      setIdx(0);
-    }
-  }, [open]);
 
   const items = useMemo<Item[]>(() => {
     const st = useStore.getState;
@@ -144,16 +141,11 @@ export function CommandPalette() {
     return sorted.slice(0, 40).map((r) => r.it);
   }, [items, q]);
 
-  useEffect(() => {
-    if (!open) return;
-    return () => restoreFocus();
-  }, [open]);
-  useEffect(() => setIdx(0), [q]);
+  useEffect(() => () => restoreFocus(), []);
   useEffect(() => {
     list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
   }, [idx]);
 
-  if (!open) return null;
   const close = () => set({ paletteOpen: false });
   const run = (it: Item | undefined) => {
     if (!it) return;
@@ -161,7 +153,6 @@ export function CommandPalette() {
     setTimeout(it.run, 0);
   };
 
-  let lastGroup = '';
   return (
     <div className="palette-back" onMouseDown={close}>
       <div
@@ -195,7 +186,10 @@ export function CommandPalette() {
             ref={input}
             autoFocus
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setIdx(0);
+            }}
             placeholder={tools.palette.placeholder}
             aria-label={tools.palette.placeholder}
             aria-controls="palette-list"
@@ -208,8 +202,7 @@ export function CommandPalette() {
         <ul className="palette-list" id="palette-list" role="listbox" ref={list}>
           {results.length === 0 && <li className="palette-empty">{tools.palette.empty}</li>}
           {results.map((it, i) => {
-            const head = it.group !== lastGroup;
-            lastGroup = it.group;
+            const head = i === 0 || results[i - 1]?.group !== it.group;
             return (
               <li key={it.id} role="presentation">
                 {head && <p className="palette-group">{tools.palette.groups[it.group]}</p>}

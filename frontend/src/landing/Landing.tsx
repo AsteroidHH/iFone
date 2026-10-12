@@ -1,10 +1,30 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Icon } from '../components/Icon';
 import { landing as L } from '../copy/landing';
-import { go, prefersReduced, scrollToId, useInView } from './hooks';
+import { go, prefersReduced, scrollToId } from './hooks';
 import { LandingGraph, useCascade, type Cascade } from './LandingGraph';
 import { Loader, useLoaderNeeded } from './Loader';
-import { Cta, Defense, Footer, Gallery, Playground, Proof, Tracks } from './Sections';
+import { prefetchConsole, prefetchOnIdle } from './prefetch';
+import { LazyMount, ScrollChrome, useMagnetic } from './fx/Chrome';
+import { LiquidCursor } from './fx/LiquidCursor';
+import { NetworkCanvas } from './fx/NetworkCanvas';
+import { Parallax } from './fx/Parallax';
+import { SplitText } from './fx/SplitText';
+
+const Below = lazy(() => import('./Below'));
+const BelowFooter = lazy(() => import('./Below').then((m) => ({ default: m.BelowFooter })));
+const BELOW = 'lp:below';
+
+function jump(id: string) {
+  window.dispatchEvent(new Event(BELOW));
+  let tries = 0;
+  const t = setInterval(() => {
+    if (document.getElementById(id) || ++tries > 30) {
+      clearInterval(t);
+      scrollToId(id);
+    }
+  }, 60);
+}
 
 function Nav() {
   const [scrolled, setScrolled] = useState(false);
@@ -24,12 +44,12 @@ function Nav() {
       </button>
       <nav className="lp-links" aria-label="Sections">
         {L.nav.links.map(([id, label]) => (
-          <button key={id} onClick={() => scrollToId(id)}>
+          <button key={id} onClick={() => jump(id)}>
             {label}
           </button>
         ))}
       </nav>
-      <button className="lp-pill dark" onClick={() => go('app')}>
+      <button className="lp-pill dark" onClick={() => go('app')} onPointerEnter={prefetchConsole} onFocus={prefetchConsole}>
         {L.nav.cta}
         <Icon name="conclusion" size={16} />
       </button>
@@ -38,13 +58,14 @@ function Nav() {
 }
 
 function useHeroLoop(c: Cascade) {
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(() => (prefersReduced() ? 2 : 0));
   const cRef = useRef(c);
-  cRef.current = c;
+  useEffect(() => {
+    cRef.current = c;
+  });
   useEffect(() => {
     if (prefersReduced()) {
       cRef.current.quarantine('f2');
-      setStep(2);
       return;
     }
     let alive = true;
@@ -69,6 +90,25 @@ function useHeroLoop(c: Cascade) {
   return step;
 }
 
+function HeroWords({ words }: { words: [string, boolean][] }) {
+  let i = 0;
+  return (
+    <>
+      {words.flatMap(([t, ghost], k) =>
+        t === '\n'
+          ? [<br key={`br${k}`} />]
+          : t.split(' ').map((w) => (
+              <span key={`${k}-${w}-${i}`} className={`split-w${ghost ? ' ghost' : ''}`} aria-hidden="true">
+                <span className="split-i" style={{ transitionDelay: `${180 + i++ * 70}ms` }}>
+                  {w}
+                </span>{' '}
+              </span>
+            )),
+      )}
+    </>
+  );
+}
+
 function Hero() {
   const cascade = useCascade();
   const step = useHeroLoop(cascade);
@@ -76,27 +116,32 @@ function Hero() {
   const { held, rolled, rolling, cancelled } = cascade.stats;
   return (
     <section className="lp-hero" id="top">
+      <NetworkCanvas />
+      <Parallax speed={0.1} className="lp-float h1" innerClassName="lp-shape ci" />
+      <Parallax speed={-0.12} className="lp-float h2" innerClassName="lp-shape sq" />
+      <Parallax speed={0.16} className="lp-float h3" innerClassName="lp-shape tr" />
       <p className="lp-eyebrow">
         <span className="lp-dot" aria-hidden="true" />
         {L.hero.eyebrow}
       </p>
-      <h1 className="lp-h1">
-        <span>{L.hero.before}</span> <span className="ghost">{L.hero.ghost}</span>
-        <br />
-        <span>{L.hero.after}</span>
-      </h1>
+      <Parallax speed={0.05}>
+        <h1 className="lp-h1 split on" aria-label={`${L.hero.before} ${L.hero.ghost} ${L.hero.after}`}>
+          <HeroWords words={[[L.hero.before, false], [L.hero.ghost, true], ['\n', false], [L.hero.after, false]]} />
+        </h1>
+      </Parallax>
       <p className="lp-lede">{L.hero.sub}</p>
       <div className="lp-cta-row">
-        <button className="lp-pill dark xl" onClick={() => go('app')}>
+        <button className="lp-pill dark xl" onClick={() => go('app')} onPointerEnter={prefetchConsole} onFocus={prefetchConsole}>
           {L.hero.primary}
           <Icon name="conclusion" size={18} />
         </button>
-        <button className="lp-pill ghost xl" onClick={() => go('app', true)}>
+        <button className="lp-pill ghost xl" onClick={() => go('app', true)} onPointerEnter={prefetchConsole} onFocus={prefetchConsole}>
           <Icon name="play" size={15} />
           {L.hero.secondary}
         </button>
       </div>
 
+      <Parallax speed={-0.04}>
       <div className="lp-window" role="img" aria-label={L.hero.windowLabel}>
         <div className="lp-window-bar">
           <i />
@@ -124,6 +169,7 @@ function Hero() {
           <span className="grow">No later retrieval returns them.</span>
         </div>
       </div>
+      </Parallax>
     </section>
   );
 }
@@ -147,7 +193,6 @@ function Marquee() {
 function Problem() {
   const [active, setActive] = useState(0);
   const rows = useRef<(HTMLLIElement | null)[]>([]);
-  const [ref, seen] = useInView<HTMLDivElement>(0.1);
 
   useEffect(() => {
     if (typeof IntersectionObserver === 'undefined') return;
@@ -181,9 +226,7 @@ function Problem() {
         <p className="lp-tag">
           <span>[{L.problem.tag}]</span> {L.problem.kicker}
         </p>
-        <h2 className={`lp-h2 reveal${seen ? ' in' : ''}`} ref={ref}>
-          {L.problem.title}
-        </h2>
+        <SplitText text={L.problem.title} className="lp-h2" />
       </div>
       <div className="lp-problem-grid">
         <ol className="lp-spy">
@@ -208,6 +251,8 @@ function Problem() {
 export function Landing({ onEnter }: { onEnter?: () => void }) {
   const [loading, setLoading] = useState(useLoaderNeeded());
   void onEnter;
+  useMagnetic();
+  useEffect(() => prefetchOnIdle(), []);
   return (
     <div className="lp">
       <a className="lp-skip" href="#lp-main" onClick={(e) => (e.preventDefault(), scrollToId('lp-main'))}>
@@ -220,19 +265,24 @@ export function Landing({ onEnter }: { onEnter?: () => void }) {
         <i className="crop bl" />
         <i className="crop br" />
       </div>
+      <LiquidCursor />
+      <ScrollChrome sections={L.nav.links as [string, string][]} />
       <Nav />
       <main id="lp-main">
         <Hero />
         <Marquee />
         <Problem />
-        <Playground />
-        <Defense />
-        <Gallery />
-        <Proof />
-        <Tracks />
-        <Cta />
+        <LazyMount event={BELOW} minHeight={2400}>
+          <Suspense fallback={<div style={{ minHeight: 2400 }} aria-hidden="true" />}>
+            <Below />
+          </Suspense>
+        </LazyMount>
       </main>
-      <Footer />
+      <LazyMount event={BELOW} minHeight={420}>
+        <Suspense fallback={<div style={{ minHeight: 420 }} aria-hidden="true" />}>
+          <BelowFooter />
+        </Suspense>
+      </LazyMount>
     </div>
   );
 }

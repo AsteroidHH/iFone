@@ -3,6 +3,9 @@ import { Icon } from '../components/Icon';
 import { landing as L } from '../copy/landing';
 import { go, prefersReduced, useCounter, useInView } from './hooks';
 import { LandingGraph, useCascade } from './LandingGraph';
+import { LatencyChart } from './fx/LatencyChart';
+import { Parallax } from './fx/Parallax';
+import { SplitText } from './fx/SplitText';
 
 function Head({ tag, kicker, title, sub, dark = false }: { tag: string; kicker: string; title: string; sub?: string; dark?: boolean }) {
   const [ref, seen] = useInView<HTMLDivElement>(0.2);
@@ -11,10 +14,12 @@ function Head({ tag, kicker, title, sub, dark = false }: { tag: string; kicker: 
       <p className="lp-tag">
         <span>[{tag}]</span> {kicker}
       </p>
-      <div ref={ref} className={`reveal${seen ? ' in' : ''}`}>
-        <h2 className="lp-h2">{title}</h2>
-        {sub && <p className="lp-sub">{sub}</p>}
-      </div>
+      <SplitText text={title} className="lp-h2" />
+      {sub && (
+        <div ref={ref} className={`reveal${seen ? ' in' : ''}`}>
+          <p className="lp-sub">{sub}</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -254,6 +259,7 @@ export function Proof() {
           <Stat key={it.l} v={it.v} u={it.u} l={it.l} d={'d' in it ? it.d : 0} run={seen} />
         ))}
       </div>
+      <LatencyChart />
       <p className="lp-note">{L.proof.note}</p>
     </section>
   );
@@ -293,6 +299,9 @@ export function Cta() {
   const [ref, seen] = useInView<HTMLDivElement>(0.3);
   return (
     <section className="lp-cta" id="start">
+      <Parallax speed={-0.14} className="lp-float f1" innerClassName="lp-shape sq" />
+      <Parallax speed={0.2} className="lp-float f2" innerClassName="lp-shape ci" />
+      <Parallax speed={-0.08} className="lp-float f3" innerClassName="lp-shape tr" />
       <div ref={ref} className={`reveal${seen ? ' in' : ''}`}>
         <h2 className="lp-giant">{L.cta.title}</h2>
         <p className="lp-lede">{L.cta.sub}</p>
