@@ -11,7 +11,7 @@ import { useStore } from '../state/store';
 import { Chip, Empty, ErrorState, Skeleton } from './ui';
 
 function useNow(ms = 500) {
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), ms);
     return () => clearInterval(t);

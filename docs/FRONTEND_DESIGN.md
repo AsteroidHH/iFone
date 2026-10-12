@@ -1,6 +1,6 @@
 # Console design
 
-Direction: a print proof room, shared with the landing page. Cool off-white stock, ink black outlines, hard offset shadows on the pieces that matter, crop marks at the viewport corners, Bricolage Grotesque for headings, Silkscreen pixel numerals for anything countable, JetBrains Mono for labels and ids. State colours are signals only: mint for healthy, red for quarantined, amber for out of date, periwinkle for "a person decides".
+Direction: a print proof room, shared with the landing page. Cool off-white stock, ink black outlines, hard offset shadows on the pieces that matter (the corner crop marks stay on the landing page only, so nothing frames or collides with console controls), Bricolage Grotesque for headings, Silkscreen pixel numerals for anything countable, JetBrains Mono for labels and ids. State colours are signals only: mint for healthy, red for quarantined, amber for out of date, periwinkle for "a person decides".
 
 History of the direction: the first console was a light ledger, then a dark "incident command room". The owner asked for the console to look like the landing page, so the console now uses the same system. The role names in `src/styles/tokens.css` did not change, only their values, which is why one stylesheet pass (`proof-room.css`) restyled every view.
 
@@ -61,7 +61,8 @@ Everything that floats follows one set of rules (`src/styles/layers.css`, `src/c
 | Dialogs | The palette and shortcuts dialog trap Tab and give focus back to where it was; the context menu focuses its first item and supports arrow keys |
 | Toasts | At most three, identical messages are counted not stacked, lifetime scales with length (problems stay longer), the timer pauses while the pointer or focus is on a toast, and they sit above the measured height of the timeline |
 | Transient previews | The blast-radius preview lingers 450 ms after the pointer leaves, so it does not flicker |
-| Docked, not floating | The dev console is a drawer below the stage; toasts move up to make room |
+| Docked, not floating | The dev console is a compact drawer (128 px, drag its top edge to resize, remembered) below the stage; toasts move up to make room, and the graph refits once, instantly, so everything stays visible |
+| No constant redraws | The timeline no longer ticks every second, dev log rows are memoised, and layout changes trigger one instant refit rather than repeated animated ones |
 | Minimap | Off by default and remembered; when on, the graph area shrinks to leave room instead of drawing underneath it |
 
 ## Motion
@@ -75,6 +76,15 @@ Plain and specific. Statuses: Healthy, Quarantined, Replaced by a newer fact, Ou
 ## Honesty
 
 A "Sample data" chip sits in the header whenever the scripted in-browser backend is active; it explains itself on hover. Benchmark numbers and every other figure come from the API (or, in sample mode, from a labelled fixture).
+
+## Security and quality
+
+- Production builds carry a strict Content-Security-Policy (`script-src 'self'`, no inline scripts, `connect-src 'self'`, `object-src 'none'`); fonts are never inlined so `font-src 'self'` holds. The QA run fails on any CSP violation.
+- No tokens in the repo: the sample backend uses built-in throwaway tokens; live mode reads `/config.json` at deploy time (`public/config.example.json` shows the shape, `config.json` is git-ignored).
+- Links that come from the API are only followed if they are http or https (`src/api/safeUrl.ts`).
+- Every response and event is validated at the boundary (zod); unknown enum values render neutrally; one failing component is caught by an error boundary instead of blanking the page.
+- ESLint (TypeScript, React hooks and compiler rules, no `any`, no stray `console.log`) runs as part of `npm run verify`.
+- `npm audit --omit=dev` reports no known vulnerabilities.
 
 ## Verification
 

@@ -151,7 +151,7 @@ export const copy = {
   },
   welcome: {
     title: 'Acme Support shares one memory',
-    body: 'Press Inject poisoned webhook and watch what happens when one belief is wrong.',
+    body: 'Press Inject poisoned webhook to see what one wrong belief does.',
   },
   tabs: { graph: 'Graph', diff: 'Prompt diff', ledger: 'Actions and handoffs', insights: 'Insights' },
   containment: {

@@ -1,24 +1,24 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { copy } from '../copy';
 import { Icon } from '../components/Icon';
 import { Chip, Empty, ErrorState, fmtDateTime, Skeleton } from '../components/ui';
+import { safeUrl } from '../api/safeUrl';
 import { askBrain, getTrace, getWhoKnows } from '../state/endpoints';
 import { useStore } from '../state/store';
 import { Avatar, PageHead } from './Memory';
 
-function Ask() {
-  const [q, setQ] = useState('');
-  const prefill = useStore((s) => s.brainQuestion);
+function Ask({ prefill }: { prefill: string | null }) {
+  const [q, setQ] = useState(prefill ?? '');
   const ask = useMutation({ mutationFn: (question: string) => askBrain(question) });
 
+  const asked = useRef(false);
   useEffect(() => {
-    if (prefill) {
-      setQ(prefill);
+    if (prefill && !asked.current) {
+      asked.current = true;
       ask.mutate(prefill);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefill]);
+  }, [prefill, ask]);
 
   return (
     <section className="card ask" aria-label={copy.brain.title}>
@@ -82,8 +82,8 @@ function Ask() {
                 {c.quote && <blockquote>{c.quote}</blockquote>}
                 <p className="muted small">
                   {copy.brain.owner}: {c.owner_team}. <span className="num">{fmtDateTime(c.valid_from)}</span>{' '}
-                  {c.url && (
-                    <a href={c.url} target="_blank" rel="noreferrer noopener">
+                  {safeUrl(c.url) && (
+                    <a href={safeUrl(c.url) as string} target="_blank" rel="noreferrer noopener">
                       Open source
                     </a>
                   )}
@@ -182,9 +182,13 @@ function Trace() {
               {r.quote && <blockquote>{r.quote}</blockquote>}
               <p className="muted small">
                 {r.source_title}, {copy.brain.version.toLowerCase()} {r.version}. {copy.brain.owner}: {r.owner}.{' '}
-                <a href={r.url} target="_blank" rel="noreferrer noopener">
-                  Open source
-                </a>
+                {safeUrl(r.url) ? (
+                  <a href={safeUrl(r.url) as string} target="_blank" rel="noreferrer noopener">
+                    Open source
+                  </a>
+                ) : (
+                  <span className="muted">No link</span>
+                )}
               </p>
             </div>
           </li>
@@ -195,10 +199,11 @@ function Trace() {
 }
 
 export function Brain() {
+  const prefill = useStore((s) => s.brainQuestion);
   return (
     <div className="page">
       <PageHead page="brain" />
-      <Ask />
+      <Ask key={prefill ?? ''} prefill={prefill} />
       <div className="grid-2">
         <WhoKnows />
         <Trace />

@@ -17,7 +17,7 @@ export function Timeline() {
   const compareBase = useStore((s) => s.compareBase);
   const set = useStore((s) => s.set);
   const graph = useStore((s) => visibleGraph(s));
-  const [now, setNow] = useState(Date.now());
+  const mounted = useRef(Date.now());
   const [playing, setPlaying] = useState(false);
   const root = useRef<HTMLElement>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -33,10 +33,6 @@ export function Timeline() {
     return () => ro.disconnect();
   }, []);
 
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
   useEffect(
     () => () => {
       if (timer.current) clearInterval(timer.current);
@@ -45,8 +41,8 @@ export function Timeline() {
     [],
   );
 
-  const start = eventLog[0] ? eventLog[0].ts - 800 : now - 1000;
-  const end = Math.max(now, eventLog[eventLog.length - 1]?.ts ?? now);
+  const start = eventLog[0] ? eventLog[0].ts - 800 : mounted.current - 1000;
+  const end = Math.max(mounted.current, eventLog[eventLog.length - 1]?.ts ?? mounted.current);
   const span = Math.max(1, end - start);
   const markers = useMemo<Marker[]>(() => {
     const out: Marker[] = [];

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { API_MODE, session, type Role } from '../api/client';
 import { subscribeDevLog, type DevLogEntry } from '../api/devlog';
 import { CONTRACT_VERSION } from '../api/schemas';
@@ -153,17 +153,64 @@ export function Shortcuts() {
   );
 }
 
+const DEV_MIN = 72;
+const DEV_KEY = 'quorum:devh';
+
+function readDevHeight(): number {
+  try {
+    const v = Number(localStorage.getItem(DEV_KEY));
+    return v >= DEV_MIN ? v : 128;
+  } catch {
+    return 128;
+  }
+}
+
+const DevRow = memo(function DevRow({ e }: { e: DevLogEntry }) {
+  return (
+    <li className={e.level}>
+      {fmtTime(e.ts)} {e.message}
+    </li>
+  );
+});
+
 export function DevConsole() {
   const open = useStore((s) => s.devOpen);
   const demo = useStore((s) => s.demo);
   const set = useStore((s) => s.set);
   const role = useStore((s) => s.role);
   const [entries, setEntries] = useState<DevLogEntry[]>([]);
+  const [height, setHeight] = useState(readDevHeight);
   useEffect(() => subscribeDevLog(setEntries), []);
   useEffect(() => {
-    document.documentElement.style.setProperty('--dock-h', open && !demo ? '224px' : '0px');
+    document.documentElement.style.setProperty('--dock-h', open && !demo ? `${height}px` : '0px');
     return () => document.documentElement.style.setProperty('--dock-h', '0px');
-  }, [open, demo]);
+  }, [open, demo, height]);
+  const rows = useMemo(() => [...entries].reverse(), [entries]);
+
+  const startDrag = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startH = height;
+    const move = (ev: PointerEvent) => {
+      const h = Math.round(Math.min(window.innerHeight * 0.5, Math.max(DEV_MIN, startH + (startY - ev.clientY))));
+      setHeight(h);
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      setHeight((h) => {
+        try {
+          localStorage.setItem(DEV_KEY, String(h));
+        } catch {
+          /* storage can be unavailable */
+        }
+        return h;
+      });
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
   if (demo) return null;
   const errs = entries.filter((e) => e.level !== 'info').length;
   if (!open) {
@@ -175,7 +222,19 @@ export function DevConsole() {
     );
   }
   return (
-    <section className="dev-drawer" aria-label={copy.dev.title}>
+    <section className="dev-drawer" aria-label={copy.dev.title} style={{ height }}>
+      <div
+        className="dev-resize"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize the dev console"
+        tabIndex={0}
+        onPointerDown={startDrag}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowUp') setHeight((h) => Math.min(Math.round(window.innerHeight * 0.5), h + 24));
+          if (e.key === 'ArrowDown') setHeight((h) => Math.max(DEV_MIN, h - 24));
+        }}
+      />
       <header>
         <strong>{copy.dev.title}</strong>
         <label className="dev-role">
@@ -193,12 +252,10 @@ export function DevConsole() {
           Close {copy.dev.title.toLowerCase()}
         </button>
       </header>
-      {entries.length === 0 && <p className="muted" style={{ padding: '8px 16px' }}>{copy.dev.empty}</p>}
+      {rows.length === 0 && <p className="muted dev-empty">{copy.dev.empty}</p>}
       <ol className="dev-log mono">
-        {[...entries].reverse().map((e) => (
-          <li key={e.id} className={e.level}>
-            {fmtTime(e.ts)} {e.message}
-          </li>
+        {rows.map((e) => (
+          <DevRow key={e.id} e={e} />
         ))}
       </ol>
     </section>

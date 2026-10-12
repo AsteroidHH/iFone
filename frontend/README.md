@@ -19,7 +19,7 @@ npm run build && npm run preview   # production build on http://127.0.0.1:5173
 | Mode | How | What you see |
 |---|---|---|
 | mock (default) | `VITE_API_MODE=mock` | A scripted backend inside the browser. Every response and event goes through the same zod schemas as live data. A "Sample data" chip in the header says so. |
-| live | `VITE_API_MODE=live` | Calls `/api/...` through the dev or preview proxy. Set `QUORUM_BACKEND=http://localhost:8000` if the backend is elsewhere. Tokens come from `public/config.json` (never commit real ones). |
+| live | `VITE_API_MODE=live` | Calls `/api/...` through the dev or preview proxy. Set `QUORUM_BACKEND=http://localhost:8000` if the backend is elsewhere. Tokens come from `public/config.json`, which you create at deploy time from `public/config.example.json` and which is git-ignored. |
 
 `GET /meta` reports the backend's agent mode (Replay or Live). The header shows it as sent.
 
@@ -28,6 +28,7 @@ npm run build && npm run preview   # production build on http://127.0.0.1:5173
 | Command | What it does |
 |---|---|
 | `npm run typecheck` | `tsc --noEmit` |
+| `npm run lint` | ESLint over `src/` and the scripts |
 | `npm test` | Unit tests: event reducer and sequencing, action display state, as-of diff, layout, zod boundary, and every mock response and SSE event against `contracts/events.schema.json` |
 | `npm run contrast` | WCAG check for every text and background pair in the palette |
 | `npm run contract:check` | Fixture validation; with `QUORUM_BACKEND` set, diffs the live `/openapi.json` against `contracts/openapi.snapshot.json` |

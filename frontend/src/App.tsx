@@ -155,12 +155,6 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <div className={`app${presentation ? ' presenting' : ''}${demo ? ' demo' : ''}`}>
-        <div className="lp-frame" aria-hidden="true">
-          <i className="crop tl" />
-          <i className="crop tr" />
-          <i className="crop bl" />
-          <i className="crop br" />
-        </div>
         <Header />
         <Banners />
         {vs === 'major' ? (

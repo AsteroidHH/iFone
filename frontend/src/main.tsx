@@ -13,9 +13,12 @@ import './styles/tools.css';
 import './styles/layers.css';
 import './landing/landing.css';
 import { App } from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 createRoot(document.getElementById('root') as HTMLElement).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 );

@@ -208,6 +208,7 @@ export class GraphAdapter {
 
   destroy() {
     if (this.fitTimer) clearTimeout(this.fitTimer);
+    if (this.resizeRaf) cancelAnimationFrame(this.resizeRaf);
     this.timers.forEach(clearTimeout);
     this.timers.clear();
     this.cy.destroy();
@@ -318,10 +319,20 @@ export class GraphAdapter {
     this.later(reduced() ? 260 : 560, () => el.removeClass('pulse'));
   }
 
+  private resizeRaf = 0;
+
+  /** One instant refit after a layout change, so the whole graph stays visible without animating or flickering. */
   resized() {
     this.cy.resize();
-    if (this.autoFit) this.fitView(false);
-    else this.h.onViewport(this.cy.pan(), this.cy.zoom());
+    if (!this.autoFit) {
+      this.h.onViewport(this.cy.pan(), this.cy.zoom());
+      return;
+    }
+    if (this.resizeRaf) return;
+    this.resizeRaf = requestAnimationFrame(() => {
+      this.resizeRaf = 0;
+      if (this.autoFit) this.fitView(false);
+    });
   }
 
   private scheduleFit() {

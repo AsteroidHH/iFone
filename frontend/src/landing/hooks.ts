@@ -24,14 +24,10 @@ export function go(to: 'landing' | 'app', autoplay = false) {
 
 export function useInView<T extends HTMLElement>(threshold = 0.25): [React.RefObject<T>, boolean] {
   const ref = useRef<T>(null);
-  const [seen, setSeen] = useState(false);
+  const [seen, setSeen] = useState(() => typeof IntersectionObserver === 'undefined' || prefersReduced());
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
-    if (typeof IntersectionObserver === 'undefined' || prefersReduced()) {
-      setSeen(true);
-      return;
-    }
+    if (!el || seen) return;
     const io = new IntersectionObserver(
       (es) => {
         if (es.some((e) => e.isIntersecting)) {
@@ -43,18 +39,15 @@ export function useInView<T extends HTMLElement>(threshold = 0.25): [React.RefOb
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [threshold]);
+  }, [threshold, seen]);
   return [ref, seen];
 }
 
 export function useCounter(target: number, run: boolean, decimals = 0, ms = 1400): string {
   const [v, setV] = useState(0);
+  const reduce = prefersReduced();
   useEffect(() => {
-    if (!run) return;
-    if (prefersReduced()) {
-      setV(target);
-      return;
-    }
+    if (!run || reduce) return;
     const start = performance.now();
     let raf = 0;
     const tick = (now: number) => {
@@ -64,8 +57,8 @@ export function useCounter(target: number, run: boolean, decimals = 0, ms = 1400
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [target, run, ms]);
-  return v.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  }, [target, run, ms, reduce]);
+  return (reduce && run ? target : v).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
 export function scrollToId(id: string) {

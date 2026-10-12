@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { copy } from '../copy';
 import { graphBus } from '../graph/bus';
@@ -59,7 +59,11 @@ export function Containment() {
   const nodes = useStore((s) => s.nodes);
   const selected = useStore((s) => s.selectedId);
   const [compact, setCompact] = useState(false);
-  useEffect(() => setCompact(!!selected), [selected]);
+  const [seenSelection, setSeenSelection] = useState(selected);
+  if (seenSelection !== selected) {
+    setSeenSelection(selected);
+    setCompact(!!selected);
+  }
   const q = useQuery({
     queryKey: ['report', root],
     queryFn: () => getReport(root as string),

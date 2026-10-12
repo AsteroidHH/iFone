@@ -305,6 +305,37 @@ check('the dev console docks below the timeline without overlapping it', drawer.
 await page.getByRole('button', { name: 'Dev console' }).click();
 await wait(200);
 
+// frames belong to the landing page only; the console is clean
+check('the console has no corner frames', (await page.locator('.app .crop').count()) === 0);
+check('the console has no overlay frame element', (await page.locator('.app .lp-frame').count()) === 0);
+check('production builds ship a content security policy', (await page.locator('meta[http-equiv="Content-Security-Policy"]').count()) === 1);
+
+// opening the dev console must not redraw or rescale what is behind it
+await page.getByRole('tab', { name: 'Graph', exact: true }).click();
+await wait(300);
+await page.getByRole('button', { name: 'Dev console' }).click();
+await wait(500);
+const allVisible = await page.locator('.cy').evaluate((el) => {
+  const h = el.getBoundingClientRect().height;
+  const w = el.getBoundingClientRect().width;
+  return el.__cy.nodes(':visible').every((n) => { const b = n.renderedBoundingBox({ includeLabels: false, includeOverlays: false }); return b.y1 >= -2 && b.y2 <= h + 2 && b.x1 >= -2 && b.x2 <= w + 2; });
+});
+check('every node stays on screen when the dev console opens', allVisible);
+const dh = await rect('.dev-drawer');
+check('the dev console opens compact so the console stays visible', dh.h <= 140, `${Math.round(dh.h)}px`);
+const sh = await rect('.stage');
+check('most of the screen stays with the console while the dev console is open', sh.h > 520, `${Math.round(sh.h)}px`);
+const handle = await rect('.dev-resize');
+await page.mouse.move(handle.l + handle.w / 2, handle.t + 5);
+await page.mouse.down();
+await page.mouse.move(handle.l + handle.w / 2, handle.t - 80, { steps: 4 });
+await page.mouse.up();
+await wait(200);
+const dh2 = await rect('.dev-drawer');
+check('the dev console can be resized by dragging its top edge', dh2.h > dh.h + 40, `${Math.round(dh.h)} to ${Math.round(dh2.h)}`);
+await page.getByRole('button', { name: 'Dev console' }).click();
+await wait(200);
+
 // tenant switch
 await page.selectOption('.tenant select', 'globex');
 await wait(1200);

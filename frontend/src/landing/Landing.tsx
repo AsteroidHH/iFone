@@ -38,13 +38,14 @@ function Nav() {
 }
 
 function useHeroLoop(c: Cascade) {
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(() => (prefersReduced() ? 2 : 0));
   const cRef = useRef(c);
-  cRef.current = c;
+  useEffect(() => {
+    cRef.current = c;
+  });
   useEffect(() => {
     if (prefersReduced()) {
       cRef.current.quarantine('f2');
-      setStep(2);
       return;
     }
     let alive = true;
