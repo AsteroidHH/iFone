@@ -1,0 +1,98 @@
+from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, Field
+from app.models.common import (
+    Status,
+    NodeKind,
+    EdgeType,
+    Tier,
+    SourceKind,
+    Reversibility,
+    GateStatus,
+    CompensationStatus,
+)
+
+
+class AssertedBy(BaseModel):
+    id: str
+    name: str
+    tier: Tier
+
+
+class SourceInfo(BaseModel):
+    kind: SourceKind
+    title: str
+    url: str
+    version: str
+
+
+class CompensationInfo(BaseModel):
+    status: CompensationStatus
+    attempts: int = Field(default=0, ge=0)
+
+
+class ActionInfo(BaseModel):
+    type: str
+    reversibility: Reversibility
+    executed: bool = False
+    confirmed: bool = False
+    gate: GateStatus
+    procedure_id: Optional[str] = None
+    idempotency_key: Optional[str] = None
+    compensation: Optional[CompensationInfo] = None
+
+
+class GraphNode(BaseModel):
+    id: str
+    kind: NodeKind
+    is_decision: Optional[bool] = None
+    label: str = Field(..., max_length=60)
+    text: Optional[str] = None
+    key: Optional[str] = None
+    value: Optional[str] = None
+    status: Status
+    stale: bool = False
+    valid_from: Optional[int] = None
+    valid_to: Optional[int] = None
+    quarantined_at: Optional[int] = None
+    released_at: Optional[int] = None
+    quarantine_root: Optional[str] = None
+    depth: Optional[int] = Field(default=None, ge=0)
+    source_ref: Optional[str] = None
+    quote: Optional[str] = None
+    origin: Optional[str] = None
+    asserted_by: Optional[AssertedBy] = None
+    source: Optional[SourceInfo] = None
+    owner_team: Optional[str] = None
+    action: Optional[ActionInfo] = None
+
+
+class GraphEdge(BaseModel):
+    id: str
+    source: str
+    target: str
+    type: EdgeType
+
+
+class GraphResponse(BaseModel):
+    contract_version: str
+    tenant: str
+    epoch: int
+    seq: int
+    as_of: Optional[int] = None
+    generated_at: int
+    truncated: bool = False
+    nodes: List[GraphNode]
+    edges: List[GraphEdge]
+
+
+class StatusHistoryEntry(BaseModel):
+    ts: int
+    status: Status
+    reason: str
+
+
+class NodeDetailResponse(BaseModel):
+    node: GraphNode
+    path: List[GraphNode]
+    descendant_count: int
+    status_history: List[StatusHistoryEntry]
