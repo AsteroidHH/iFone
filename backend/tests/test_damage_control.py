@@ -138,3 +138,55 @@ def test_quarantine_executed_irreversible_action_creates_correction_notice(clien
         updated_handoff = [h for h in _handoff_store if h.context_root_id == "act_email_001"][0]
         assert updated_handoff.status == HandoffStatus.COMPLETED
         assert updated_handoff.correction_notice["status"] == "DISPATCHED"
+
+
+def test_handoff_review_approval_dispatches_correction_notice(client):
+    """Asserts that reviewing and approving an escalation handoff with a correction notice marks it DISPATCHED."""
+    human_headers = {"Authorization": "Bearer token_human"}
+    store = get_graph_store("acme")
+    with store._lock:
+        store.nodes.clear()
+        store.edges.clear()
+
+    with _handoff_lock:
+        _handoff_store.clear()
+
+    email_act = GraphNode(
+        id="act_email_002",
+        kind=NodeKind.ACTION,
+        label="Send refund confirmation email to customer",
+        text="Your refund has been approved under 90-day policy.",
+        status=Status.QUARANTINED,
+        action=ActionInfo(
+            type="SEND_CUSTOMER_EMAIL",
+            reversibility=Reversibility.IRREVERSIBLE,
+            executed=True,
+            gate=GateStatus.PASSED,
+        ),
+    )
+    store.add_node(email_act)
+    notice = generate_correction_notice(email_act, store, tenant="acme")
+    email_act.action.correction_notice = notice
+
+    from app.models.handoffs import Handoff
+    handoff = Handoff(
+        id="hand_escl_002",
+        kind=HandoffKind.ESCALATION,
+        task="Irreversible action quarantined! Retraction notice drafted.",
+        status=HandoffStatus.PENDING,
+        context_root_id="act_email_002",
+        correction_notice=notice,
+    )
+    with _handoff_lock:
+        _handoff_store.append(handoff)
+
+    res = client.post(
+        "/api/handoffs/hand_escl_002/review",
+        json={"decision": "APPROVE", "notes": "Approved damage control notice"},
+        headers=human_headers,
+    )
+    assert res.status_code == 200
+    assert handoff.status == HandoffStatus.COMPLETED
+    assert handoff.correction_notice["status"] == "DISPATCHED"
+    assert email_act.action.correction_notice["status"] == "DISPATCHED"
+

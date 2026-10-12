@@ -140,6 +140,18 @@ def approve_correction(
                     h.correction_notice["status"] = "DISPATCHED"
                 event_bus.publish(auth.tenant, "handoff_updated", {"handoff": h.model_dump()})
 
+    # Update alert memory node if present
+    alert_node = store.nodes.get(f"alert_retraction_{action_id}")
+    if alert_node:
+        alert_node.label = f"✅ Retraction Dispatched for {action_id}"
+        event_bus.publish(auth.tenant, "node_updated", {"node": alert_node.model_dump()})
+
+    try:
+        import graph.queries as falkor_queries
+        falkor_queries.approve_correction(auth.tenant, action_id)
+    except Exception:
+        pass
+
     event_bus.publish(
         auth.tenant,
         "correction_dispatched",
@@ -151,3 +163,4 @@ def approve_correction(
         "action_id": action_id,
         "notice": notice,
     }
+

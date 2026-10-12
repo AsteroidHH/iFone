@@ -358,6 +358,15 @@ def review_handoff(id: str, decision: str, token: str, note: Optional[str] = Non
                 action_node = store.nodes.get(target.context_root_id)
                 if action_node and action_node.action:
                     action_node.action.gate = GateStatus.PASSED
+                    if getattr(action_node.action, "correction_notice", None):
+                        action_node.action.correction_notice["status"] = "DISPATCHED"
+                        action_node.correction_notice = action_node.action.correction_notice
+                if target.correction_notice:
+                    target.correction_notice["status"] = "DISPATCHED"
+
+                alert_node = store.nodes.get(f"alert_retraction_{target.context_root_id}")
+                if alert_node:
+                    alert_node.label = f"✅ Retraction Dispatched for {target.context_root_id}"
 
         return {
             "epoch": store.epoch,

@@ -361,9 +361,59 @@ def create_compensations(
         res = g.query(cypher, {"action_id": aid, "comp_id": cid})
         ms = (time.time() - t0) * 1000
         log_query("create_compensation", cypher, ms, len(res.result_set), request_id)
+        if act.get("reversibility") == "IRREVERSIBLE":
+            cypher_escl = """
+            MATCH (a:Action {id: $action_id})
+            MERGE (alert:Alert:MemoryNode {id: 'alert_retraction_' + a.id})
+            ON CREATE SET alert.label = '⚠️ Damage Control: Retraction for ' + a.id,
+                          alert.target_action_id = a.id,
+                          alert.status = 'HEALTHY',
+                          alert.recipient = 'customer@acme.com',
+                          alert.original_subject = 'Update: Your Refund Request is Approved',
+                          alert.original_statement = coalesce(a.text, a.label, 'Your refund of $150 has been approved under our new 90-day policy.'),
+                          alert.correction_subject = 'CORRECTION: Important update regarding your refund request',
+                          alert.drafted_body = 'Dear Customer,\\n\\nWe recently sent an email stating that your refund request was approved under a 90-day refund policy. That communication was sent in error due to an unverified policy update.\\n\\nOur official refund policy remains 30 days (per Finance Ops Policy v3.0). We sincerely apologize for any confusion. Please find our verified policy details attached.\\n\\nSincerely,\\nAcme Support Operations',
+                          alert.verified_policy_citation = 'Finance Ops Policy Doc v3.0 (30-day window)',
+                          alert.notice_status = 'READY_FOR_HUMAN_APPROVAL',
+                          alert.created_at = timestamp()
+            MERGE (alert)-[:LEADS_TO]->(a)
+            MERGE (h:Handoff:MemoryNode {id: 'hand_escl_' + a.id})
+            ON CREATE SET h.kind = 'ESCALATION',
+                          h.task = 'Irreversible action quarantined! Automated damage control retraction notice drafted.',
+                          h.status = 'PENDING',
+                          h.context_root_id = a.id,
+                          h.created_at = timestamp()
+            MERGE (a)-[:REQUIRES_HANDOFF]->(h)
+            RETURN alert.id, h.id
+            """
+            try:
+                g.query(cypher_escl, {"action_id": aid})
+            except Exception:
+                pass
         if res.result_set:
             results.append({"compensation_id": cid, "action_id": aid, "status": "PENDING_COMPENSATION"})
     return results
+
+
+def approve_correction(tenant_id: str, action_id: str, request_id: Optional[str] = None) -> Dict[str, Any]:
+    """Marks the correction notice on Alert memory node as DISPATCHED in FalkorDB."""
+    g = get_graph(tenant_id, "commons")
+    cypher = """
+    MATCH (alert:Alert {id: 'alert_retraction_' + $action_id})
+    SET alert.notice_status = 'DISPATCHED',
+        alert.dispatched_at = timestamp()
+    RETURN alert.id, alert.notice_status
+    """
+    t0 = time.time()
+    try:
+        res = g.query(cypher, {"action_id": action_id})
+        ms = (time.time() - t0) * 1000
+        log_query("approve_correction", cypher, ms, len(res.result_set), request_id)
+        if res.result_set:
+            return {"success": True, "alert_id": res.result_set[0][0], "status": res.result_set[0][1]}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    return {"success": False, "error": f"Alert for action {action_id} not found"}
 
 
 # =========================================================================
