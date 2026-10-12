@@ -17,7 +17,52 @@ const check = (name, ok, extra = '') => {
 const btn = (name) => page.getByRole('button', { name, exact: false }).first();
 const text = (sel) => page.locator(sel).first().innerText();
 
+// ---- landing page ----
 await page.goto(base);
+await page.waitForSelector('.lp-hero h1', { timeout: 15000 });
+await wait(300);
+check('landing loads with the product headline', (await text('.lp-h1')).replace(/\s+/g, ' ').includes('revert'));
+check('hero window is live (graph svg present)', (await page.locator('.lp-window svg.lg').count()) === 1);
+await page.evaluate(() => document.getElementById('playground')?.scrollIntoView());
+await wait(900);
+await page.getByRole('button', { name: /Window: 90 days/ }).first().click().catch(() => undefined);
+const pg = page.locator('#playground');
+await pg.locator('.lg-node.hot', { hasText: 'Up to 90 qualify' }).first().click();
+await wait(2600);
+const held = await pg.locator('.lp-meters div').first().innerText();
+check('playground: clicking a belief quarantines it and everything downstream', /0?5/.test(held.split('\n')[0] ?? ''), held.replace(/\n/g, ' '));
+check('playground: executed refunds roll back, the held email is cancelled', (await pg.locator('.lg-state', { hasText: 'Rolled back' }).count()) === 2 && (await pg.locator('.lg-state', { hasText: 'Cancelled' }).count()) === 1);
+await pg.getByRole('button', { name: 'Restore everything' }).click();
+await wait(300);
+check('playground: restore returns everything to healthy', (await pg.locator('.lg-node.bad').count()) === 0);
+await pg.locator('.lg-node.hot', { hasText: 'Window: 30 days' }).first().click();
+await wait(300);
+check('playground: a root fact refuses quarantine and blames the challenger', (await pg.locator('.lp-play-note').innerText()).includes('Root facts are never auto-quarantined'));
+await page.evaluate(() => document.getElementById('defense')?.scrollIntoView());
+await wait(600);
+const before = await page.locator('#defense .lp-counter b').innerText();
+await page.getByRole('button', { name: 'Next layer' }).click();
+await wait(300);
+check('defense carousel advances', (await page.locator('#defense .lp-counter b').innerText()) !== before);
+await page.evaluate(() => document.getElementById('console')?.scrollIntoView());
+await page.getByRole('button', { name: 'Next screen' }).click();
+await wait(400);
+check('console gallery advances and the screenshot loads', await page.locator('.lp-shot img').evaluate((i) => i.complete && i.naturalWidth > 0));
+await page.evaluate(() => window.scrollTo(0, 0));
+await page.getByRole('button', { name: 'Open console' }).first().click();
+await page.waitForSelector('.cy canvas', { timeout: 15000 });
+check('Open console routes into the app', page.url().endsWith('#/app'));
+await page.getByRole('button', { name: 'Quorum home' }).click();
+await page.waitForSelector('.lp-hero h1');
+check('the app brand returns to the landing page', page.url().endsWith('#/') || !page.url().includes('#/app'));
+await page.getByRole('button', { name: 'Watch the 90-second story' }).first().click();
+await page.waitForSelector('.cy canvas', { timeout: 15000 });
+await wait(2200);
+check('the 90-second story button starts autopilot in the console', await btn('Inject poisoned webhook').isDisabled());
+await page.goto(base.replace(/\/?$/, '/') + '#/');
+await page.reload();
+
+await page.goto(base.replace(/\/?$/, '/') + '#/app');
 await page.waitForSelector('.cy canvas');
 await wait(600);
 

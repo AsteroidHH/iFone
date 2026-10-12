@@ -10,6 +10,10 @@ npm run dev          # http://127.0.0.1:5173, mock mode
 npm run build && npm run preview   # production build on http://127.0.0.1:5173
 ```
 
+## Pages
+
+`#/` is the landing page (loader, live hero, problem, playground, defense, console gallery, proof, tracks). `#/app` is the console. Design notes for both: `../docs/LANDING_DESIGN.md` and `../docs/FRONTEND_DESIGN.md`.
+
 ## Two data modes
 
 | Mode | How | What you see |
@@ -28,6 +32,7 @@ npm run build && npm run preview   # production build on http://127.0.0.1:5173
 | `npm run contrast` | WCAG check for every text and background pair in the palette |
 | `npm run contract:check` | Fixture validation; with `QUORUM_BACKEND` set, diffs the live `/openapi.json` against `contracts/openapi.snapshot.json` |
 | `npm run screens` | Headless run of the whole demo, one screenshot per beat into `docs/screens/` |
+| `npm run landing` | Screenshots every landing section into `docs/screens/landing/` |
 | `npm run qa` | Headless interaction checks (shortcuts, roles, tenants, time travel, autopilot, narrow widths) |
 | `npm run verify` | typecheck, tests, contrast, contract check, production build |
 

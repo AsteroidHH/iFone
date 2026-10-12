@@ -131,6 +131,10 @@ a:hover {
   display: flex;
   align-items: center;
   gap: 10px;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
 }
 .brand-mark {
   width: 32px;
