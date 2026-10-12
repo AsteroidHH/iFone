@@ -5,7 +5,8 @@
 **Git revert for AI agent beliefs.**  
 *Quorum rolls back a poisoned fact and everything built on it, and no later retrieval can return it.*
 
-[![Tests](https://img.shields.io/badge/pytest-39%20passed-brightgreen?style=flat-square)](backend/tests)
+[![Backend Tests](https://img.shields.io/badge/pytest-45%20passed-brightgreen?style=flat-square)](backend/tests)
+[![Frontend Tests](https://img.shields.io/badge/vitest-64%20passed-brightgreen?style=flat-square)](frontend)
 [![Benchmark](https://img.shields.io/badge/throughput-33%2C111%20ops%2Fsec-blue?style=flat-square)](bench/results.json)
 [![Containment](https://img.shields.io/badge/containment-0.4ms-success?style=flat-square)](docs/PROOF.md)
 [![Leakage](https://img.shields.io/badge/poison%20leakage-0.0%25-brightgreen?style=flat-square)](bench/results.json)
@@ -61,14 +62,20 @@ When an autonomous agent ingests an erroneous or malicious fact, standard RAG ar
                       ┌──────────────────────────────────────────────────────────┐
                       │          Mock Helpdesk API & Tombstone Protection        │
                       │         (Idempotent Execution / 409 Conflict Races)      │
-                      └──────────────────────────────────────────────────────────┘
+                      └──────────────────────────────┬───────────────────────────┘
+                                                     │
+                                                     ▼
+                                      ┌─────────────────────────────┐
+                                      │  Damage Control Engine (L4) │
+                                      │  (Auto-Retraction Notices)  │
+                                      └─────────────────────────────┘
 ```
 
 ---
 
-## 🛡️ The Three Layers of Defense
+## 🛡️ The Four Layers of Defense
 
-Quorum enforces three deterministic, non-LLM safety layers:
+Quorum enforces four deterministic, non-LLM safety layers:
 
 1. **PREVENT (Layer 1 — The Quorum Gate):**
    - Evaluated during `stage_action`.
@@ -85,6 +92,11 @@ Quorum enforces three deterministic, non-LLM safety layers:
    - Atomically increments the tenant's **Context Epoch**. Any agent making MCP calls with a stale epoch is forced to rebuild context.
    - Strikethroughs in the **Prompt Diff** visually and programmatically remove quarantined facts from LLM context.
    - An asynchronous **Outbox Saga Worker** leases pending compensation rows and calls external APIs with backoff and idempotency keys to reverse executed side effects.
+
+4. **DAMAGE CONTROL (Layer 4 — Automated Retraction Notices):**
+   - When an executed `IRREVERSIBLE` action (e.g. an email already sent to a customer) is hit by the Quarantine Cascade, Quorum automatically intervenes.
+   - Generates a structured `CorrectionNotice` linked to the verified truth (`Finance Ops Policy Doc v3.0`) and drafts a ready-to-dispatch retraction email for 1-click human review in the Incident Command Room.
+
 
 ---
 

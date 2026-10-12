@@ -71,13 +71,16 @@ Quorum implements three deterministic, non-LLM safety layers designed to catch m
        [INCOMING FACT]
               │
               ▼
-    Layer 1: PREVENT    ──► Quorum Gate (Blocks uncorroborated irreversible actions)
+    Layer 1: PREVENT        ──► Quorum Gate (Blocks uncorroborated irreversible actions)
               │
               ▼
-    Layer 2: GUARD      ──► Atomic Execute Guard (Single check-and-set prevents racing executions)
+    Layer 2: GUARD          ──► Atomic Execute Guard (Single check-and-set prevents racing executions)
               │
               ▼
-    Layer 3: REPAIR     ──► Quarantine Red Wave Cascade (0.4ms causal invalidation & Outbox Saga)
+    Layer 3: REPAIR         ──► Quarantine Red Wave Cascade (0.4ms causal invalidation & Outbox Saga)
+              │
+              ▼
+    Layer 4: DAMAGE CONTROL ──► Automated Retraction Engine (Drafts verified correction notices)
 ```
 
 ### Layer 1: PREVENT (The Quorum Gate)
@@ -110,6 +113,12 @@ When an Auditor detects a fraudulent or superseded fact, it triggers the **Quara
 - FalkorDB traverses downstream along `[:LEADS_TO|SUPPORTS*]`, marking all derived conclusions and actions `QUARANTINED` in order of causal hop depth.
 - **Context Epoch Increment:** In the same transaction, `Meta.epoch` is incremented. All connected MCP agents holding stale epochs have their context caches invalidated.
 - **Outbox Saga Worker:** Any action that completed external execution before the quarantine arrived is leased by the background saga worker, which dispatches compensating webhooks with idempotency keys and exponential backoff until the action is marked `COMPENSATED`.
+
+### Layer 4: DAMAGE CONTROL (Automated Retraction Engine)
+For irreversible side-effects that already reached the outside world before the fraud was detected (e.g., an email already dispatched to a customer):
+- Quorum automatically drafts a structured `CorrectionNotice` linked to the verified root truth (`Finance Ops Policy Doc v3.0`).
+- Generates a ready-to-dispatch correction email explaining the error and attaches it to an `ESCALATION` Handoff in the Incident Room for one-click human review and dispatch.
+
 
 ---
 
