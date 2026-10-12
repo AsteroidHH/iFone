@@ -1,4 +1,5 @@
 import { copy } from '../copy';
+import { Icon } from '../components/Icon';
 import { Containment } from '../components/Containment';
 import { HistoryFeed } from '../components/History';
 import { Inspector } from '../components/Inspector';
@@ -26,12 +27,15 @@ export function Console({ visible }: { visible: boolean }) {
         </aside>
       )}
       <main className="col center">
-        <div className="tabs center-tabs" role="tablist">
-          {TABS.map((t) => (
-            <button key={t} role="tab" aria-selected={tab === t} className={`tab${tab === t ? ' on' : ''}`} onClick={() => set({ tab: t })}>
-              {copy.tabs[t]}
-            </button>
-          ))}
+        <div className="center-head">
+          <div className="seg" role="tablist">
+            {TABS.map((t) => (
+              <button key={t} role="tab" aria-selected={tab === t} className={`seg-btn${tab === t ? ' on' : ''}`} onClick={() => set({ tab: t })}>
+                <Icon name={t === 'graph' ? 'graph' : t === 'diff' ? 'doc' : 'bolt'} size={14} />
+                {copy.tabs[t]}
+              </button>
+            ))}
+          </div>
         </div>
         <GraphCanvas active={visible && tab === 'graph'} />
         {tab === 'diff' && <PromptDiff />}

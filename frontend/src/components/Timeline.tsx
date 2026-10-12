@@ -3,6 +3,7 @@ import { copy } from '../copy';
 import { diffGraphs } from '../state/diff';
 import { useStore, visibleGraph } from '../state/store';
 import { goToTime } from '../state/timetravel';
+import { Icon } from './Icon';
 import { fmtTime } from './ui';
 
 interface Marker {
@@ -83,8 +84,10 @@ export function Timeline() {
 
   return (
     <section className="timeline" aria-label={copy.timeline.title}>
+      <h2 className="sr">{copy.timeline.title}</h2>
       <div className="tl-controls">
         <button className="btn" disabled={empty} onClick={togglePlay}>
+          <Icon name={playing ? 'pause' : 'play'} size={14} />
           {playing ? copy.timeline.pause : copy.timeline.play}
         </button>
         <label className="tl-slider">
@@ -113,14 +116,14 @@ export function Timeline() {
         <span className="tl-label num">{asOf ? fmtTime(asOf) : copy.timeline.now}</span>
         {!compareBase ? (
           <button
-            className="btn ghost"
+            className="btn quiet"
             disabled={empty}
             onClick={() => set({ compareBase: { ts: asOf ?? Date.now(), nodes: graph.nodes, edges: graph.edges } })}
           >
             {copy.timeline.compareFrom}
           </button>
         ) : (
-          <button className="btn ghost" onClick={() => set({ compareBase: null })}>
+          <button className="btn quiet" onClick={() => set({ compareBase: null })}>
             {copy.timeline.clearCompare}
           </button>
         )}

@@ -1,54 +1,67 @@
-// Verifies every text/background pairing used in the UI meets WCAG AA (4.5:1) for text, 3:1 for UI strokes.
+// Verifies every text/background pairing used in the UI meets WCAG AA (4.5:1 text, 3:1 UI strokes).
+// Translucent tints (--ok-dim etc.) are composited over the surface they sit on.
 import { readFileSync } from 'node:fs';
 
 const css = readFileSync(new URL('../src/styles/tokens.css', import.meta.url), 'utf8');
-const tokens = Object.fromEntries([...css.matchAll(/--([a-z-]+):\s*(#[0-9a-f]{6})/gi)].map((m) => [m[1], m[2]]));
+const hex = Object.fromEntries([...css.matchAll(/--([a-z0-9-]+):\s*(#[0-9a-f]{6})/gi)].map((m) => [m[1], m[2]]));
+const rgba = Object.fromEntries(
+  [...css.matchAll(/--([a-z0-9-]+):\s*rgb\((\d+) (\d+) (\d+) \/ (\d+)%\)/gi)].map((m) => [m[1], [+m[2], +m[3], +m[4], +m[5] / 100]]),
+);
 
-const lum = (hex) => {
-  const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+const toRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const lum = ([r, g, b]) => {
+  const c = [r, g, b].map((v) => v / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
   return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
 };
 const ratio = (a, b) => {
   const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
   return (x + 0.05) / (y + 0.05);
 };
+const resolve = (spec, under) => {
+  if (spec.startsWith('#')) return toRgb(spec);
+  if (hex[spec]) return toRgb(hex[spec]);
+  const t = rgba[spec];
+  if (t) return [0, 1, 2].map((i) => Math.round(t[i] * t[3] + under[i] * (1 - t[3])));
+  throw new Error(`unknown token ${spec}`);
+};
 
-// [foreground token or hex, background token, minimum ratio, where it is used]
+// [foreground, background, surface under a translucent background, minimum ratio, where it is used]
 const pairs = [
-  ['ink', 'paper', 4.5, 'body text on panels'],
-  ['ink', 'vellum', 4.5, 'body text on canvas'],
-  ['graphite', 'paper', 4.5, 'secondary text on panels'],
-  ['graphite', 'vellum', 4.5, 'secondary text on canvas'],
-  ['paper', 'ink', 4.5, 'header text'],
-  ['verdigris-text', 'verdigris-wash', 4.5, 'healthy chip'],
-  ['verdigris-text', 'paper', 4.5, 'healthy text'],
-  ['stamp-text', 'stamp-wash', 4.5, 'quarantined chip'],
-  ['stamp-text', 'paper', 4.5, 'quarantined text'],
-  ['ochre-text', 'ochre-wash', 4.5, 'out-of-date chip'],
-  ['ochre-text', 'paper', 4.5, 'out-of-date text'],
-  ['ochre-text', 'vellum', 4.5, 'mock banner'],
-  ['#2d31b0', 'ultramarine-wash', 4.5, 'review chip'],
-  ['#ffffff', 'ultramarine', 4.5, 'review button'],
-  ['ink', 'stamp-wash', 4.5, 'removed diff line'],
-  ['paper', 'verdigris', 3, 'ui stroke'],
-  ['verdigris', 'paper', 3, 'healthy ring'],
-  ['stamp', 'paper', 3, 'quarantined ring and edges'],
-  ['ink', 'ochre-wash', 4.5, 'mock banner body'],
+  ['text', 'bg-2', null, 4.5, 'body text on cards'],
+  ['text', 'bg', null, 4.5, 'body text on the page'],
+  ['text-2', 'bg-2', null, 4.5, 'secondary text on cards'],
+  ['text-2', 'bg-3', null, 4.5, 'secondary text on raised surfaces'],
+  ['text-3', 'bg-2', null, 4.5, 'captions on cards'],
+  ['text-3', 'bg-3', null, 4.5, 'captions on raised surfaces'],
+  ['text-3', '#0a1017', null, 4.5, 'captions on the canvas'],
+  ['ok', 'bg-2', null, 4.5, 'healthy text'],
+  ['ok', 'ok-dim', 'bg-2', 4.5, 'healthy chip'],
+  ['#ff9d8e', 'bad-dim', 'bg-2', 4.5, 'quarantined chip'],
+  ['#ff9d8e', 'bg-2', null, 4.5, 'quarantined text'],
+  ['#ffc3b9', 'bad-dim', 'bg-2', 4.5, 'error and banner text'],
+  ['warn', 'warn-dim', 'bg-2', 4.5, 'out-of-date chip'],
+  ['warn', 'bg-2', null, 4.5, 'out-of-date text'],
+  ['person', 'person-dim', 'bg-2', 4.5, 'review chip'],
+  ['person', 'bg-2', null, 4.5, 'review text'],
+  ['on-light', 'text', null, 4.5, 'primary button'],
+  ['on-light', 'person', null, 4.5, 'review button'],
+  ['text', '#202e3c', null, 4.5, 'button hover'],
+  ['badText', '#2b1614', null, 4.5, 'quarantined node label'],
+  ['ok', '#0e2423', null, 3, 'healthy node ring'],
+  ['bad', '#2b1614', null, 3, 'quarantined node ring'],
+  ['ghost', 'bg-2', null, 3, 'superseded ring'],
 ];
+hex.badText = '#ffb7aa';
 
 let bad = 0;
-for (const [fg, bg, min, use] of pairs) {
-  const a = fg.startsWith('#') ? fg : tokens[fg];
-  const b = bg.startsWith('#') ? bg : tokens[bg];
-  if (!a || !b) {
-    console.error(`missing token for ${fg} / ${bg}`);
-    bad++;
-    continue;
-  }
+for (const [fg, bg, under, min, use] of pairs) {
+  const surface = under ? resolve(under) : null;
+  const b = resolve(bg, surface);
+  const a = resolve(fg, b);
   const r = ratio(a, b);
   const ok = r >= min;
   if (!ok) bad++;
   console.log(`${ok ? 'ok  ' : 'FAIL'} ${r.toFixed(2).padStart(5)}  (min ${min})  ${fg} on ${bg}  ${use}`);
 }
-console.log('Never used for text: pencil, ochre (#b5760f). Shape and glyph always accompany colour.');
+console.log('Colour never carries state alone: every state also has a shape, border style, glyph or label.');
 process.exit(bad ? 1 : 0);

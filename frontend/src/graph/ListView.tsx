@@ -1,4 +1,5 @@
 import { copy } from '../copy';
+import { Icon } from '../components/Icon';
 import { Chip } from '../components/ui';
 import { actionDisplayState, actionTone } from '../state/actionState';
 import { useStore, visibleGraph } from '../state/store';
@@ -23,7 +24,10 @@ export function ListView() {
                 aria-pressed={selected === n.id}
                 onClick={() => set({ selectedId: n.id })}
               >
-                <span className="list-kind">{n.is_decision ? copy.kind.decision : (copy.kind[n.kind] ?? n.kind)}</span>
+                <span className="list-kind">
+                  <Icon name={n.is_decision ? 'flag' : n.kind === 'source' ? 'doc' : n.kind === 'fact' ? 'fact' : n.kind === 'conclusion' ? 'conclusion' : 'bolt'} size={14} />
+                  {n.is_decision ? copy.kind.decision : (copy.kind[n.kind] ?? n.kind)}
+                </span>
                 <span className="list-label">{n.label}</span>
                 <Chip tone={n.status === 'QUARANTINED' ? 'bad' : n.status === 'HEALTHY' ? 'good' : 'neutral'}>
                   {copy.status[n.status] ?? n.status}

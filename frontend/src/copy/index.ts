@@ -2,6 +2,8 @@ export const copy = {
   appName: 'Quorum',
   tagline: 'Git revert for agent beliefs',
   nav: { console: 'Console', memory: 'Memory', brain: 'Brain', tenants: 'Tenants', benchmark: 'Benchmark' },
+  sampleData: 'Sample data',
+  sampleHint: 'A scripted scenario running in this browser. Connect a Quorum backend to see real memory.',
   mockBanner: 'Mock data, not from Quorum',
   mockBannerDetail: 'Scripted scenario in this browser. Do not record this as the real demo.',
   presentationMode: 'Presentation mode',
@@ -35,7 +37,7 @@ export const copy = {
     live: 'Agents call the model for real.',
   } as Record<string, string>,
   epoch: (n: number) => `Epoch ${n}`,
-  invariants: { ok: 'Invariants hold', bad: (n: number) => `${n} invariant violation${n === 1 ? '' : 's'}`, unknown: 'Invariants not checked yet' },
+  invariants: { ok: 'Invariants hold', bad: (n: number) => `${n} invariant violation${n === 1 ? '' : 's'}`, unknown: 'Invariants pending' },
   connection: {
     connecting: 'Connecting',
     live: 'Connected',
@@ -96,7 +98,8 @@ export const copy = {
     resync: 'Stream gap detected. Reloaded the graph.',
   },
   scenario: {
-    title: 'Scenario',
+    title: 'The story',
+    subtitle: 'Four beats, one belief gone wrong',
     steps: {
       inject_poison: 'Inject poisoned webhook',
       run_agents: 'Run agents',
@@ -139,6 +142,16 @@ export const copy = {
       shapes: 'Circle: fact. Rounded box: conclusion. Double border: decision. Square: action. Folded box: source.',
       state: 'Solid green ring: healthy. Dashed red: quarantined. Grey ghost: replaced. Dotted ochre: out of date.',
     },
+  },
+  pages: {
+    memory: { title: 'Agent memory', sub: 'What each agent knows, how they learn, and where every belief came from.' },
+    brain: { title: 'Company brain', sub: 'Ask anything. Every answer is traced to a source or refused.' },
+    tenants: { title: 'Tenant isolation', sub: 'One graph per tenant. The token decides what can be read.' },
+    bench: { title: 'Benchmark', sub: 'Concurrency, handoff races and poison containment, from the proof run.' },
+  },
+  welcome: {
+    title: 'Acme Support shares one memory',
+    body: 'Four agents read from it and act on it. Press Inject poisoned webhook and watch what happens when one belief is wrong.',
   },
   tabs: { graph: 'Graph', diff: 'Prompt diff', ledger: 'Actions and handoffs' },
   containment: {

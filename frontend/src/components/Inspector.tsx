@@ -5,12 +5,18 @@ import { graphBus } from '../graph/bus';
 import { actionDisplayState, actionTone } from '../state/actionState';
 import { getCypher, getNode } from '../state/endpoints';
 import { useStore, type InspectorTab } from '../state/store';
+import { Icon } from './Icon';
 import { Chip, Empty, ErrorState, fmtDateTime, fmtTime, Skeleton } from './ui';
 
 const TABS: InspectorTab[] = ['path', 'details', 'cypher'];
 
-function Kind({ n }: { n: GraphNode }) {
-  return <span className="kind">{n.is_decision ? copy.kind.decision : (copy.kind[n.kind] ?? n.kind)}</span>;
+function kindIcon(n: GraphNode) {
+  if (n.kind === 'conclusion' && n.is_decision) return 'flag';
+  return n.kind === 'source' ? 'doc' : n.kind === 'fact' ? 'fact' : n.kind === 'conclusion' ? 'conclusion' : 'bolt';
+}
+
+function statusTone(n: GraphNode) {
+  return n.status === 'QUARANTINED' ? 'bad' : n.status === 'HEALTHY' ? 'good' : 'neutral';
 }
 
 function PathTab({ nodes }: { nodes: GraphNode[] }) {
@@ -20,6 +26,9 @@ function PathTab({ nodes }: { nodes: GraphNode[] }) {
     <ol className="path">
       {nodes.map((n) => (
         <li key={n.id} className={`path-step st-${n.status}`}>
+          <span className="path-dot">
+            <Icon name={kindIcon(n)} size={13} />
+          </span>
           <button
             className="path-btn"
             onClick={() => {
@@ -27,17 +36,17 @@ function PathTab({ nodes }: { nodes: GraphNode[] }) {
               graphBus.focus.emit(n.id);
             }}
           >
-            <Kind n={n} />
+            <span className="kind">{n.is_decision ? copy.kind.decision : (copy.kind[n.kind] ?? n.kind)}</span>
             <strong>{n.label}</strong>
           </button>
           {n.quote && <blockquote>{n.quote}</blockquote>}
           {n.source && (
-            <p className="muted">
+            <p className="muted small">
               {copy.inspector.source}: {n.source.title}, {copy.inspector.version.toLowerCase()} {n.source.version}
             </p>
           )}
           {n.origin && (
-            <p className="muted">
+            <p className="muted small">
               {copy.inspector.origin}: <span className="mono">{n.origin}</span>
             </p>
           )}
@@ -47,17 +56,25 @@ function PathTab({ nodes }: { nodes: GraphNode[] }) {
   );
 }
 
-function DetailsTab({ node, descendants, history }: { node: GraphNode; descendants: number; history: { ts: number; status: string; reason: string }[] }) {
+function DetailsTab({
+  node,
+  descendants,
+  history,
+}: {
+  node: GraphNode;
+  descendants: number;
+  history: { ts: number; status: string; reason: string }[];
+}) {
   const ds = node.kind === 'action' ? actionDisplayState(node) : null;
   return (
     <div className="details">
       <h3 className="node-title">{node.label}</h3>
       <div className="chips">
-        <Chip tone={node.status === 'QUARANTINED' ? 'bad' : node.status === 'HEALTHY' ? 'good' : 'neutral'}>{copy.status[node.status] ?? node.status}</Chip>
+        <Chip tone={statusTone(node)}>{copy.status[node.status] ?? node.status}</Chip>
         {node.stale && node.status === 'HEALTHY' && <Chip tone="warn">{copy.status.stale}</Chip>}
         {ds && <Chip tone={actionTone(ds)}>{copy.actionState[ds]}</Chip>}
       </div>
-      {node.text && <p>{node.text}</p>}
+      {node.text && <p className="node-text">{node.text}</p>}
       <dl className="kv">
         <dt>ID</dt>
         <dd className="mono">{node.id}</dd>
@@ -94,11 +111,33 @@ function DetailsTab({ node, descendants, history }: { node: GraphNode; descendan
       <ul className="hist">
         {history.map((h, i) => (
           <li key={i}>
-            <span className="num">{fmtTime(h.ts)}</span> {copy.status[h.status] ?? h.status}. {h.reason}
+            <span className="num">{fmtTime(h.ts)}</span>
+            <span>
+              {copy.status[h.status] ?? h.status}. {h.reason}
+            </span>
           </li>
         ))}
       </ul>
     </div>
+  );
+}
+
+const KEYWORDS = /\b(MATCH|OPTIONAL MATCH|WHERE|WITH|SET|RETURN|CREATE|MERGE|UNWIND|ORDER BY|ON CREATE SET|AND|ALL|IN|NOT|DISTINCT|AS)\b/g;
+
+function Cypher({ text }: { text: string }) {
+  const parts = text.split(KEYWORDS);
+  return (
+    <pre className="mono">
+      {parts.map((p, i) =>
+        i % 2 === 1 ? (
+          <span key={i} className="kw">
+            {p}
+          </span>
+        ) : (
+          <span key={i}>{p}</span>
+        ),
+      )}
+    </pre>
   );
 }
 
@@ -111,7 +150,7 @@ function CypherTab({ nodeId }: { nodeId: string }) {
   if (!q.data?.length) return <Empty>{copy.inspector.cypherEmpty}</Empty>;
   return (
     <div className="cypher">
-      <p className="muted">
+      <p className="muted small">
         {copy.inspector.cypherNote} <span className="mono">{rid}</span>
       </p>
       {q.data.map((c, i) => (
@@ -122,7 +161,7 @@ function CypherTab({ nodeId }: { nodeId: string }) {
               {c.ms} ms, {copy.inspector.rows(c.rows)}
             </span>
           </header>
-          <pre className="mono">{c.cypher}</pre>
+          <Cypher text={c.cypher} />
         </article>
       ))}
     </div>
@@ -140,14 +179,26 @@ export function Inspector() {
   const node = asOf ? past : (live ?? q.data?.node);
 
   return (
-    <section className="panel inspector" aria-label={copy.inspector.title}>
-      <h2 className="panel-h">{copy.inspector.title}</h2>
-      {!id && <Empty>{copy.inspector.empty}</Empty>}
+    <section className="card inspector" aria-label={copy.inspector.title}>
+      <header className="card-h">
+        <h2>{copy.inspector.title}</h2>
+        {id && (
+          <button className="iconbtn" aria-label={copy.dismiss} onClick={() => set({ selectedId: null })}>
+            <Icon name="x" size={14} />
+          </button>
+        )}
+      </header>
+      {!id && (
+        <div className="inspector-empty">
+          <Icon name="graph" size={26} />
+          <p>{copy.inspector.empty}</p>
+        </div>
+      )}
       {id && (
         <>
-          <div className="tabs" role="tablist">
+          <div className="seg wide" role="tablist">
             {TABS.map((t) => (
-              <button key={t} role="tab" aria-selected={tab === t} className={`tab${tab === t ? ' on' : ''}`} onClick={() => set({ inspectorTab: t })}>
+              <button key={t} role="tab" aria-selected={tab === t} className={`seg-btn${tab === t ? ' on' : ''}`} onClick={() => set({ inspectorTab: t })}>
                 {copy.inspector.tabs[t]}
               </button>
             ))}

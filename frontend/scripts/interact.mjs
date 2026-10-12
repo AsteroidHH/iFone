@@ -21,8 +21,8 @@ await page.goto(base);
 await page.waitForSelector('.cy canvas');
 await wait(600);
 
-check('mock banner is visible', (await text('.banner.mock')).includes('Mock data, not from Quorum'));
-check('mode badge says Replay', (await text('.badge.mode')) === 'Replay');
+check('sample-data chip is visible', (await text('.pill.sample')).includes('Sample data'));
+check('mode badge says Replay', (await text('.pill.mode')) === 'Replay');
 
 // shortcuts
 await page.keyboard.press('?');
@@ -129,7 +129,7 @@ await wait(1000);
 await page.keyboard.press('p');
 await wait(500);
 check('P enters presentation mode and hides the scenario panel', (await page.locator('.scenario').count()) === 0);
-check('mock banner stays in mock mode while presenting', await page.locator('.banner.mock').isVisible());
+check('sample-data chip stays while presenting', await page.locator('.pill.sample').isVisible());
 await page.keyboard.press('Escape');
 
 // responsive

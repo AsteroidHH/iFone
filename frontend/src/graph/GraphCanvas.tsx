@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { shallow } from 'zustand/shallow';
+import { Icon } from '../components/Icon';
 import { copy } from '../copy';
 import { getPreview } from '../state/endpoints';
 import { useStore, visibleGraph } from '../state/store';
 import { goToTime } from '../state/timetravel';
 import { GraphAdapter } from './adapter';
 import { graphBus } from './bus';
-import { COL_X } from './layout';
+import { COL_X, NODE_W } from './layout';
 import { ListView } from './ListView';
+
+const KINDS = ['source', 'fact', 'conclusion', 'action'];
 
 export function GraphCanvas({ active }: { active: boolean }) {
   const host = useRef<HTMLDivElement>(null);
@@ -15,8 +19,12 @@ export function GraphCanvas({ active }: { active: boolean }) {
   const rails = useRef<(HTMLDivElement | null)[]>([]);
   const [hover, setHover] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+  const [welcomeGone, setWelcomeGone] = useState(false);
   const loaded = useStore((s) => s.loaded);
-  const nodeCount = useStore((s) => (s.past ? s.past.nodes.length : Object.keys(s.nodes).length));
+  const counts = useStore((s) => {
+    const nodes = visibleGraph(s).nodes;
+    return KINDS.map((k) => nodes.filter((n) => n.kind === k).length);
+  }, shallow);
   const selectedId = useStore((s) => s.selectedId);
   const search = useStore((s) => s.search);
   const locked = useStore((s) => s.lockLayout);
@@ -24,6 +32,8 @@ export function GraphCanvas({ active }: { active: boolean }) {
   const asOf = useStore((s) => s.asOf);
   const set = useStore((s) => s.set);
   const legendOpen = useStore((s) => s.legendOpen);
+  const started = useStore((s) => s.eventLog.length > 0);
+  const nodeCount = counts.reduce((a, b) => a + b, 0);
 
   useEffect(() => {
     if (!host.current) return;
@@ -31,8 +41,11 @@ export function GraphCanvas({ active }: { active: boolean }) {
       onSelect: (id) => useStore.getState().set({ selectedId: id }),
       onHover: setHover,
       onViewport: (pan, zoom) => {
+        const w = (NODE_W + 56) * zoom;
         rails.current.forEach((el, i) => {
-          if (el) el.style.transform = `translateX(${pan.x + (COL_X[i] ?? 0) * zoom}px)`;
+          if (!el) return;
+          el.style.width = `${w}px`;
+          el.style.transform = `translateX(${pan.x + (COL_X[i] ?? 0) * zoom - w / 2}px)`;
         });
       },
     });
@@ -106,61 +119,102 @@ export function GraphCanvas({ active }: { active: boolean }) {
 
   return (
     <div className={`canvas-wrap${asOf ? ' is-past' : ''}`} hidden={!active}>
-      <div className="canvas-tools" role="toolbar" aria-label="Graph tools">
-        <button className="btn" onClick={() => graphBus.fit.emit()} title="F">
-          {copy.canvas.fit}
-        </button>
-        <button className="btn" disabled={!selectedId} onClick={() => graphBus.collapse.emit()}>
-          {collapsed ? copy.canvas.expand : copy.canvas.collapse}
-        </button>
-        <button className="btn" onClick={() => graphBus.relayout.emit()}>
-          {copy.canvas.relayout}
-        </button>
-        <button className="btn" aria-pressed={locked} onClick={() => set({ lockLayout: !locked })}>
-          {locked ? copy.canvas.unlock : copy.canvas.lock}
-        </button>
-        <label className="search">
-          <span className="sr">{copy.canvas.search}</span>
-          <input
-            id="graph-search"
-            type="search"
-            placeholder={`${copy.canvas.search} (/)`}
-            value={search}
-            onChange={(e) => set({ search: e.target.value })}
-          />
-        </label>
-        <button className="btn" aria-pressed={listView} onClick={() => set({ listView: !listView })} title="L">
-          {listView ? copy.canvas.graph : copy.canvas.list}
-        </button>
-        <button className="btn ghost" aria-expanded={legendOpen} onClick={() => set({ legendOpen: !legendOpen })}>
-          {copy.canvas.legendTitle}
-        </button>
-      </div>
-
-      {legendOpen && (
-        <div className="legend" role="note">
-          <p>{copy.canvas.legend.shapes}</p>
-          <p>{copy.canvas.legend.state}</p>
-        </div>
-      )}
-
       <div className="canvas-stage">
         <div className="grid" aria-hidden="true" />
         <div className="rails" aria-hidden="true">
           {copy.rails.map((r, i) => (
             <div key={r} className="rail" ref={(el) => (rails.current[i] = el)}>
-              <span>{r}</span>
+              <span className="rail-label">
+                {r}
+                <b className="num">{counts[i]}</b>
+              </span>
             </div>
           ))}
         </div>
         <div ref={host} className="cy" role="img" aria-label={copy.canvas.graphAria} />
+
+        <div className="canvas-tools" role="toolbar" aria-label="Graph tools">
+          <label className="search">
+            <Icon name="search" size={15} />
+            <span className="sr">{copy.canvas.search}</span>
+            <input
+              id="graph-search"
+              type="search"
+              placeholder={`${copy.canvas.search}  /`}
+              value={search}
+              onChange={(e) => set({ search: e.target.value })}
+            />
+          </label>
+          <div className="seg" role="group" aria-label="View">
+            <button className={`seg-btn${!listView ? ' on' : ''}`} aria-pressed={!listView} onClick={() => set({ listView: false })}>
+              <Icon name="graph" size={14} />
+              {copy.canvas.graph}
+            </button>
+            <button className={`seg-btn${listView ? ' on' : ''}`} aria-pressed={listView} onClick={() => set({ listView: true })} title="L">
+              <Icon name="list" size={14} />
+              {copy.canvas.list}
+            </button>
+          </div>
+          <button className="btn quiet" disabled={!selectedId} onClick={() => graphBus.collapse.emit()}>
+            <Icon name="collapse" size={14} />
+            {collapsed ? copy.canvas.expand : copy.canvas.collapse}
+          </button>
+        </div>
+
+        <div className="zoomdock" role="group" aria-label="Zoom">
+          <button className="iconbtn" aria-label={copy.canvas.fit} title={`${copy.canvas.fit} (F)`} onClick={() => graphBus.fit.emit()}>
+            <Icon name="fit" size={16} />
+          </button>
+          <button className="iconbtn" aria-label="Zoom in" onClick={() => adapter.current?.zoomBy(1.25)}>
+            +
+          </button>
+          <button className="iconbtn" aria-label="Zoom out" onClick={() => adapter.current?.zoomBy(0.8)}>
+            -
+          </button>
+          <button className="iconbtn" aria-label={copy.canvas.relayout} title={copy.canvas.relayout} onClick={() => graphBus.relayout.emit()}>
+            <Icon name="refresh" size={15} />
+          </button>
+          <button className="iconbtn" aria-pressed={locked} aria-label={locked ? copy.canvas.unlock : copy.canvas.lock} title={locked ? copy.canvas.unlock : copy.canvas.lock} onClick={() => set({ lockLayout: !locked })}>
+            <Icon name="lock" size={15} />
+          </button>
+        </div>
+
+        <div className={`legend${legendOpen ? ' open' : ''}`}>
+          <button className="legend-toggle" aria-expanded={legendOpen} onClick={() => set({ legendOpen: !legendOpen })}>
+            <Icon name="help" size={14} />
+            {copy.canvas.legendTitle}
+          </button>
+          {legendOpen && (
+            <div className="legend-body" role="note">
+              <p>{copy.canvas.legend.shapes}</p>
+              <p>{copy.canvas.legend.state}</p>
+            </div>
+          )}
+        </div>
+
         {loaded && nodeCount === 0 && <p className="canvas-empty">{copy.canvas.empty}</p>}
+        {!started && !welcomeGone && !asOf && nodeCount > 0 && (
+          <div className="welcome" role="note">
+            <span className="welcome-ico">
+              <Icon name="sparkle" size={18} />
+            </span>
+            <div>
+              <h3>{copy.welcome.title}</h3>
+              <p>{copy.welcome.body}</p>
+            </div>
+            <button className="iconbtn" aria-label={copy.dismiss} onClick={() => setWelcomeGone(true)}>
+              <Icon name="x" size={14} />
+            </button>
+          </div>
+        )}
         {listView && <ListView />}
         {asOf && (
           <div className="past-bar" role="status">
+            <Icon name="clock" size={15} />
             <strong>{copy.canvas.pastFrame}</strong>
             <span className="mono">{new Date(asOf).toLocaleTimeString([], { hour12: false })}</span>
             <button className="btn" onClick={() => void goToTime(null)}>
+              <Icon name="back" size={14} />
               {copy.canvas.backToNow}
             </button>
           </div>

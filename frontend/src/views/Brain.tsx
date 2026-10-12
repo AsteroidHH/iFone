@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { copy } from '../copy';
+import { Icon } from '../components/Icon';
 import { Chip, Empty, ErrorState, fmtDateTime, Skeleton } from '../components/ui';
 import { askBrain, getTrace, getWhoKnows } from '../state/endpoints';
 import { useStore } from '../state/store';
+import { Avatar, PageHead } from './Memory';
 
 function Ask() {
   const [q, setQ] = useState('');
@@ -19,8 +21,7 @@ function Ask() {
   }, [prefill]);
 
   return (
-    <section className="panel ask" aria-label={copy.brain.title}>
-      <h2 className="panel-h">{copy.brain.title}</h2>
+    <section className="card ask" aria-label={copy.brain.title}>
       <form
         className="askform"
         onSubmit={(e) => {
@@ -28,7 +29,10 @@ function Ask() {
           if (q.trim()) ask.mutate(q.trim());
         }}
       >
-        <label className="sr" htmlFor="ask-q">{copy.brain.title}</label>
+        <Icon name="search" size={18} />
+        <label className="sr" htmlFor="ask-q">
+          {copy.brain.title}
+        </label>
         <input id="ask-q" value={q} onChange={(e) => setQ(e.target.value)} placeholder={copy.brain.placeholder} />
         <button className="btn primary" disabled={ask.isPending || !q.trim()}>
           {copy.brain.ask}
@@ -38,7 +42,7 @@ function Ask() {
         {copy.brain.examples.map((x) => (
           <button
             key={x}
-            className="btn ghost"
+            className="chip-btn"
             onClick={() => {
               setQ(x);
               ask.mutate(x);
@@ -52,7 +56,10 @@ function Ask() {
       {ask.isError && <ErrorState error={ask.error} onRetry={() => ask.mutate(q)} />}
       {ask.data?.refused && (
         <div className="answer refused" role="status">
-          <Chip tone="bad">{copy.brain.refused}</Chip>
+          <div className="answer-tag">
+            <Icon name="shield" size={15} />
+            <Chip tone="bad">{copy.brain.refused}</Chip>
+          </div>
           <h3>{copy.brain.refusedWhy}</h3>
           <p>{ask.data.reason}</p>
         </div>
@@ -65,6 +72,7 @@ function Ask() {
             {ask.data.citations.map((c, i) => (
               <li key={i} className={c.stale ? 'old' : ''}>
                 <div className="cite-head">
+                  <Icon name="doc" size={16} />
                   <strong>{c.source_title}</strong>
                   <span className="muted">
                     {copy.brain.version} {c.version}
@@ -72,7 +80,7 @@ function Ask() {
                   <Chip tone={c.stale ? 'warn' : 'good'}>{c.stale ? copy.brain.outOfDate : copy.brain.current}</Chip>
                 </div>
                 {c.quote && <blockquote>{c.quote}</blockquote>}
-                <p className="muted">
+                <p className="muted small">
                   {copy.brain.owner}: {c.owner_team}. <span className="num">{fmtDateTime(c.valid_from)}</span>{' '}
                   {c.url && (
                     <a href={c.url} target="_blank" rel="noreferrer noopener">
@@ -95,16 +103,20 @@ function WhoKnows() {
   const q = useQuery({ queryKey: ['who-knows', committed], queryFn: () => getWhoKnows(committed) });
   const max = Math.max(1, ...(q.data ?? []).map((p) => p.evidence_count));
   return (
-    <section className="panel" aria-label={copy.brain.whoKnows}>
-      <h2 className="panel-h">{copy.brain.whoKnows}</h2>
+    <section className="card" aria-label={copy.brain.whoKnows}>
+      <header className="card-h">
+        <h2>{copy.brain.whoKnows}</h2>
+      </header>
       <form
-        className="askform"
+        className="inline-form"
         onSubmit={(e) => {
           e.preventDefault();
           setCommitted(topic);
         }}
       >
-        <label className="sr" htmlFor="topic">{copy.brain.topic}</label>
+        <label className="sr" htmlFor="topic">
+          {copy.brain.topic}
+        </label>
         <input id="topic" value={topic} onChange={(e) => setTopic(e.target.value)} />
         <button className="btn">{copy.brain.lookup}</button>
       </form>
@@ -112,15 +124,18 @@ function WhoKnows() {
       {q.isError && <ErrorState error={q.error} onRetry={() => void q.refetch()} />}
       {q.data && q.data.length === 0 && <Empty>{copy.brain.traceNone}</Empty>}
       <ol className="board">
-        {q.data?.map((p) => (
+        {q.data?.map((p, i) => (
           <li key={p.person}>
-            <div className="board-head">
-              <strong>{p.person}</strong>
-              <span className="muted">{p.team}</span>
-              <span className="num">{copy.brain.evidence(p.evidence_count)}</span>
-            </div>
-            <div className="rankbar">
-              <i style={{ width: `${(p.evidence_count / max) * 100}%` }} />
+            <Avatar name={p.person} tier={i === 0 ? 'root' : 'established'} />
+            <div className="board-main">
+              <div className="board-head">
+                <strong>{p.person}</strong>
+                <span className="muted small">{p.team}</span>
+                <span className="num board-n">{copy.brain.evidence(p.evidence_count)}</span>
+              </div>
+              <div className="rankbar">
+                <i style={{ width: `${(p.evidence_count / max) * 100}%` }} />
+              </div>
             </div>
           </li>
         ))}
@@ -136,8 +151,10 @@ function Trace() {
   const current = id || decisions[0]?.id || '';
   const q = useQuery({ queryKey: ['trace', current], queryFn: () => getTrace(current), enabled: !!current });
   return (
-    <section className="panel" aria-label={copy.brain.traceTitle}>
-      <h2 className="panel-h">{copy.brain.traceTitle}</h2>
+    <section className="card" aria-label={copy.brain.traceTitle}>
+      <header className="card-h">
+        <h2>{copy.brain.traceTitle}</h2>
+      </header>
       {decisions.length === 0 && <Empty>{copy.brain.traceEmpty}</Empty>}
       {decisions.length > 0 && (
         <label className="field">
@@ -157,14 +174,19 @@ function Trace() {
       <ol className="trace">
         {q.data?.map((r, i) => (
           <li key={i}>
-            <strong>{r.claim}</strong>
-            {r.quote && <blockquote>{r.quote}</blockquote>}
-            <p className="muted">
-              {r.source_title}, {copy.brain.version.toLowerCase()} {r.version}. {copy.brain.owner}: {r.owner}.{' '}
-              <a href={r.url} target="_blank" rel="noreferrer noopener">
-                Open source
-              </a>
-            </p>
+            <span className="trace-dot">
+              <Icon name="link" size={13} />
+            </span>
+            <div>
+              <strong>{r.claim}</strong>
+              {r.quote && <blockquote>{r.quote}</blockquote>}
+              <p className="muted small">
+                {r.source_title}, {copy.brain.version.toLowerCase()} {r.version}. {copy.brain.owner}: {r.owner}.{' '}
+                <a href={r.url} target="_blank" rel="noreferrer noopener">
+                  Open source
+                </a>
+              </p>
+            </div>
           </li>
         ))}
       </ol>
@@ -174,10 +196,13 @@ function Trace() {
 
 export function Brain() {
   return (
-    <div className="page brain">
+    <div className="page">
+      <PageHead page="brain" />
       <Ask />
-      <WhoKnows />
-      <Trace />
+      <div className="grid-2">
+        <WhoKnows />
+        <Trace />
+      </div>
     </div>
   );
 }

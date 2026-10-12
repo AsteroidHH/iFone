@@ -1,6 +1,8 @@
 import type { GraphEdge, GraphNode } from '../api/schemas';
 
-export const COL_X = [0, 230, 460, 690];
+export const NODE_W = 160;
+export const NODE_H = 54;
+export const COL_X = [0, 206, 412, 618];
 export const GAP_Y = 68;
 
 export const KIND_COL: Record<string, number> = { source: 0, fact: 1, conclusion: 2, action: 3 };

@@ -2,9 +2,11 @@ import { copy } from '../copy';
 import { graphBus } from '../graph/bus';
 import type { FeedGroup } from '../state/reducer';
 import { useStore, type FeedFilter } from '../state/store';
-import { fmtTime, Empty, Skeleton } from './ui';
+import { Icon } from './Icon';
+import { fmtTime, Skeleton } from './ui';
 
 const FILTERS: FeedFilter[] = ['all', 'graph', 'actions', 'handoffs', 'system'];
+const TONE_ICON: Record<string, string> = { bad: 'alert', good: 'check', review: 'user', warn: 'clock', neutral: 'fact' };
 
 export function HistoryFeed() {
   const feed = useStore((s) => s.feed);
@@ -14,20 +16,24 @@ export function HistoryFeed() {
   const shown = feed.filter((f) => filter === 'all' || f.group === (filter as FeedGroup));
 
   return (
-    <section className="panel history" aria-label={copy.history.title}>
-      <div className="panel-top">
-        <h2 className="panel-h">{copy.history.title}</h2>
-        <label className="sr" htmlFor="feed-filter">{copy.history.filterLabel}</label>
-        <select id="feed-filter" value={filter} onChange={(e) => set({ feedFilter: e.target.value as FeedFilter })}>
+    <section className="card history" aria-label={copy.history.title}>
+      <header className="card-h">
+        <h2>{copy.history.title}</h2>
+        <div className="seg" role="group" aria-label={copy.history.filterLabel}>
           {FILTERS.map((f) => (
-            <option key={f} value={f}>
+            <button key={f} className={`seg-btn${filter === f ? ' on' : ''}`} aria-pressed={filter === f} onClick={() => set({ feedFilter: f })}>
               {copy.history.filters[f]}
-            </option>
+            </button>
           ))}
-        </select>
-      </div>
+        </div>
+      </header>
       {!loaded && <Skeleton lines={4} />}
-      {loaded && shown.length === 0 && <Empty>{copy.history.empty}</Empty>}
+      {loaded && shown.length === 0 && (
+        <div className="feed-empty">
+          <Icon name="clock" size={22} />
+          <p>{copy.history.empty}</p>
+        </div>
+      )}
       <ol className="feed" aria-live="polite" aria-relevant="additions">
         {shown.map((f) => (
           <li key={f.id} className={`feed-item tone-${f.tone}`}>
@@ -40,8 +46,11 @@ export function HistoryFeed() {
                 graphBus.focus.emit(f.nodeId);
               }}
             >
-              <span className="feed-time num">{fmtTime(f.ts)}</span>
+              <span className="feed-ico">
+                <Icon name={TONE_ICON[f.tone] ?? 'fact'} size={13} />
+              </span>
               <span className="feed-text">{f.text}</span>
+              <span className="feed-time num">{fmtTime(f.ts)}</span>
             </button>
           </li>
         ))}

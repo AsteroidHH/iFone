@@ -1,8 +1,9 @@
 import cytoscape, { type Core, type EdgeSingular, type NodeSingular } from 'cytoscape';
 import type { GraphEdge, GraphNode } from '../api/schemas';
 import { copy } from '../copy';
+import { iconPath } from '../components/Icon';
 import { actionDisplayState } from '../state/actionState';
-import { colOf, COL_X, freeSlot, GAP_Y, layoutAll } from './layout';
+import { colOf, COL_X, freeSlot, GAP_Y, layoutAll, NODE_H, NODE_W } from './layout';
 import { P } from './palette';
 
 export interface AdapterHandlers {
@@ -13,125 +14,144 @@ export interface AdapterHandlers {
 
 const reduced = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const uri = (svg: string) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}...` : s);
 
-function actionIcon(color: string, blocked: boolean, confirmed: boolean): string {
-  const bolt = `<path d="M19 6 L10 21 H17 L15 32 L27 15 H20 Z" fill="${color}"/>`;
-  const lock = blocked
-    ? `<g transform="translate(24 3)"><rect x="0" y="5" width="11" height="8" fill="${P.ultramarine}"/><path d="M2 5 V3 a3.5 3.5 0 0 1 7 0 V5" fill="none" stroke="${P.ultramarine}" stroke-width="1.6"/></g>`
-    : '';
-  const check = confirmed
-    ? `<path d="M24 8 L28 12 L35 3" fill="none" stroke="${P.verdigris}" stroke-width="2.4"/>`
-    : '';
-  return uri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 38 38">${bolt}${lock}${check}</svg>`);
+function nodeImage(n: GraphNode): string {
+  const tone =
+    n.status === 'QUARANTINED' ? P.bad : n.status === 'SUPERSEDED' ? P.ghost : n.stale ? P.warn : n.kind === 'source' ? P.text2 : P.ok;
+  const key = n.kind === 'conclusion' && n.is_decision ? 'decision' : n.kind;
+  const path = iconPath[key] ?? iconPath.fact ?? '';
+  const icon = `<g transform="translate(11 ${NODE_H / 2 - 9}) scale(0.75)" fill="none" stroke="${tone}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${path}"/></g>`;
+  let badge = '';
+  const a = n.action;
+  if (a?.gate === 'BLOCKED' && !a.executed) {
+    badge = `<g transform="translate(${NODE_W - 20} 6)" fill="none" stroke="${P.person}" stroke-width="2" stroke-linecap="round"><rect x="1" y="6" width="10" height="7" rx="1.5" fill="${P.person}" fill-opacity="0.25"/><path d="M3 6V4a3 3 0 0 1 6 0v2"/></g>`;
+  } else if (a?.confirmed) {
+    badge = `<g transform="translate(${NODE_W - 20} 6)" fill="none" stroke="${n.status === 'QUARANTINED' ? P.bad : P.ok}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m1 7 3.5 3.5L11 3"/></g>`;
+  }
+  return uri(`<svg xmlns="http://www.w3.org/2000/svg" width="${NODE_W}" height="${NODE_H}" viewBox="0 0 ${NODE_W} ${NODE_H}">${icon}${badge}</svg>`);
 }
 
 function toData(n: GraphNode): cytoscape.NodeDataDefinition {
   const isAction = n.kind === 'action';
   const display = isAction ? copy.actionState[actionDisplayState(n)] : '';
-  const color = n.status === 'QUARANTINED' ? P.stamp : n.status === 'SUPERSEDED' ? P.pencil : P.ink;
   return {
     id: n.id,
     label: n.label,
-    label2: isAction ? `${n.label}\n${display}` : n.label,
+    label2: isAction ? `${clip(n.label, 22)}\n${display}` : clip(n.label, 34),
     kind: n.kind,
     status: n.status,
     stale: n.stale && n.status === 'HEALTHY' ? 1 : 0,
     decision: n.is_decision ? 1 : 0,
-    img: isAction ? actionIcon(color, n.action?.gate === 'BLOCKED' && !n.action.executed, !!n.action?.confirmed) : '',
+    img: nodeImage(n),
   };
 }
 
-const style: cytoscape.StylesheetJson = [
+const style = [
   {
     selector: 'node',
     style: {
+      shape: 'round-rectangle',
+      width: NODE_W,
+      height: NODE_H,
+      'corner-radius': 10,
       'font-family': '"Schibsted Grotesk", system-ui, sans-serif',
-      'font-size': 12,
-      color: P.ink,
+      'font-size': 13,
+      'font-weight': 500,
+      color: P.text,
       label: 'data(label2)',
-      'text-valign': 'bottom',
+      'text-valign': 'center',
       'text-halign': 'center',
-      'text-margin-y': 6,
+      'text-margin-x': 14,
       'text-wrap': 'wrap',
-      'text-max-width': '150px',
-      'text-background-color': P.paper,
-      'text-background-opacity': 0.82,
-      'text-background-padding': '1px',
-      'min-zoomed-font-size': 7,
-      'background-color': P.paper,
-      'border-width': 2,
-      'border-color': P.ink,
+      'text-max-width': `${NODE_W - 46}px`,
+      'line-height': 1.25,
+      'min-zoomed-font-size': 6,
+      'background-color': P.bg3,
+      'border-width': 1.5,
+      'border-color': P.nodeBorder,
+      'background-image': 'data(img)',
+      'background-fit': 'none',
+      'background-width': '100%',
+      'background-height': '100%',
+      'background-clip': 'none',
       'overlay-opacity': 0,
-      'overlay-padding': 8,
+      'overlay-padding': 6,
       'transition-property': 'opacity',
       'transition-duration': 160,
     },
   },
-  { selector: 'node[kind="source"]', style: { shape: 'cut-rectangle', width: 46, height: 34, 'border-width': 1.5 } },
-  { selector: 'node[kind="fact"]', style: { shape: 'ellipse', width: 34, height: 34 } },
-  { selector: 'node[kind="conclusion"]', style: { shape: 'round-rectangle', width: 64, height: 32 } },
+  { selector: 'node[kind="source"]', style: { shape: 'cut-rectangle', 'cut-rectangle-corner-radius': 9, 'background-color': P.bg2 } },
+  { selector: 'node[kind="fact"]', style: { 'corner-radius': 26 } },
+  { selector: 'node[kind="conclusion"]', style: { 'corner-radius': 8 } },
   {
     selector: 'node[kind="conclusion"][decision > 0]',
-    style: { shape: 'rectangle', width: 66, height: 38, 'border-style': 'double', 'border-width': 5 },
+    style: { shape: 'rectangle', 'border-style': 'double', 'border-width': 5 },
   },
-  {
-    selector: 'node[kind="action"]',
-    style: {
-      shape: 'rectangle',
-      width: 38,
-      height: 38,
-      'background-image': 'data(img)',
-      'background-fit': 'contain',
-      'background-clip': 'none',
-      'background-width': '100%',
-      'background-height': '100%',
-    },
-  },
-  { selector: 'node[status="HEALTHY"]', style: { 'border-color': P.verdigris } },
-  { selector: 'node[kind="source"][status="HEALTHY"]', style: { 'border-color': P.ink } },
+  { selector: 'node[kind="action"]', style: { 'corner-radius': 4 } },
+  { selector: 'node[status="HEALTHY"]', style: { 'border-color': P.ok, 'background-color': P.okFill } },
+  { selector: 'node[kind="source"][status="HEALTHY"]', style: { 'border-color': 'rgba(255,255,255,0.34)', 'background-color': P.bg2 } },
   {
     selector: 'node[status="QUARANTINED"]',
-    style: { 'border-color': P.stamp, 'border-style': 'dashed', 'background-color': P.stampWash, color: P.stamp },
+    style: { 'border-color': P.bad, 'border-style': 'dashed', 'background-color': P.badFill, color: P.badText },
   },
   {
     selector: 'node[status="SUPERSEDED"]',
-    style: { 'border-color': P.pencil, 'background-color': P.vellum, color: P.graphite, opacity: 0.55 },
+    style: { 'border-color': P.ghost, 'background-color': P.ghostFill, color: P.ghost, opacity: 0.6 },
   },
-  { selector: 'node[status="UNKNOWN"]', style: { 'border-color': P.graphite, 'border-style': 'dotted' } },
-  { selector: 'node[stale > 0]', style: { 'border-color': P.ochre, 'border-style': 'dotted', 'border-width': 3 } },
-  { selector: 'node:selected', style: { 'overlay-color': P.ink, 'overlay-opacity': 0.12, 'overlay-padding': 9 } },
-  { selector: 'node.dry', style: { 'overlay-color': P.stamp, 'overlay-opacity': 0.22, 'overlay-padding': 10 } },
-  { selector: 'node.pulse', style: { 'overlay-color': P.stamp, 'overlay-opacity': 0.4, 'overlay-padding': 18 } },
-  { selector: '.faded', style: { opacity: 0.18 } },
+  { selector: 'node[status="UNKNOWN"]', style: { 'border-color': P.ghost, 'border-style': 'dotted' } },
+  { selector: 'node[stale > 0]', style: { 'border-color': P.warn, 'border-style': 'dotted', 'border-width': 2.5 } },
+  { selector: 'node:selected', style: { 'overlay-color': '#ffffff', 'overlay-opacity': 0.1, 'overlay-padding': 8 } },
+  { selector: 'node.dry', style: { 'overlay-color': P.bad, 'overlay-opacity': 0.22, 'overlay-padding': 9 } },
+  { selector: 'node.pulse', style: { 'overlay-color': P.bad, 'overlay-opacity': 0.26, 'overlay-padding': 10 } },
+  { selector: '.faded', style: { opacity: 0.14 } },
   { selector: '.hidden', style: { display: 'none' } },
   {
     selector: 'edge',
     style: {
-      width: 1.4,
+      width: 1.3,
       'line-color': P.edge,
       'target-arrow-color': P.edge,
       'target-arrow-shape': 'triangle',
-      'arrow-scale': 0.9,
-      'curve-style': 'bezier',
-      opacity: 0.9,
+      'arrow-scale': 0.85,
+      'curve-style': 'taxi',
+      'taxi-direction': 'rightward',
+      'taxi-turn': '50%',
+      'taxi-radius': 14,
     },
   },
   { selector: 'edge[type="SUPPORTS"]', style: { 'line-style': 'dashed', 'line-dash-pattern': [6, 4] } },
-  { selector: 'edge[type="FROM_SOURCE"]', style: { width: 0.9, 'target-arrow-shape': 'none' } },
+  { selector: 'edge[type="FROM_SOURCE"]', style: { width: 1, 'target-arrow-shape': 'none', 'line-color': 'rgba(163,176,191,0.3)' } },
   {
     selector: 'edge[type="CONTRADICTS"]',
-    style: { 'line-color': P.stamp, 'target-arrow-color': P.stamp, 'target-arrow-shape': 'tee', width: 2.4 },
+    style: {
+      'line-color': P.bad,
+      'target-arrow-color': P.bad,
+      'target-arrow-shape': 'tee',
+      width: 2.2,
+      'curve-style': 'unbundled-bezier',
+      'control-point-distances': [-60],
+      'control-point-weights': [0.5],
+    },
   },
   {
     selector: 'edge[type="SUPERSEDES"]',
-    style: { 'line-color': P.pencil, 'target-arrow-color': P.pencil, 'line-style': 'dashed', 'line-dash-pattern': [14, 7] },
+    style: {
+      'line-color': P.ghost,
+      'target-arrow-color': P.ghost,
+      'line-style': 'dashed',
+      'line-dash-pattern': [14, 7],
+      'curve-style': 'unbundled-bezier',
+      'control-point-distances': [60],
+      'control-point-weights': [0.5],
+    },
   },
   {
     selector: 'edge[tq > 0][type!="CONTRADICTS"]',
-    style: { 'line-color': P.stamp, 'target-arrow-color': P.stamp, 'line-style': 'dashed', 'line-dash-pattern': [5, 4] },
+    style: { 'line-color': P.bad, 'target-arrow-color': P.bad, 'line-style': 'dashed', 'line-dash-pattern': [5, 4] },
   },
-  { selector: 'edge.dry', style: { 'line-color': P.stamp, 'target-arrow-color': P.stamp, width: 2.4 } },
-];
+  { selector: 'edge.dry', style: { 'line-color': P.bad, 'target-arrow-color': P.bad, width: 2.4 } },
+] as unknown as cytoscape.StylesheetJson;
 
 export class GraphAdapter {
   readonly cy: Core;
@@ -142,7 +162,10 @@ export class GraphAdapter {
   private autoFit = true;
   private fitTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(container: HTMLElement, private h: AdapterHandlers) {
+  constructor(
+    container: HTMLElement,
+    private h: AdapterHandlers,
+  ) {
     this.cy = cytoscape({
       container,
       style,
@@ -150,14 +173,19 @@ export class GraphAdapter {
       minZoom: 0.25,
       maxZoom: 2.5,
       boxSelectionEnabled: false,
-      autoungrabify: false,
     });
     this.cy.on('tap', 'node', (e) => h.onSelect((e.target as NodeSingular).id()));
     this.cy.on('tap', (e) => {
       if (e.target === this.cy) h.onSelect(null);
     });
-    this.cy.on('mouseover', 'node', (e) => h.onHover((e.target as NodeSingular).id()));
-    this.cy.on('mouseout', 'node', () => h.onHover(null));
+    this.cy.on('mouseover', 'node', (e) => {
+      container.style.cursor = 'pointer';
+      h.onHover((e.target as NodeSingular).id());
+    });
+    this.cy.on('mouseout', 'node', () => {
+      container.style.cursor = '';
+      h.onHover(null);
+    });
     this.cy.on('viewport', () => h.onViewport(this.cy.pan(), this.cy.zoom()));
     const manual = () => {
       this.autoFit = false;
@@ -218,7 +246,11 @@ export class GraphAdapter {
   }
 
   /** Adds new elements and updates changed ones. Existing positions never move. */
-  applyDelta(nodes: Record<string, GraphNode>, edges: Record<string, GraphEdge>, d: { ids: string[]; edgeIds: string[]; delays: Record<string, number> }) {
+  applyDelta(
+    nodes: Record<string, GraphNode>,
+    edges: Record<string, GraphEdge>,
+    d: { ids: string[]; edgeIds: string[]; delays: Record<string, number> },
+  ) {
     for (const id of d.ids) {
       const n = nodes[id];
       if (!n) continue;
@@ -233,12 +265,8 @@ export class GraphAdapter {
         this.scheduleFit();
       } else {
         const delay = d.delays[id] ?? 0;
-        const quarantining = n.status === 'QUARANTINED' || existing.data('status') === 'QUARANTINED';
-        if (delay > 0 || (quarantining && id in d.delays)) {
-          this.later(delay, () => this.updateNode(n, true));
-        } else {
-          this.updateNode(n, id in d.delays);
-        }
+        if (delay > 0) this.later(delay, () => this.updateNode(n, true));
+        else this.updateNode(n, id in d.delays);
       }
     }
     for (const eid of d.edgeIds) {
@@ -276,7 +304,7 @@ export class GraphAdapter {
 
   private pulse(el: NodeSingular) {
     el.addClass('pulse');
-    this.later(reduced() ? 260 : 520, () => el.removeClass('pulse'));
+    this.later(reduced() ? 260 : 560, () => el.removeClass('pulse'));
   }
 
   resized() {
@@ -298,11 +326,17 @@ export class GraphAdapter {
     this.fitView(animate);
   }
 
+  zoomBy(factor: number) {
+    this.autoFit = false;
+    const z = Math.min(2.5, Math.max(0.25, this.cy.zoom() * factor));
+    this.cy.zoom({ level: z, renderedPosition: { x: this.cy.width() / 2, y: this.cy.height() / 2 } });
+  }
+
   private fitView(animate: boolean) {
     const els = this.cy.elements(':visible');
     if (els.empty()) return;
-    if (animate && !reduced()) this.cy.animate({ fit: { eles: els, padding: 56 } }, { duration: 260 });
-    else this.cy.fit(els, 56);
+    if (animate && !reduced()) this.cy.animate({ fit: { eles: els, padding: 30 } }, { duration: 300 });
+    else this.cy.fit(els, 30);
     this.h.onViewport(this.cy.pan(), this.cy.zoom());
   }
 
@@ -312,7 +346,7 @@ export class GraphAdapter {
     this.cy.$(':selected').unselect();
     el.select();
     if (reduced()) this.cy.center(el);
-    else this.cy.animate({ center: { eles: el } }, { duration: 240 });
+    else this.cy.animate({ center: { eles: el } }, { duration: 260 });
   }
 
   setSelected(id: string | null) {

@@ -1,72 +1,50 @@
-# Quorum frontend design plan
+# Quorum frontend design
 
-Direction: a forensic ledger drawn on drafting paper. Quiet, light, precise.
-The belief graph is evidence; the UI never decorates it.
+Direction: an incident command room. Graphite surfaces, one signal colour per state, card-style evidence nodes on a dot grid, big numerals for the numbers that matter, and a guided story stepper so the first minute makes sense without a briefing.
 
-## Palette (tokens as CSS variables)
+This replaces the first plan (a light "forensic ledger on drafting paper"). That version was accurate but read as a prototype: flat, low contrast between regions, and no focal point. The brief's art direction is a starting point; the owner asked for a polished product, so the pack's light palette was dropped. The rules that mattered stay: status never rides on colour alone, nothing on screen is invented, the quarantine wave and the prompt diff are where the boldness goes.
 
-| Role | Token | Hex | Text use |
+## Palette (CSS variables in `src/styles/tokens.css`)
+
+| Role | Token | Value | Used for |
 |---|---|---|---|
-| Canvas | `--vellum` | #E6EBEF | background only |
-| Panel | `--paper` | #F7F9FA | background only |
-| Ink | `--ink` | #101C2B | body, lines |
-| Secondary | `--graphite` | #566577 | secondary text |
-| Healthy | `--verdigris` | #17806D | fills, rings, 4.5:1 on paper for text |
-| Quarantined | `--stamp` | #C62F1B | rings, dashed edges |
-| Out of date | `--ochre` | #B5760F | rings only; text uses #8A5A0B |
-| Superseded | `--pencil` | #8D9AA8 | ghosts, never body text |
-| Review/human | `--ultramarine` | #3B3FD1 | review actions, "viewing the past" frame |
+| Page | `--bg` | #080d13 | background |
+| Card | `--bg-2` / `--bg-3` / `--bg-4` | #0d141c / #121b25 / #19242f | surfaces, three steps of elevation |
+| Text | `--text` / `--text-2` / `--text-3` | #e9eef4 / #a3b0bf / #8392a3 | body, secondary, captions |
+| Healthy | `--ok` | #3ddbb0 | healthy rings, success |
+| Quarantined | `--bad` | #ff6a55 | quarantine, dashed edges, errors |
+| Out of date | `--warn` | #f4b94f | stale rings, sample-data chip |
+| Person decides | `--person` | #8f9bff | review handoffs, replay mode, "viewing the past", Autopilot |
+| Superseded | `--ghost` | #8190a3 | ghost nodes |
 
-Hairline: ink at 14%. No gradients, glow or glass. Every text/background pair
-is checked with a script (`npm run contrast`) before it ships; pencil and
-ochre (#B5760F) are never used for text.
+`npm run contrast` checks every text and surface pair at 4.5:1 and every ring at 3:1, compositing translucent tints over the surface they sit on. The periwinkle `--person` is reserved for "a person or a replay is in charge", so it never competes with the green and red state colours.
 
 ## Type
 
-- Schibsted Grotesk 400/500/700 for UI, headings, big numerals (tabular figures).
-- JetBrains Mono only for ids, Cypher and drawer timestamps.
-- Scale 12, 13, 14, 16, 20, 28, 44. Sentence case. Lines under 80 characters.
-- Both families bundled via `@fontsource`; no network at runtime.
+Schibsted Grotesk (400, 500, 700) for everything; tabular figures on numbers. JetBrains Mono only for ids, Cypher and server output. Scale 12, 13, 14, 16, 20, 28, 44. Sentence case. Both families are bundled, so the app works offline.
 
-## Layout
+## Structure
 
-Header (tenant, mode, epoch, invariants, connection) over three columns
-(History + scenario controls | graph canvas | containment report + inspector)
-over a timeline bar. Desktop-first: 1440 target, 1280 comfortable, 1024 usable.
+- Header: brand, view switcher, then tenant, data source chip, agent mode, epoch, invariants, connection. Narrow widths drop labels before dropping meaning.
+- Console: left column holds the story stepper and the history feed; the centre is the graph with floating search, view toggle and zoom dock; the right column holds the containment report (collapses when a node is selected) and the inspector; the timeline runs underneath.
+- Secondary views use one page template: title, one sentence, cards.
 
-## Principles
+## The canvas
 
-1. The canvas is the signature: faint drafting grid, four labelled column rails
-   (Sources, Facts, Conclusions, Actions) that encode causal order.
-2. Boldness in two places only: the quarantine wave and the prompt diff.
-3. Shape and glyph carry meaning, never color alone.
-4. Radius varies by role (2 px panels, pill chips); not one card kit.
-5. One orchestrated motion per major event; `prefers-reduced-motion` turns the
-   wave into an instant state change with a short highlight.
-6. Every number on screen comes from the API. Mock mode carries a permanent banner.
+Nodes are cards with the shape language kept from the brief: source (cut corners), fact (pill), conclusion (rounded box), decision (double border), action (square corners, bolt). State is carried by border style and a glyph as well as colour: solid green healthy, dashed red quarantined, dotted amber out of date, faded ghost for replaced, lock for held-for-review, check for confirmed. Columns are fixed by kind with a labelled, counted header per column. Edges are orthogonal, dashed red once their target is quarantined.
 
-## Review against generic defaults
+## Motion
 
-| Generic pattern | Risk in this plan | Change made |
-|---|---|---|
-| Dark mode with one neon accent | none, plan is light | kept light |
-| Cream paper with a serif | vellum/paper could drift warm | kept cool blue-grey; sans only |
-| Identical rounded cards | panels could all look alike | panels flat with hairlines; only chips are pills |
-| All-caps tracked eyebrows | easy habit for section labels | banned; sentence-case labels |
-| Mono for every small label | tempting for ids and counts | mono restricted to ids, Cypher, drawer timestamps |
-| Arrow on every button | tempting for CTAs | buttons name the result, no arrows |
-| Single blue-ish accent | ultramarine plus pale blue-grey can read "SaaS blue" | ultramarine reserved for human/review and the past-viewing frame, so it appears rarely and always means "a person decides" |
+Two orchestrated moments: the quarantine wave (each node pulses at 120 ms per hop) and the claim race. Everything else is a short response to a click. `prefers-reduced-motion` turns the wave into an instant change with a brief highlight.
 
 ## Voice
 
-Statuses: Healthy, Quarantined, Replaced by a newer fact, Out of date.
-Actions: Staged, Held for review, Running, Ran, Cancelled, Rolling back,
-Rolled back, Rollback failed, Needs a person.
-Buttons: "Inject poisoned webhook", "Audit memory", "Restore", "Replace policy".
-All strings live in `frontend/src/copy/`.
+Plain and specific. Statuses: Healthy, Quarantined, Replaced by a newer fact, Out of date. Actions: Staged, Held for review, Ran, Rolled back, Needs a person. Buttons name the result. Errors say what failed and what to do. All strings are in `src/copy/`.
+
+## Honesty
+
+A "Sample data" chip sits in the header whenever the scripted in-browser backend is active; it explains itself on hover. Benchmark numbers and every other figure come from the API (or, in sample mode, from a labelled fixture).
 
 ## Verification
 
-`npm run verify` (typecheck, lint, unit tests, contract check, build), then
-headless screenshots of each demo beat saved to `docs/screens/`, each critiqued
-before the beat is called done.
+`npm run verify` runs typecheck, unit tests, contrast, contract check and the production build. `npm run screens` and `npm run qa` drive the full story headlessly; screenshots land in `docs/screens/` and are reviewed before a beat counts as done.

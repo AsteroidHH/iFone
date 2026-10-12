@@ -39,7 +39,7 @@ export interface CoreState {
   nodeRequest: Record<string, string>;
   claimRace: ClaimRace | null;
   handoffs: Record<string, Handoff>;
-  eventLog: { seq: number; ts: number; type: string; reason?: string; step?: string }[];
+  eventLog: { seq: number; ts: number; type: string; reason?: string; step?: string; state?: string }[];
 }
 
 export type Effect =
@@ -134,6 +134,7 @@ export function applyEvent(prev: CoreState, ev: SseEvent): { state: CoreState; e
         type: ev.type,
         reason: ev.type === 'epoch_changed' ? String(ev.data.reason) : undefined,
         step: ev.type === 'scenario_progress' ? ev.data.step : undefined,
+        state: ev.type === 'scenario_progress' ? String(ev.data.state) : undefined,
       },
     ].slice(-600),
   };

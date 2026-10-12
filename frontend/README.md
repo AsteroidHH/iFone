@@ -1,6 +1,6 @@
 # Quorum console (frontend)
 
-React 18, Vite, TypeScript (strict), Zustand, TanStack Query, zod, Cytoscape.js. No Tailwind, no animation library: tokens are CSS variables in `src/styles/tokens.css`.
+React 18, Vite, TypeScript (strict), Zustand, TanStack Query, zod, Cytoscape.js. No Tailwind, no animation library: tokens are CSS variables in `src/styles/tokens.css`. Design notes: `../docs/FRONTEND_DESIGN.md`.
 
 ## Run it
 
@@ -14,7 +14,7 @@ npm run build && npm run preview   # production build on http://127.0.0.1:5173
 
 | Mode | How | What you see |
 |---|---|---|
-| mock (default) | `VITE_API_MODE=mock` | A scripted backend inside the browser. Every response and event goes through the same zod schemas as live data. A permanent banner says "Mock data, not from Quorum". |
+| mock (default) | `VITE_API_MODE=mock` | A scripted backend inside the browser. Every response and event goes through the same zod schemas as live data. A "Sample data" chip in the header says so. |
 | live | `VITE_API_MODE=live` | Calls `/api/...` through the dev or preview proxy. Set `QUORUM_BACKEND=http://localhost:8000` if the backend is elsewhere. Tokens come from `public/config.json` (never commit real ones). |
 
 `GET /meta` reports the backend's agent mode (Replay or Live). The header shows it as sent.
@@ -53,4 +53,4 @@ F fit, / search, L list view, P presentation mode, Esc dismiss, ? legend.
 
 - Mock mode proves the interface, not the system. Numbers in the Benchmark view are a mock fixture until `make proof` produces a real `bench/results.json`.
 - The as-of view in mock mode replays recorded snapshots; the real backend only knows the latest quarantine window per node.
-- `?demo=1` hides the dev console; it never hides the mock banner.
+- `?demo=1` hides the dev console; it never hides the Sample data chip.

@@ -32,17 +32,9 @@ export function Banners() {
   const meta = useStore((s) => s.meta);
   const dismissed = useStore((s) => s.versionBannerDismissed);
   const set = useStore((s) => s.set);
-  const presentation = useStore((s) => s.presentation);
-  const demo = useStore((s) => s.demo);
 
   return (
     <div className="banners">
-      {API_MODE === 'mock' && (
-        <div className="banner mock" role="note">
-          <strong>{copy.mockBanner}</strong>
-          {!presentation && !demo && <span>{copy.mockBannerDetail}</span>}
-        </div>
-      )}
       {(stale || conn === 'offline') && (
         <div className="banner warn" role="alert">
           {copy.staleBanner}
