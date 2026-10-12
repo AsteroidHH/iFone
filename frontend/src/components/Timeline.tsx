@@ -19,8 +19,19 @@ export function Timeline() {
   const graph = useStore((s) => visibleGraph(s));
   const [now, setNow] = useState(Date.now());
   const [playing, setPlaying] = useState(false);
+  const root = useRef<HTMLElement>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    const apply = () => document.documentElement.style.setProperty('--timeline-h', `${el.getBoundingClientRect().height + 34}px`);
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -52,6 +63,13 @@ export function Timeline() {
   }, [eventLog]);
 
   const empty = eventLog.length === 0;
+  const hist = useMemo(() => {
+    const bins = 60;
+    const counts = new Array<number>(bins).fill(0);
+    for (const e of eventLog) if (e.type !== 'heartbeat') counts[Math.min(bins - 1, Math.max(0, Math.floor(((e.ts - start) / span) * bins)))]! += 1;
+    const max = Math.max(1, ...counts);
+    return counts.map((c) => c / max);
+  }, [eventLog, start, span]);
   const value = asOf ?? end;
 
   function seek(v: number) {
@@ -83,7 +101,7 @@ export function Timeline() {
   const diff = compareBase ? diffGraphs(compareBase.nodes, graph.nodes) : null;
 
   return (
-    <section className="timeline" aria-label={copy.timeline.title}>
+    <section className="timeline" ref={root} aria-label={copy.timeline.title}>
       <h2 className="sr">{copy.timeline.title}</h2>
       <div className="tl-controls">
         <button className="btn" disabled={empty} onClick={togglePlay}>
@@ -93,6 +111,11 @@ export function Timeline() {
         <label className="tl-slider">
           <span className="sr">{copy.timeline.asOf}</span>
           <div className="tl-track">
+            <svg className="tl-hist" viewBox="0 0 60 10" preserveAspectRatio="none" aria-hidden="true">
+              {hist.map((h, i) => (
+                <rect key={i} x={i + 0.12} y={10 - h * 10} width={0.76} height={h * 10} />
+              ))}
+            </svg>
             {markers.map((m, i) => (
               <span
                 key={i}

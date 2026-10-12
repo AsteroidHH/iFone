@@ -8,6 +8,9 @@ import '@fontsource-variable/bricolage-grotesque';
 import '@fontsource/silkscreen/400.css';
 import './styles/tokens.css';
 import './styles/app.css';
+import './styles/proof-room.css';
+import './styles/tools.css';
+import './styles/layers.css';
 import './landing/landing.css';
 import { App } from './App';
 

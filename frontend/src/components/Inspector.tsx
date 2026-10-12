@@ -6,9 +6,11 @@ import { actionDisplayState, actionTone } from '../state/actionState';
 import { getCypher, getNode } from '../state/endpoints';
 import { useStore, type InspectorTab } from '../state/store';
 import { Icon } from './Icon';
+import { tools } from '../copy/tools';
+import { adjacency, degree, explain } from '../state/insights';
 import { Chip, Empty, ErrorState, fmtDateTime, fmtTime, Skeleton } from './ui';
 
-const TABS: InspectorTab[] = ['path', 'details', 'cypher'];
+const TABS: InspectorTab[] = ['path', 'details', 'links', 'cypher'];
 
 function kindIcon(n: GraphNode) {
   if (n.kind === 'conclusion' && n.is_decision) return 'flag';
@@ -141,6 +143,53 @@ function Cypher({ text }: { text: string }) {
   );
 }
 
+function LinksTab({ node }: { node: GraphNode }) {
+  const nodesRec = useStore((s) => s.nodes);
+  const edgesRec = useStore((s) => s.edges);
+  const set = useStore((s) => s.set);
+  const all = Object.values(nodesRec);
+  const adj = adjacency(all, Object.values(edgesRec));
+  const list = (ids: string[]) =>
+    ids.length === 0 ? (
+      <p className="muted small">{tools.links.none}</p>
+    ) : (
+      <ul className="links-list">
+        {ids.map((i) => {
+          const n = nodesRec[i];
+          return n ? (
+            <li key={i}>
+              <button
+                onClick={() => {
+                  set({ selectedId: i });
+                  graphBus.focus.emit(i);
+                }}
+              >
+                <Icon name={kindIcon(n)} size={14} />
+                <span>{n.label}</span>
+                <Chip tone={statusTone(n)}>{copy.status[n.status] ?? n.status}</Chip>
+              </button>
+            </li>
+          ) : null;
+        })}
+      </ul>
+    );
+  return (
+    <div className="links">
+      <p className="card-sub">{tools.links.degree(degree(adj, node.id))}</p>
+      <h4 className="sub">{tools.links.builtFrom}</h4>
+      {list(adj.inn.get(node.id) ?? [])}
+      <h4 className="sub">{tools.links.feeds}</h4>
+      {list(adj.out.get(node.id) ?? [])}
+      <h4 className="sub">{tools.links.explain}</h4>
+      <div className="ins-explain">
+        {explain(node, adj, all).map((l, i) => (
+          <p key={i}>{l}</p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function CypherTab({ nodeId }: { nodeId: string }) {
   const rid = useStore((s) => s.nodeRequest[nodeId]);
   const q = useQuery({ queryKey: ['cypher', rid], queryFn: () => getCypher(rid as string), enabled: !!rid });
@@ -211,6 +260,7 @@ export function Inspector() {
             {tab === 'details' && node && (
               <DetailsTab node={node} descendants={q.data?.descendant_count ?? 0} history={q.data?.status_history ?? []} />
             )}
+            {tab === 'links' && node && <LinksTab node={node} />}
             {tab === 'cypher' && <CypherTab nodeId={id} />}
           </div>
         </>

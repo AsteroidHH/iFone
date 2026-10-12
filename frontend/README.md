@@ -32,6 +32,7 @@ npm run build && npm run preview   # production build on http://127.0.0.1:5173
 | `npm run contrast` | WCAG check for every text and background pair in the palette |
 | `npm run contract:check` | Fixture validation; with `QUORUM_BACKEND` set, diffs the live `/openapi.json` against `contracts/openapi.snapshot.json` |
 | `npm run screens` | Headless run of the whole demo, one screenshot per beat into `docs/screens/` |
+| `node scripts/feature-shots.mjs` | Screenshots the palette, filters, links, local graph, insights, path and context menu into `docs/screens/features/` |
 | `npm run landing` | Screenshots every landing section into `docs/screens/landing/` |
 | `npm run qa` | Headless interaction checks (shortcuts, roles, tenants, time travel, autopilot, narrow widths) |
 | `npm run verify` | typecheck, tests, contrast, contract check, production build |
@@ -52,7 +53,7 @@ src/mocks/    scripted backend and fixtures (synthetic)
 
 ## Keyboard
 
-F fit, / search, L list view, P presentation mode, Esc dismiss, ? legend.
+Ctrl K command palette, 1 to 5 switch views, F fit, / search, L list view, P presentation mode, Alt Left and Alt Right selection history, Esc dismiss, ? legend. Right-click a node for its menu.
 
 ## Honest limits
 

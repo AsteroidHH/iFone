@@ -1,24 +1,56 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { API_MODE, session, type Role } from '../api/client';
 import { subscribeDevLog, type DevLogEntry } from '../api/devlog';
 import { CONTRACT_VERSION } from '../api/schemas';
 import { copy } from '../copy';
 import { setRole, startSession } from '../state/pipeline';
-import { useStore } from '../state/store';
+import { useStore, type Toast } from '../state/store';
+import { restoreFocus } from './focus';
+import { Icon } from './Icon';
 import { fmtTime } from './ui';
+
+function ToastItem({ t }: { t: Toast }) {
+  const drop = useStore((s) => s.dropToast);
+  const [paused, setPaused] = useState(false);
+  const left = useRef(t.ttl);
+  useEffect(() => {
+    if (paused) return;
+    const started = Date.now();
+    const h = setTimeout(() => drop(t.id), left.current);
+    return () => {
+      clearTimeout(h);
+      left.current -= Date.now() - started;
+    };
+  }, [paused, drop, t.id]);
+  const icon = t.tone === 'bad' ? 'alert' : t.tone === 'warn' ? 'clock' : t.tone === 'good' ? 'check' : 'sparkle';
+  return (
+    <div
+      className={`toast tone-${t.tone}`}
+      role="status"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocus={() => setPaused(true)}
+      onBlur={() => setPaused(false)}
+    >
+      <Icon name={icon} size={16} />
+      <span className="toast-text">
+        {t.text}
+        {t.count > 1 && <b className="toast-count num">x{t.count}</b>}
+      </span>
+      <button className="iconbtn" aria-label={copy.dismiss} onClick={() => drop(t.id)}>
+        <Icon name="x" size={14} />
+      </button>
+      <i className={`toast-life${paused ? ' paused' : ''}`} style={{ animationDuration: `${t.ttl}ms` }} aria-hidden="true" />
+    </div>
+  );
+}
 
 export function Toasts() {
   const toasts = useStore((s) => s.toasts);
-  const drop = useStore((s) => s.dropToast);
   return (
-    <div className="toasts" role="status" aria-live="polite">
+    <div className="toasts" role="region" aria-label="Notifications" aria-live="polite">
       {toasts.map((t) => (
-        <div key={t.id} className="toast">
-          <span>{t.text}</span>
-          <button className="btn ghost icon" aria-label={copy.dismiss} onClick={() => drop(t.id)}>
-            x
-          </button>
-        </div>
+        <ToastItem key={`${t.id}-${t.count}`} t={t} />
       ))}
     </div>
   );
@@ -84,10 +116,24 @@ export function LoadError() {
 export function Shortcuts() {
   const open = useStore((s) => s.shortcutsOpen);
   const set = useStore((s) => s.set);
+  useEffect(() => {
+    if (!open) return;
+    return () => restoreFocus();
+  }, [open]);
   if (!open) return null;
   return (
     <div className="modal-back" onClick={() => set({ shortcutsOpen: false })}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={copy.shortcuts.title} onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={copy.shortcuts.title}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          if (e.key === 'Tab') e.preventDefault();
+          if (e.key === 'Escape') set({ shortcutsOpen: false });
+        }}
+      >
         <h2>{copy.shortcuts.title}</h2>
         <dl className="keys">
           {copy.shortcuts.items.map(([k, d]) => (
@@ -114,37 +160,47 @@ export function DevConsole() {
   const role = useStore((s) => s.role);
   const [entries, setEntries] = useState<DevLogEntry[]>([]);
   useEffect(() => subscribeDevLog(setEntries), []);
+  useEffect(() => {
+    document.documentElement.style.setProperty('--dock-h', open && !demo ? '224px' : '0px');
+    return () => document.documentElement.style.setProperty('--dock-h', '0px');
+  }, [open, demo]);
   if (demo) return null;
   const errs = entries.filter((e) => e.level !== 'info').length;
-  return (
-    <aside className={`dev${open ? ' open' : ''}`}>
-      <button className="dev-toggle" aria-expanded={open} onClick={() => set({ devOpen: !open })}>
+  if (!open) {
+    return (
+      <button className="dev-toggle" aria-expanded={false} onClick={() => set({ devOpen: true })}>
         {copy.dev.title}
         {errs > 0 && <span className="dev-count num">{errs}</span>}
       </button>
-      {open && (
-        <div className="dev-body">
-          <label className="dev-role">
-            {copy.dev.actAs}
-            <select value={role} onChange={(e) => setRole(e.target.value as Role)}>
-              <option value="human">human</option>
-              <option value="auditor">auditor</option>
-              <option value="agent">agent</option>
-            </select>
-          </label>
-          <p className="muted">
-            tenant {session.tenant}, contract {CONTRACT_VERSION}, {API_MODE}
-          </p>
-          {entries.length === 0 && <p className="muted">{copy.dev.empty}</p>}
-          <ol className="dev-log mono">
-            {[...entries].reverse().map((e) => (
-              <li key={e.id} className={e.level}>
-                {fmtTime(e.ts)} {e.message}
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
-    </aside>
+    );
+  }
+  return (
+    <section className="dev-drawer" aria-label={copy.dev.title}>
+      <header>
+        <strong>{copy.dev.title}</strong>
+        <label className="dev-role">
+          {copy.dev.actAs}
+          <select value={role} onChange={(e) => setRole(e.target.value as Role)}>
+            <option value="human">human</option>
+            <option value="auditor">auditor</option>
+            <option value="agent">agent</option>
+          </select>
+        </label>
+        <span className="muted mono">
+          tenant {session.tenant}, contract {CONTRACT_VERSION}, {API_MODE}
+        </span>
+        <button className="btn quiet grow" aria-expanded onClick={() => set({ devOpen: false })}>
+          Close {copy.dev.title.toLowerCase()}
+        </button>
+      </header>
+      {entries.length === 0 && <p className="muted" style={{ padding: '8px 16px' }}>{copy.dev.empty}</p>}
+      <ol className="dev-log mono">
+        {[...entries].reverse().map((e) => (
+          <li key={e.id} className={e.level}>
+            {fmtTime(e.ts)} {e.message}
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }

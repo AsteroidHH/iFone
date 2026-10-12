@@ -8,6 +8,9 @@ import { getAgents, getProcedures, getResume } from '../state/endpoints';
 function PageHead({ page }: { page: keyof typeof copy.pages }) {
   return (
     <header className="page-head">
+      <p className="page-tag">
+        <span>[{copy.pages[page].tag}]</span> {copy.nav[page === 'bench' ? 'benchmark' : page]}
+      </p>
       <h1>{copy.pages[page].title}</h1>
       <p>{copy.pages[page].sub}</p>
     </header>

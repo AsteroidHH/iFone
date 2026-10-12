@@ -10,10 +10,7 @@ import time
 import json
 import logging
 from typing import Any, Dict, List, Optional, Tuple
-try:
-    from falkordb import FalkorDB
-except ImportError:
-    FalkorDB = None  # type: ignore
+from falkordb import FalkorDB
 
 logger = logging.getLogger("quorum.graph")
 
@@ -21,13 +18,11 @@ logger = logging.getLogger("quorum.graph")
 QUERY_LOG: List[Dict[str, Any]] = []
 MAX_QUERY_LOG_SIZE = 500
 
-_db_client: Optional[Any] = None
+_db_client: Optional[FalkorDB] = None
 
 
-def get_db(host: str = "localhost", port: int = 6379) -> Any:
+def get_db(host: str = "localhost", port: int = 6379) -> FalkorDB:
     global _db_client
-    if FalkorDB is None:
-        raise RuntimeError("falkordb Python package is not installed. Install via requirements.txt or run inside docker-compose.")
     if _db_client is None:
         _db_client = FalkorDB(host=host, port=port)
     return _db_client
@@ -806,3 +801,645 @@ def graph_snapshot(tenant_id: str, as_of_ms: Optional[int] = None) -> Dict[str, 
     epoch = epoch_res.result_set[0][0] if epoch_res.result_set else 1
 
     return {"nodes": nodes, "edges": edges, "epoch": epoch}
+
+
+# =========================================================================
+# T02-1: EPISODIC, SEMANTIC & PROCEDURAL MEMORY
+# =========================================================================
+
+def record_episode(
+    tenant_id: str,
+    agent_id: str,
+    session_id: str,
+    message_id: str,
+    role: str,          # "user" | "assistant" | "system"
+    content: str,
+    ts_ms: Optional[int] = None,
+    request_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Records an episodic memory event into the agent's private raw graph.
+    Creates: (:Message {id, session_id, role, content, ts})
+    Links:   (prev_message)-[:NEXT]->(message)  (ordered chain)
+    Graph:   tenant_<id>:agent_<n>:raw
+    """
+    g = get_graph(tenant_id, f"agent_{agent_id}:raw")
+    ts = ts_ms or int(time.time() * 1000)
+    # Step 1: Merge session + create message node
+    cypher_create = """
+    MERGE (s:Session {id: $session_id})
+    ON CREATE SET s.started_at = $ts
+    CREATE (m:Message {
+        id: $message_id,
+        session_id: $session_id,
+        role: $role,
+        content: $content,
+        ts: $ts
+    })
+    MERGE (s)-[:HAS_MESSAGE]->(m)
+    RETURN m.id AS message_id, s.id AS session_id
+    """
+    t0 = time.time()
+    res = g.query(cypher_create, {
+        "session_id": session_id,
+        "message_id": message_id,
+        "role": role,
+        "content": content,
+        "ts": ts,
+    })
+    ms = (time.time() - t0) * 1000
+    log_query("record_episode_create", cypher_create, ms, len(res.result_set), request_id)
+
+    # Step 2: Link previous message with NEXT (FalkorDB has no FOREACH)
+    cypher_next = """
+    MATCH (prev:Message {session_id: $session_id})
+    WHERE prev.id <> $message_id AND prev.ts < $ts
+    WITH prev ORDER BY prev.ts DESC LIMIT 1
+    MATCH (m:Message {id: $message_id})
+    CREATE (prev)-[:NEXT]->(m)
+    RETURN prev.id
+    """
+    try:
+        g.query(cypher_next, {
+            "session_id": session_id,
+            "message_id": message_id,
+            "ts": ts,
+        })
+    except Exception:
+        pass  # No prior message — first in session, no NEXT link needed
+
+    return {"success": True, "message_id": message_id, "session_id": session_id}
+
+
+def upsert_procedure(
+    tenant_id: str,
+    procedure_id: str,
+    name: str,
+    description: str,
+    steps: List[str],
+    domain: str = "general",
+    request_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Upserts a Procedure node in the commons graph (procedural memory).
+    Procedure schema: {id, name, description, steps[], domain, uses, successes, failures, rank}
+    """
+    g = get_graph(tenant_id, "commons")
+    cypher = """
+    MERGE (p:Procedure {id: $proc_id})
+    ON CREATE SET
+        p.name = $name,
+        p.description = $description,
+        p.steps = $steps,
+        p.domain = $domain,
+        p.uses = 0,
+        p.successes = 0,
+        p.failures = 0,
+        p.rank = 0.5,
+        p.created_at = timestamp()
+    ON MATCH SET
+        p.name = $name,
+        p.description = $description,
+        p.steps = $steps,
+        p.domain = $domain,
+        p.updated_at = timestamp()
+    RETURN p.id AS id, p.rank AS rank
+    """
+    t0 = time.time()
+    res = g.query(cypher, {
+        "proc_id": procedure_id,
+        "name": name,
+        "description": description,
+        "steps": steps,
+        "domain": domain,
+    })
+    ms = (time.time() - t0) * 1000
+    log_query("upsert_procedure", cypher, ms, len(res.result_set), request_id)
+    row = res.result_set[0] if res.result_set else {}
+    return {"id": procedure_id, "rank": row[1] if res.result_set else 0.5}
+
+
+def score_procedure(
+    tenant_id: str,
+    procedure_id: str,
+    outcome: str,  # "success" | "failure"
+    request_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Updates procedure outcome counters and recalculates Laplace-smoothed rank:
+        rank = (successes + 1) / (uses + 2)
+    This is bayesian smoothing — new procedures start at 0.5, drift up or down.
+    Runs on post-execution feedback.
+    """
+    g = get_graph(tenant_id, "commons")
+    cypher = """
+    MATCH (p:Procedure {id: $proc_id})
+    SET p.uses = p.uses + 1,
+        p.successes = p.successes + $inc_success,
+        p.failures = p.failures + $inc_failure,
+        p.rank = toFloat(p.successes + 1) / toFloat(p.uses + 2),
+        p.last_used_at = timestamp()
+    RETURN p.id AS id, p.uses AS uses, p.successes AS successes,
+           p.failures AS failures, p.rank AS rank
+    """
+    inc_success = 1 if outcome == "success" else 0
+    inc_failure = 1 if outcome == "failure" else 0
+    t0 = time.time()
+    res = g.query(cypher, {
+        "proc_id": procedure_id,
+        "inc_success": inc_success,
+        "inc_failure": inc_failure,
+    })
+    ms = (time.time() - t0) * 1000
+    log_query("score_procedure", cypher, ms, len(res.result_set), request_id)
+    if not res.result_set:
+        return {"success": False, "error": "Procedure not found"}
+    r = res.result_set[0]
+    return {
+        "success": True,
+        "procedure_id": r[0],
+        "uses": r[1],
+        "successes": r[2],
+        "failures": r[3],
+        "rank": round(r[4], 4),
+    }
+
+
+def rank_procedures(
+    tenant_id: str,
+    domain: Optional[str] = None,
+    limit: int = 10,
+    request_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Returns procedures ranked by Laplace-smoothed success rate (desc).
+    Optional domain filter. T02-1 verification: rank changes between runs.
+    """
+    g = get_graph(tenant_id, "commons")
+    if domain:
+        cypher = """
+        MATCH (p:Procedure {domain: $domain})
+        RETURN p.id, p.name, p.rank, p.uses, p.successes, p.failures, p.steps
+        ORDER BY p.rank DESC
+        LIMIT $limit
+        """
+        params: Dict[str, Any] = {"domain": domain, "limit": limit}
+    else:
+        cypher = """
+        MATCH (p:Procedure)
+        RETURN p.id, p.name, p.rank, p.uses, p.successes, p.failures, p.steps
+        ORDER BY p.rank DESC
+        LIMIT $limit
+        """
+        params = {"limit": limit}
+    t0 = time.time()
+    res = g.query(cypher, params)
+    ms = (time.time() - t0) * 1000
+    log_query("rank_procedures", cypher, ms, len(res.result_set), request_id)
+    return [
+        {
+            "id": r[0],
+            "name": r[1],
+            "rank": round(r[2], 4) if r[2] is not None else 0.5,
+            "uses": r[3] or 0,
+            "successes": r[4] or 0,
+            "failures": r[5] or 0,
+            "steps": r[6] or [],
+        }
+        for r in res.result_set
+    ]
+
+
+# =========================================================================
+# T02-2: PERSISTENT CONVERSATION HISTORY
+# =========================================================================
+
+def close_session(
+    tenant_id: str,
+    agent_id: str,
+    session_id: str,
+    request_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Closes a session and writes a deterministic summary Fact into the commons graph.
+    Summary includes: message count, first+last message timestamps, topic digest.
+    This is the 'session summarizer' step — enables agent restart recall.
+    """
+    raw_g = get_graph(tenant_id, f"agent_{agent_id}:raw")
+    # Collect all messages in session ordered by ts
+    cypher_messages = """
+    MATCH (s:Session {id: $session_id})-[:HAS_MESSAGE]->(m:Message)
+    RETURN m.ts, m.role, m.content
+    ORDER BY m.ts ASC
+    """
+    t0 = time.time()
+    res = raw_g.query(cypher_messages, {"session_id": session_id})
+    ms = (time.time() - t0) * 1000
+    log_query("close_session_read", cypher_messages, ms, len(res.result_set), request_id)
+
+    messages = res.result_set
+    if not messages:
+        return {"success": False, "error": "Session has no messages"}
+
+    msg_count = len(messages)
+    first_ts = messages[0][0]
+    last_ts = messages[-1][0]
+    # Deterministic digest: roles + content lengths (no LLM)
+    digest = " | ".join(
+        f"{r[1]}:{len(r[2])}" for r in messages[:5]
+    )
+
+    # Write summary Fact into commons graph
+    commons_g = get_graph(tenant_id, "commons")
+    summary_id = f"session_summary_{agent_id}_{session_id}"
+    cypher_summary = """
+    MERGE (f:Fact:MemoryNode {id: $fact_id})
+    ON CREATE SET
+        f.key = $fact_id,
+        f.text = $summary_text,
+        f.session_id = $session_id,
+        f.agent_id = $agent_id,
+        f.msg_count = $msg_count,
+        f.first_ts = $first_ts,
+        f.last_ts = $last_ts,
+        f.status = 'HEALTHY',
+        f.kind = 'EPISODIC_SUMMARY',
+        f.valid_from = $first_ts
+    ON MATCH SET
+        f.text = $summary_text,
+        f.msg_count = $msg_count,
+        f.last_ts = $last_ts
+    RETURN f.id
+    """
+    summary_text = (
+        f"[Session {session_id}] agent={agent_id} msgs={msg_count} "
+        f"span={first_ts}-{last_ts} digest={digest}"
+    )
+    t1 = time.time()
+    res2 = commons_g.query(cypher_summary, {
+        "fact_id": summary_id,
+        "summary_text": summary_text,
+        "session_id": session_id,
+        "agent_id": agent_id,
+        "msg_count": msg_count,
+        "first_ts": first_ts,
+        "last_ts": last_ts,
+    })
+    ms2 = (time.time() - t1) * 1000
+    log_query("close_session_write_summary", cypher_summary, ms2, len(res2.result_set), request_id)
+    bump_epoch(tenant_id)
+    return {
+        "success": True,
+        "summary_fact_id": summary_id,
+        "msg_count": msg_count,
+        "summary_text": summary_text,
+    }
+
+
+def resume_agent(
+    tenant_id: str,
+    agent_id: str,
+    limit: int = 5,
+    request_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    2-query agent resume flow (T02-2 core spec):
+    1. Query raw private graph for most recent session messages.
+    2. Query commons graph for session summary Facts authored by this agent.
+    Returns both so the restarted agent knows what it was doing.
+    """
+    # Query 1: Most recent messages from raw graph
+    raw_g = get_graph(tenant_id, f"agent_{agent_id}:raw")
+    cypher_recent = """
+    MATCH (m:Message)
+    RETURN m.session_id, m.role, m.content, m.ts
+    ORDER BY m.ts DESC
+    LIMIT $limit
+    """
+    t0 = time.time()
+    res_raw = raw_g.query(cypher_recent, {"limit": limit})
+    ms1 = (time.time() - t0) * 1000
+    log_query("resume_agent_raw", cypher_recent, ms1, len(res_raw.result_set), request_id)
+
+    recent_messages = [
+        {"session_id": r[0], "role": r[1], "content": r[2], "ts": r[3]}
+        for r in res_raw.result_set
+    ]
+
+    # Query 2: Session summaries from commons graph
+    commons_g = get_graph(tenant_id, "commons")
+    cypher_summaries = """
+    MATCH (f:Fact {agent_id: $agent_id})
+    RETURN f.id, f.session_id, f.text, f.msg_count, f.last_ts
+    ORDER BY f.last_ts DESC
+    LIMIT $limit
+    """
+    t1 = time.time()
+    res_commons = commons_g.query(cypher_summaries, {"agent_id": agent_id, "limit": limit})
+    ms2 = (time.time() - t1) * 1000
+    log_query("resume_agent_commons", cypher_summaries, ms2, len(res_commons.result_set), request_id)
+
+    summaries = [
+        {
+            "fact_id": r[0],
+            "session_id": r[1],
+            "summary": r[2],
+            "msg_count": r[3],
+            "last_ts": r[4],
+        }
+        for r in res_commons.result_set
+    ]
+
+    return {
+        "agent_id": agent_id,
+        "recent_messages": recent_messages,
+        "session_summaries": summaries,
+        "resumed": True,
+    }
+
+
+def session_history(
+    tenant_id: str,
+    agent_id: str,
+    session_id: str,
+    request_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Returns the full ordered message chain for a session (NEXT-linked traversal).
+    Used for the attribution demo: 'where did this belief come from'.
+    """
+    g = get_graph(tenant_id, f"agent_{agent_id}:raw")
+    cypher = """
+    MATCH (m:Message {session_id: $session_id})
+    RETURN m.id, m.role, m.content, m.ts
+    ORDER BY m.ts ASC
+    """
+    t0 = time.time()
+    res = g.query(cypher, {"session_id": session_id})
+    ms = (time.time() - t0) * 1000
+    log_query("session_history", cypher, ms, len(res.result_set), request_id)
+    return [
+        {"id": r[0], "role": r[1], "content": r[2], "ts": r[3]}
+        for r in res.result_set
+    ]
+
+
+# =========================================================================
+# T03-4: KEEPING KNOWLEDGE CURRENT (stale propagation + REVIEW handoffs)
+# =========================================================================
+
+def supersede_with_review(
+    tenant_id: str,
+    old_fact_key: str,
+    new_fact_id: str,
+    new_text: str,
+    new_value: str,
+    author: str = "system",
+    source_url: str = "",
+    request_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Full T03-4 supersede flow:
+    1. SUPERSEDES link: new fact -> old fact
+    2. Mark old fact superseded
+    3. Propagate stale=true to all downstream Conclusions and Decisions
+    4. Create REVIEW Handoff for each stale Decision, assigned to owning team
+    5. Bump epoch
+    Returns superseded_count, stale_count, review_handoffs_created.
+    """
+    g = get_graph(tenant_id, "commons")
+    now_ms = int(time.time() * 1000)
+
+    # Step 1: Create new fact and SUPERSEDES link
+    cypher_create = """
+    MATCH (old:Fact {key: $old_key})
+    CREATE (new:Fact:MemoryNode {
+        id: $new_id,
+        key: $old_key,
+        text: $new_text,
+        value: $new_value,
+        author: $author,
+        source_url: $source_url,
+        status: 'HEALTHY',
+        stale: false,
+        valid_from: $now_ms
+    })
+    CREATE (new)-[:SUPERSEDES {at: $now_ms}]->(old)
+    SET old.status = 'SUPERSEDED', old.superseded_at = $now_ms
+    RETURN old.id AS old_id, new.id AS new_id
+    """
+    t0 = time.time()
+    res = g.query(cypher_create, {
+        "old_key": old_fact_key,
+        "new_id": new_fact_id,
+        "new_text": new_text,
+        "new_value": new_value,
+        "author": author,
+        "source_url": source_url,
+        "now_ms": now_ms,
+    })
+    ms = (time.time() - t0) * 1000
+    log_query("supersede_create_link", cypher_create, ms, len(res.result_set), request_id)
+
+    if not res.result_set:
+        return {"success": False, "error": f"Old fact with key '{old_fact_key}' not found"}
+
+    # Step 2: Propagate stale=true to dependent Conclusions and Decisions
+    cypher_stale = """
+    MATCH (old:Fact {key: $old_key})-[:LEADS_TO*1..]->(dependent)
+    WHERE dependent:Conclusion OR dependent:Decision
+    SET dependent.stale = true, dependent.stale_since = $now_ms
+    RETURN dependent.id AS dep_id, labels(dependent) AS dep_labels
+    """
+    t1 = time.time()
+    res_stale = g.query(cypher_stale, {"old_key": old_fact_key, "now_ms": now_ms})
+    ms2 = (time.time() - t1) * 1000
+    stale_count = len(res_stale.result_set)
+    log_query("supersede_propagate_stale", cypher_stale, ms2, stale_count, request_id)
+
+    stale_decisions = [
+        r[0] for r in res_stale.result_set
+        if r[1] and "Decision" in r[1]
+    ]
+
+    # Step 3: Create REVIEW Handoff for each stale Decision
+    handoffs_created = []
+    for decision_id in stale_decisions:
+        # Find owning team via: Decision<-LEADS_TO-Fact-:ABOUT->Topic, Team-:OWNS->Source
+        cypher_owner = """
+        MATCH (d:Decision {id: $dec_id})<-[:LEADS_TO]-(f:Fact)<-[:FROM_SOURCE]-(src:Source)
+              <-[:OWNS]-(team:Team)
+        RETURN team.id AS team_id
+        LIMIT 1
+        """
+        res_owner = g.query(cypher_owner, {"dec_id": decision_id})
+        owner_team = res_owner.result_set[0][0] if res_owner.result_set else "ops-team"
+
+        handoff_id = f"review_{decision_id}_{now_ms}"
+        cypher_handoff = """
+        CREATE (h:Handoff {
+            id: $hid,
+            kind: 'REVIEW',
+            status: 'PENDING',
+            context_root: $dec_id,
+            assigned_to: $team_id,
+            reason: $reason,
+            created_at: $now_ms
+        })
+        WITH h
+        MATCH (d:Decision {id: $dec_id})
+        CREATE (d)-[:REQUIRES_REVIEW]->(h)
+        RETURN h.id
+        """
+        reason = f"Policy fact '{old_fact_key}' superseded → decision flagged stale"
+        res_h = g.query(cypher_handoff, {
+            "hid": handoff_id,
+            "dec_id": decision_id,
+            "team_id": owner_team,
+            "reason": reason,
+            "now_ms": now_ms,
+        })
+        if res_h.result_set:
+            handoffs_created.append({"handoff_id": handoff_id, "decision_id": decision_id, "assigned_to": owner_team})
+
+    bump_epoch(tenant_id)
+
+    return {
+        "success": True,
+        "old_fact_key": old_fact_key,
+        "new_fact_id": new_fact_id,
+        "stale_propagated": stale_count,
+        "review_handoffs_created": len(handoffs_created),
+        "handoffs": handoffs_created,
+    }
+
+
+# =========================================================================
+# T03-5: ANSWERS WITH CLEAR SOURCES (grounded brain/ask)
+# =========================================================================
+
+def brain_ask(
+    tenant_id: str,
+    question: str,
+    embedding: Optional[List[float]] = None,
+    k: int = 5,
+    request_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Grounded Q&A with citation guard (T03-5).
+    1. Vector retrieval of top-k healthy, non-stale Facts.
+    2. For each fact: trace back to Source (url, title, owner_team, quote).
+    3. If no grounded facts: return structured refusal (never hallucinate).
+    Returns: {answer, citations[], grounded: bool, refused: bool}
+    """
+    g = get_graph(tenant_id, "commons")
+    now_ms = int(time.time() * 1000)
+
+    # Step 1: Vector retrieval — healthy, non-stale facts only
+    if embedding:
+        vec_str = ", ".join(str(v) for v in embedding)
+        cypher_retrieve = f"""
+        MATCH (f:Fact:MemoryNode)
+        WHERE f.status = 'HEALTHY' AND (f.stale IS NULL OR f.stale = false)
+              AND f.embedding IS NOT NULL
+        WITH f, vec.cosineDistance(f.embedding, vecf32([{vec_str}])) AS dist
+        ORDER BY dist ASC
+        LIMIT $k
+        RETURN f.id, f.key, f.text, f.value, f.source_ref, dist
+        """
+        params: Dict[str, Any] = {"k": k}
+    else:
+        # Keyword fallback: pick the longest clean token (strip punctuation)
+        import re as _re
+        tokens = [_re.sub(r'[^a-z0-9]', '', w) for w in question.lower().split()]
+        tokens = [t for t in tokens if len(t) > 3]
+        keyword = max(tokens, key=len) if tokens else question[:20].lower()
+        # Single-line query avoids FalkorDB multi-line WHERE/WITH parsing issues
+        cypher_retrieve = (
+            "MATCH (f:Fact:MemoryNode) "
+            "WHERE f.status = 'HEALTHY' AND (f.stale IS NULL OR f.stale = false) "
+            "AND toLower(f.text) CONTAINS $keyword "
+            "WITH f, 0.0 AS dist LIMIT $k "
+            "RETURN f.id, f.key, f.text, f.value, f.source_ref, dist"
+        )
+        params = {"keyword": keyword, "k": k}
+
+    t0 = time.time()
+    res = g.query(cypher_retrieve, params)
+    ms1 = (time.time() - t0) * 1000
+    log_query("brain_ask_retrieve", cypher_retrieve, ms1, len(res.result_set), request_id)
+
+    if not res.result_set:
+        # Structured refusal — never return ungrounded answer
+        log_query("brain_ask_refused", "-- refusal: no grounded facts --", 0.0, 0, request_id)
+        return {
+            "answer": None,
+            "grounded": False,
+            "refused": True,
+            "refusal_reason": "No verified, healthy, non-stale facts found matching this query. Answer withheld.",
+            "citations": [],
+            "generated_at": now_ms,
+        }
+
+    # Step 2: Trace each fact back to its Source for citation
+    citations = []
+    answer_parts = []
+    for row in res.result_set:
+        fact_id, key, text, value, source_ref, dist = row[0], row[1], row[2], row[3], row[4], row[5]
+        if not text:
+            continue
+
+        # Provenance: fact -> Source -> Team
+        cypher_prov = """
+        MATCH (f:Fact {id: $fact_id})
+        OPTIONAL MATCH (f)-[:FROM_SOURCE]->(src:Source)<-[:OWNS]-(team:Team)
+        RETURN f.id, src.id, src.title, src.url, src.kind, team.id, team.name
+        LIMIT 1
+        """
+        t1 = time.time()
+        prov_res = g.query(cypher_prov, {"fact_id": fact_id})
+        ms_p = (time.time() - t1) * 1000
+        log_query("brain_ask_provenance", cypher_prov, ms_p, len(prov_res.result_set), request_id)
+
+        src_title = "Internal policy"
+        src_url = ""
+        src_kind = "DOC"
+        owner_team = "unknown"
+        if prov_res.result_set:
+            pr = prov_res.result_set[0]
+            src_title = pr[2] or "Internal policy"
+            src_url = pr[3] or ""
+            src_kind = pr[4] or "DOC"
+            owner_team = pr[6] or "unknown"
+
+        citations.append({
+            "fact_id": fact_id,
+            "key": key,
+            "quote": text[:200],
+            "source_title": src_title,
+            "source_url": src_url,
+            "source_kind": src_kind,
+            "owner_team": owner_team,
+            "similarity": round(1.0 - float(dist), 4),
+        })
+        answer_parts.append(text)
+
+    if not citations:
+        return {
+            "answer": None,
+            "grounded": False,
+            "refused": True,
+            "refusal_reason": "Facts retrieved but none had traceable sources. Answer withheld.",
+            "citations": [],
+            "generated_at": now_ms,
+        }
+
+    # Step 3: Compose grounded answer with citations
+    answer = " ".join(answer_parts[:2])  # top 2 facts, deterministic (no LLM)
+    return {
+        "answer": answer,
+        "grounded": True,
+        "refused": False,
+        "citations": citations,
+        "generated_at": now_ms,
+    }

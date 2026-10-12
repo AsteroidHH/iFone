@@ -1,37 +1,68 @@
-# Quorum frontend design
+# Console design
 
-Direction: an incident command room. Graphite surfaces, one signal colour per state, card-style evidence nodes on a dot grid, big numerals for the numbers that matter, and a guided story stepper so the first minute makes sense without a briefing.
+Direction: a print proof room, shared with the landing page. Cool off-white stock, ink black outlines, hard offset shadows on the pieces that matter, crop marks at the viewport corners, Bricolage Grotesque for headings, Silkscreen pixel numerals for anything countable, JetBrains Mono for labels and ids. State colours are signals only: mint for healthy, red for quarantined, amber for out of date, periwinkle for "a person decides".
 
-This replaces the first plan (a light "forensic ledger on drafting paper"). That version was accurate but read as a prototype: flat, low contrast between regions, and no focal point. The brief's art direction is a starting point; the owner asked for a polished product, so the pack's light palette was dropped. The rules that mattered stay: status never rides on colour alone, nothing on screen is invented, the quarantine wave and the prompt diff are where the boldness goes.
+History of the direction: the first console was a light ledger, then a dark "incident command room". The owner asked for the console to look like the landing page, so the console now uses the same system. The role names in `src/styles/tokens.css` did not change, only their values, which is why one stylesheet pass (`proof-room.css`) restyled every view.
 
-## Palette (CSS variables in `src/styles/tokens.css`)
+## Tokens (`src/styles/tokens.css`)
 
-| Role | Token | Value | Used for |
-|---|---|---|---|
-| Page | `--bg` | #080d13 | background |
-| Card | `--bg-2` / `--bg-3` / `--bg-4` | #0d141c / #121b25 / #19242f | surfaces, three steps of elevation |
-| Text | `--text` / `--text-2` / `--text-3` | #e9eef4 / #a3b0bf / #8392a3 | body, secondary, captions |
-| Healthy | `--ok` | #3ddbb0 | healthy rings, success |
-| Quarantined | `--bad` | #ff6a55 | quarantine, dashed edges, errors |
-| Out of date | `--warn` | #f4b94f | stale rings, sample-data chip |
-| Person decides | `--person` | #8f9bff | review handoffs, replay mode, "viewing the past", Autopilot |
-| Superseded | `--ghost` | #8190a3 | ghost nodes |
+| Role | Token | Value |
+|---|---|---|
+| Stock / card / inset | `--bg` / `--bg-2` / `--bg-3` / `--bg-4` | #f3f5f2 / #ffffff / #eef1ed / #e3e8e2 |
+| Ink | `--text` / `--text-2` / `--text-3` | #0b1218 / #46525e / #5d6975 |
+| Healthy | `--ok`, `--mint` | #07745e text, #3ddbb0 fill |
+| Quarantined | `--bad`, `--redfill` | #c93420 text, #ff6a55 fill |
+| Out of date | `--warn` | #8f5a00 |
+| Person decides | `--person` | #3b3fd1 |
+| Replaced | `--ghost` | #6b7783 |
 
-`npm run contrast` checks every text and surface pair at 4.5:1 and every ring at 3:1, compositing translucent tints over the surface they sit on. The periwinkle `--person` is reserved for "a person or a replay is in charge", so it never competes with the green and red state colours.
-
-## Type
-
-Schibsted Grotesk (400, 500, 700) for everything; tabular figures on numbers. JetBrains Mono only for ids, Cypher and server output. Scale 12, 13, 14, 16, 20, 28, 44. Sentence case. Both families are bundled, so the app works offline.
+`npm run contrast` checks every console and landing pair (text at 4.5:1, rings at 3:1). Colour never carries state alone: shape, border style, glyph or label always accompany it.
 
 ## Structure
 
-- Header: brand, view switcher, then tenant, data source chip, agent mode, epoch, invariants, connection. Narrow widths drop labels before dropping meaning.
-- Console: left column holds the story stepper and the history feed; the centre is the graph with floating search, view toggle and zoom dock; the right column holds the containment report (collapses when a node is selected) and the inspector; the timeline runs underneath.
-- Secondary views use one page template: title, one sentence, cards.
+- Header: brand (back to the landing page), view switcher with number keys, tenant, data-source chip, agent mode, epoch, invariants, connection, search button for the command palette, presentation mode, help.
+- Console: left column holds the story stepper and history; the centre card holds the graph, prompt diff, actions and handoffs, and insights; the right column holds the containment report and inspector; the timeline runs underneath.
+- Secondary pages use one template: numbered tag, giant title, one sentence, cards.
 
 ## The canvas
 
-Nodes are cards with the shape language kept from the brief: source (cut corners), fact (pill), conclusion (rounded box), decision (double border), action (square corners, bolt). State is carried by border style and a glyph as well as colour: solid green healthy, dashed red quarantined, dotted amber out of date, faded ghost for replaced, lock for held-for-review, check for confirmed. Columns are fixed by kind with a labelled, counted header per column. Edges are orthogonal, dashed red once their target is quarantined.
+Node shapes keep their meaning: source (cut corners), fact (pill), conclusion (rounded box), decision (double border), action (square corners). Healthy nodes are mint with an ink outline; quarantined are red wash with a dashed red outline; out of date has a dotted amber outline; replaced are faded. Columns are fixed by kind, with a counted header each. Edges are orthogonal and turn dashed red once their target is quarantined.
+
+## Navigation and analysis
+
+Borrowed as ideas from Obsidian (graph view, local graph, backlinks, quick switcher, back and forward through notes) and Graphify (god nodes, communities, path and explain queries). All computed client-side from the live nodes and edges, with unit tests in `src/state/insights.test.ts`.
+
+| Feature | Where | Notes |
+|---|---|---|
+| Command palette | Ctrl K, or the header search button | Fuzzy search over beliefs, views, story steps and canvas commands |
+| Graph filters | Canvas toolbar | Kinds, statuses, "only what needs attention", highlight most connected nodes |
+| Local graph | Filters, or the node context menu | The selection and everything within 1 to 4 hops, refit on change |
+| Selection history | Back and forward buttons, Alt Left, Alt Right | Like back and forward in a notes app |
+| Breadcrumb | Under the tabs | Console / Graph / kind / selected node |
+| Backlinks | Inspector, Links tab | Built from, feeds, connection count, plain-language explanation |
+| Context menu | Right-click a node | Center, inspect, trace to sources, local graph, preview blast radius, collapse, copy id |
+| Minimap | Bottom left of the canvas | Click to move the view; selected node in amber |
+| Path highlight | Insights, or the context menu | The shortest chain between two nodes, drawn on the graph |
+| Insights tab | Centre card | Belief flow ribbons, health bar, activity over time, most connected nodes, communities, shortest path, explain the selection |
+| Activity strip | Timeline | Event density behind the slider |
+| Keyboard | `?` for the full list | 1 to 5 switch views; F fit; / search; L list; P presentation; Ctrl K palette |
+
+## Layers, overlays and dismissal
+
+Everything that floats follows one set of rules (`src/styles/layers.css`, `src/components/focus.ts`, `src/state/toasts.ts`).
+
+| Rule | How |
+|---|---|
+| One z-index scale | Tokens `--z-canvas` 1, `--z-overlay` 4, `--z-chrome` 20, `--z-popover` 40, `--z-dev` 50, `--z-menu` 60, `--z-modal` 80, `--z-toast` 90; no raw numbers in components |
+| Canvas overlays cannot collide | They sit in a grid (toolbar row, one status line, bottom-left dock, bottom-right dock) and the graph area is inset to leave them clear; rail labels sit below the status line |
+| One status line at a time | Past view, path, blast-radius preview and the welcome hint share one slot, chosen by priority |
+| Popovers | One open at a time; close on outside click and Escape; focus returns to the button that opened them |
+| Layers close in order | Escape closes the palette, then the context menu, then popovers, then the shortcuts dialog, then presentation mode, then the selection |
+| Dialogs | The palette and shortcuts dialog trap Tab and give focus back to where it was; the context menu focuses its first item and supports arrow keys |
+| Toasts | At most three, identical messages are counted not stacked, lifetime scales with length (problems stay longer), the timer pauses while the pointer or focus is on a toast, and they sit above the measured height of the timeline |
+| Transient previews | The blast-radius preview lingers 450 ms after the pointer leaves, so it does not flicker |
+| Docked, not floating | The dev console is a drawer below the stage; toasts move up to make room |
+| Minimap | Off by default and remembered; when on, the graph area shrinks to leave room instead of drawing underneath it |
 
 ## Motion
 
@@ -39,7 +70,7 @@ Two orchestrated moments: the quarantine wave (each node pulses at 120 ms per ho
 
 ## Voice
 
-Plain and specific. Statuses: Healthy, Quarantined, Replaced by a newer fact, Out of date. Actions: Staged, Held for review, Ran, Rolled back, Needs a person. Buttons name the result. Errors say what failed and what to do. All strings are in `src/copy/`.
+Plain and specific. Statuses: Healthy, Quarantined, Replaced by a newer fact, Out of date. Actions: Staged, Held for review, Ran, Rolled back, Needs a person. Buttons name the result. Errors say what failed and what to do. All strings live in `src/copy/`.
 
 ## Honesty
 
@@ -47,4 +78,4 @@ A "Sample data" chip sits in the header whenever the scripted in-browser backend
 
 ## Verification
 
-`npm run verify` runs typecheck, unit tests, contrast, contract check and the production build. `npm run screens` and `npm run qa` drive the full story headlessly; screenshots land in `docs/screens/` and are reviewed before a beat counts as done.
+`npm run verify` runs typecheck, unit tests, contrast, contract check and the production build. `npm run screens`, `npm run qa`, `npm run landing` and `node scripts/feature-shots.mjs` drive the app headlessly; screenshots land in `docs/screens/` and are reviewed before a beat counts as done.

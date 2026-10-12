@@ -6,6 +6,8 @@ import { getInvariants } from '../state/endpoints';
 import { switchTenant } from '../state/pipeline';
 import { useStore, type View } from '../state/store';
 import { go } from '../landing/hooks';
+import { tools } from '../copy/tools';
+import { rememberFocus } from './focus';
 import { Icon } from './Icon';
 import { Skeleton } from './ui';
 
@@ -40,18 +42,19 @@ function EpochBadge() {
 
 function InvariantLight() {
   const inv = useStore((s) => s.invariant);
-  const [open, setOpen] = useState(false);
+  const open = useStore((s) => s.invariantsOpen);
+  const set = useStore((s) => s.set);
   const q = useQuery({ queryKey: ['invariants'], queryFn: getInvariants, enabled: open });
   const state = inv ? (inv.ok ? 'ok' : 'bad') : 'unknown';
   const text = inv ? (inv.ok ? copy.invariants.ok : copy.invariants.bad(inv.violations)) : copy.invariants.unknown;
   return (
     <div className="pop-wrap">
-      <button className={`pill light ${state}`} aria-expanded={open} onClick={() => setOpen(!open)}>
+      <button className={`pill light ${state}`} aria-expanded={open} data-popover-trigger="invariants" onClick={() => set({ invariantsOpen: !open })}>
         <Icon name="shield" size={13} />
         {text}
       </button>
       {open && (
-        <div className="popover" role="dialog" aria-label="Invariant checks">
+        <div className="popover" role="dialog" aria-label="Invariant checks" data-popover="invariants">
           <h3>Invariant checks</h3>
           {q.isLoading && <Skeleton lines={3} />}
           {q.isError && <p className="muted">{copy.errors.panel('GET /invariants')}</p>}
@@ -124,12 +127,25 @@ export function Header() {
         <InvariantLight />
         <span className={`pill conn ${conn}`} role="status">
           <span className="dot" aria-hidden="true" />
-          {copy.connection[conn]}
+          <span className="conn-label">{copy.connection[conn]}</span>
         </span>
+        <button className="palette-btn" onClick={() => {
+            rememberFocus();
+            set({ paletteOpen: true });
+          }}
+          aria-label={tools.palette.open} title={tools.palette.open}>
+          <Icon name="search" size={15} />
+          <span className="pb-label">Search</span>
+          <kbd>Ctrl K</kbd>
+        </button>
         <button className="iconbtn" aria-pressed={presentation} aria-label={copy.presentationMode} title={`${copy.presentationMode} (P)`} onClick={() => set({ presentation: !presentation })}>
           <Icon name="present" size={17} />
         </button>
-        <button className="iconbtn" aria-label={copy.shortcuts.title} title={copy.shortcuts.title} onClick={() => set({ shortcutsOpen: true })}>
+        <button className="iconbtn" aria-label={copy.shortcuts.title} title={copy.shortcuts.title} onClick={() => {
+            rememberFocus();
+            set({ shortcutsOpen: true });
+          }}
+        >
           <Icon name="help" size={17} />
         </button>
       </div>
