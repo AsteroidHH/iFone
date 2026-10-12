@@ -15,20 +15,20 @@ from app.models.system import (
     PoisonSystemMetrics,
 )
 
+from app.graph.queries import get_graph_store
+
 router = APIRouter()
 
 
 @router.get("/invariants", response_model=InvariantsResponse)
 def get_invariants(auth: AuthContext = Depends(get_auth_context)):
+    store = get_graph_store(auth.tenant)
+    res = store.check_invariants()
     now_ms = int(time.time() * 1000)
     return InvariantsResponse(
-        ok=True,
+        ok=res["ok"],
         checked_at=now_ms,
-        checks=[
-            InvariantCheckItem(name="zero_healthy_under_quarantined", ok=True, value=0.0),
-            InvariantCheckItem(name="dag_acyclicity", ok=True, value=0.0),
-            InvariantCheckItem(name="executed_has_healthy_ancestors", ok=True, value=0.0),
-        ],
+        checks=[InvariantCheckItem(**c) for c in res["checks"]],
     )
 
 
@@ -38,24 +38,43 @@ def get_cypher_log(
     limit: int = Query(20, le=100),
     auth: AuthContext = Depends(get_auth_context),
 ):
-    now_ms = int(time.time() * 1000)
+    store = get_graph_store(auth.tenant)
+    with store._lock:
+        entries = list(store.query_log)
+
+    if request_id:
+        entries = [e for e in entries if e.request_id == request_id]
+
+    if not entries:
+        now_ms = int(time.time() * 1000)
+        return [
+            CypherLogItem(
+                ts=now_ms - 2000,
+                request_id=request_id or "req_demo_01",
+                name="execute_guard",
+                cypher="MATCH (a:Action {id:$id}) WHERE a.status='HEALTHY' AND a.executed=false AND a.gate='PASSED' OPTIONAL MATCH (x:MemoryNode)-[:LEADS_TO|SUPPORTS*]->(a) WHERE coalesce(x.status,'MISSING') <> 'HEALTHY' WITH a, count(DISTINCT x) AS bad WHERE bad = 0 SET a.executed = true, a.executed_at = timestamp(), a.confirmed = false RETURN a.id",
+                ms=1.4,
+                rows=1,
+            ),
+            CypherLogItem(
+                ts=now_ms - 1500,
+                request_id=request_id or "req_demo_02",
+                name="cascade",
+                cypher="MATCH (root:Fact {id:$root_id}) MATCH (root)-[:LEADS_TO|SUPPORTS*]->(descendant) SET descendant.status='QUARANTINED', descendant.quarantined_at=timestamp(), descendant.quarantine_root=$root_id RETURN count(descendant)",
+                ms=2.8,
+                rows=3,
+            ),
+        ]
+
     return [
         CypherLogItem(
-            ts=now_ms - 2000,
-            request_id=request_id or "req_demo_01",
-            name="execute_guard",
-            cypher="MATCH (a:Action {id:$id}) WHERE a.status='HEALTHY' AND a.executed=false AND a.gate='PASSED' OPTIONAL MATCH (x:MemoryNode)-[:LEADS_TO|SUPPORTS*]->(a) WHERE coalesce(x.status,'MISSING') <> 'HEALTHY' WITH a, count(DISTINCT x) AS bad WHERE bad = 0 SET a.executed = true, a.executed_at = timestamp(), a.confirmed = false RETURN a.id",
-            ms=1.4,
-            rows=1,
-        ),
-        CypherLogItem(
-            ts=now_ms - 1500,
-            request_id=request_id or "req_demo_02",
-            name="cascade",
-            cypher="MATCH (root:Fact {id:$root_id}) MATCH (root)-[:LEADS_TO|SUPPORTS*]->(descendant) SET descendant.status='QUARANTINED', descendant.quarantined_at=timestamp(), descendant.quarantine_root=$root_id RETURN count(descendant)",
-            ms=2.8,
-            rows=3,
-        ),
+            ts=e.ts,
+            request_id=e.request_id,
+            name=e.name,
+            cypher=e.cypher,
+            ms=round(e.ms, 2),
+            rows=e.rows,
+        ) for e in reversed(entries[-limit:])
     ]
 
 

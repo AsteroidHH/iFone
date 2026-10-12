@@ -274,6 +274,61 @@ class GraphStore:
                 results.append(n)
             return results
 
+    def check_invariants(self) -> Dict[str, Any]:
+        """
+        Runs live invariant integrity checks on the graph:
+        1. zero_healthy_under_quarantined: No healthy node may have a quarantined parent.
+        2. dag_acyclicity: Graph must remain a valid DAG with 0 cycles.
+        3. executed_has_healthy_ancestors: No healthy executed action may have quarantined ancestors.
+        """
+        with self._lock:
+            # 1. Zero healthy under quarantined
+            healthy_under_quarantined = 0
+            for edge in self.edges:
+                src = self.nodes.get(edge.source)
+                tgt = self.nodes.get(edge.target)
+                if src and tgt and src.status == Status.QUARANTINED and tgt.status == Status.HEALTHY:
+                    healthy_under_quarantined += 1
+
+            # 2. DAG acyclicity (cycle detection over LEADS_TO / SUPPORTS)
+            adj: Dict[str, List[str]] = {}
+            for edge in self.edges:
+                if edge.type.value in ["LEADS_TO", "SUPPORTS"]:
+                    adj.setdefault(edge.source, []).append(edge.target)
+
+            visited: Dict[str, int] = {}  # 0: unvisited, 1: visiting, 2: visited
+            has_cycle = False
+
+            def dfs(node_id: str):
+                nonlocal has_cycle
+                visited[node_id] = 1
+                for neighbor in adj.get(node_id, []):
+                    if visited.get(neighbor) == 1:
+                        has_cycle = True
+                    elif visited.get(neighbor, 0) == 0:
+                        dfs(neighbor)
+                visited[node_id] = 2
+
+            for nid in list(self.nodes.keys()):
+                if visited.get(nid, 0) == 0:
+                    dfs(nid)
+
+            # 3. Executed actions have healthy ancestors
+            bad_ancestors_count = 0
+            for node in self.nodes.values():
+                if node.kind == NodeKind.ACTION and node.action and node.action.executed and node.status == Status.HEALTHY:
+                    ancestors = self.get_ancestors(node.id)
+                    if any(a.status != Status.HEALTHY for a in ancestors):
+                        bad_ancestors_count += 1
+
+            checks = [
+                {"name": "zero_healthy_under_quarantined", "ok": healthy_under_quarantined == 0, "value": float(healthy_under_quarantined)},
+                {"name": "dag_acyclicity", "ok": not has_cycle, "value": 1.0 if has_cycle else 0.0},
+                {"name": "executed_has_healthy_ancestors", "ok": bad_ancestors_count == 0, "value": float(bad_ancestors_count)},
+            ]
+            all_ok = all(c["ok"] for c in checks)
+            return {"ok": all_ok, "checks": checks}
+
 
 # Global store instance per tenant
 _stores: Dict[str, GraphStore] = {}
