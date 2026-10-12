@@ -405,3 +405,41 @@
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .seg-btn { min-height: 28px; }
 .story-btn { min-height: 28px; display: inline-flex; align-items: center; }
+
+/* selects and fields never outgrow their card */
+.field,
+.field select,
+.ins-card select,
+.history select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  text-overflow: ellipsis;
+}
+.field { display: grid; }
+
+/* story rail: History keeps a real height and its filter tabs wrap instead of clipping */
+.col.left > .history { flex: 1 0 auto; min-height: 280px; }
+.history .seg { display: flex; flex-wrap: wrap; border-radius: 16px; }
+.history .seg-btn { min-width: 0; padding: 4px 6px; }
+.history .feed { max-height: 42vh; }
+.history .seg-btn { flex: 1 0 auto; gap: 2px; padding: 4px 8px; }
+
+/* insights reflows to the width it is given instead of overflowing the pane */
+.insights { overflow-x: hidden; min-width: 0; }
+.ins-kpis { grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); }
+.ins-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
+.ins-card.span2 { grid-column: 1 / -1; }
+.ins-card svg { max-width: 100%; height: auto; }
+.center-body, .col.center > * { min-width: 0; }
+.scenario-extra { display: flex; flex-wrap: wrap; gap: 4px 8px; }
+.scenario-extra .btn { flex: 1 1 auto; justify-content: center; white-space: nowrap; }
+
+/* the tab bar collapses to icons (active tab keeps its label) when the centre column is narrow */
+.col.center { container-type: inline-size; }
+.center-head .seg { max-width: 100%; }
+@container (max-width: 560px) {
+  .center-head .seg-btn:not(.on) .tab-label { display: none; }
+  .center-head .seg-btn:not(.on) { padding-inline: 10px; }
+}
