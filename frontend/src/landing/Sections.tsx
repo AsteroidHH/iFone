@@ -45,7 +45,7 @@ export function Playground() {
             </button>
           </div>
         </div>
-        <div className="lp-play-stage">
+        <div className="lp-play-stage" data-cursor="Click a node">
           <LandingGraph cascade={c} interactive theme="light" label={L.play.graphLabel} />
         </div>
         <div className="lp-play-foot">
@@ -252,7 +252,8 @@ function Stat({ v, u, l, d = 0, run }: { v: number; u: string; l: string; d?: nu
 export function Proof() {
   const [ref, seen] = useInView<HTMLDivElement>(0.3);
   return (
-    <section className="lp-section lp-dark" id="proof">
+    <section className="lp-section lp-dark" id="proof" data-spot>
+      <div className="lp-spot dark" aria-hidden="true" />
       <Head dark tag={L.proof.tag} kicker={L.proof.kicker} title={L.proof.title} />
       <div className="lp-stats" ref={ref}>
         {L.proof.items.map((it) => (
@@ -298,7 +299,8 @@ export function Tracks() {
 export function Cta() {
   const [ref, seen] = useInView<HTMLDivElement>(0.3);
   return (
-    <section className="lp-cta" id="start">
+    <section className="lp-cta" id="start" data-spot>
+      <div className="lp-spot" aria-hidden="true" />
       <Parallax speed={-0.14} className="lp-float f1" innerClassName="lp-shape sq" />
       <Parallax speed={0.2} className="lp-float f2" innerClassName="lp-shape ci" />
       <Parallax speed={-0.08} className="lp-float f3" innerClassName="lp-shape tr" />
