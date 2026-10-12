@@ -1,13 +1,13 @@
 {
-  "timestamp": 1791795429299,
+  "timestamp": 1791795749799,
   "concurrency": {
     "agents": 30,
     "total_operations": 1200,
-    "duration_seconds": 0.035,
-    "throughput_ops_sec": 33965.4,
+    "duration_seconds": 0.036,
+    "throughput_ops_sec": 33111.8,
     "p50_ms": 0.02,
     "p95_ms": 0.06,
-    "p99_ms": 0.09,
+    "p99_ms": 0.08,
     "healthy_children_under_quarantined": 0,
     "zero_orphans_invariant": true
   },
@@ -22,8 +22,8 @@
   },
   "execute_race": {
     "total_actions": 50,
-    "executed_before_quarantine": 2,
-    "refused_after_quarantine": 48,
+    "executed_before_quarantine": 0,
+    "refused_after_quarantine": 50,
     "actions_executed_after_ancestor_quarantined": 0,
     "race_invariant_passed": true
   },
