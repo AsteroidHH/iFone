@@ -5,12 +5,39 @@ from app.models.graph import GraphResponse, NodeDetailResponse, StatusHistoryEnt
 from app.models.common import ErrorCode, Status
 from app.services.fixtures import get_fixture_graph
 
+from app.graph.queries import get_graph_store
+from app.config import settings
+import time
+
 router = APIRouter()
 
 
 @router.get("/graph", response_model=GraphResponse)
 def get_graph(as_of: Optional[int] = None, auth: AuthContext = Depends(get_auth_context)):
-    return get_fixture_graph(tenant=auth.tenant, as_of=as_of)
+    store = get_graph_store(tenant=auth.tenant)
+    if not store.nodes:
+        return get_fixture_graph(tenant=auth.tenant, as_of=as_of)
+
+    now_ms = int(time.time() * 1000)
+    if as_of is not None:
+        nodes = store.get_as_of(as_of)
+    else:
+        nodes = list(store.nodes.values())
+
+    node_ids = {n.id for n in nodes}
+    edges = [e for e in store.edges if e.source in node_ids and e.target in node_ids]
+
+    return GraphResponse(
+        contract_version=settings.CONTRACT_VERSION,
+        tenant=auth.tenant,
+        epoch=store.epoch,
+        seq=len(store.query_log),
+        as_of=as_of,
+        generated_at=now_ms,
+        truncated=False,
+        nodes=nodes,
+        edges=edges,
+    )
 
 
 @router.get("/node/{node_id}", response_model=NodeDetailResponse)

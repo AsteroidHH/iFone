@@ -22,6 +22,7 @@ class AuditorService:
     1. Contradiction detection & trust rule evaluation (root > corroborated > tier).
     2. Supersede authority verification.
     3. Triggers cascade quarantine, sets depths, bumps Meta.epoch, and enqueues compensations.
+    4. Triggers restore, checks all parents healthy, bumps Meta.epoch.
     """
     def check_contradiction(
         self,
@@ -159,6 +160,33 @@ class AuditorService:
                     )
 
         return affected
+
+    def restore(
+        self,
+        store: GraphStore,
+        root_id: str,
+        tenant: str = "acme",
+        request_id: Optional[str] = None,
+    ) -> List[str]:
+        restored_ids = store.restore_node(root_id, request_id=request_id)
+
+        for rid in restored_ids:
+            event_bus.publish(
+                tenant,
+                "status_changed",
+                {"id": rid, "status": Status.HEALTHY.value},
+                request_id=request_id,
+            )
+
+        if restored_ids:
+            event_bus.publish(
+                tenant,
+                "epoch_changed",
+                {"epoch": store.epoch, "reason": "restore"},
+                request_id=request_id,
+            )
+
+        return restored_ids
 
 
 auditor_service = AuditorService()

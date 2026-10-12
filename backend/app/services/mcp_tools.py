@@ -286,6 +286,23 @@ def quarantine(root_id: str, token: str, reason: str = "Manual auditor quarantin
     }
 
 
+def restore(root_id: str, token: str) -> Dict[str, Any]:
+    """Auditor-only tool: Restores root fact and valid descendants if all parents are healthy."""
+    auth = _get_auth(token)
+    if auth["role"] not in ["auditor", "human"]:
+        return {"error": "Role forbidden. Requires auditor or human role.", "success": False}
+
+    store = get_graph_store(auth["tenant"])
+    restored_ids = auditor_service.restore(store, root_id, tenant=auth["tenant"])
+    return {
+        "epoch": store.epoch,
+        "root_id": root_id,
+        "restored_count": len(restored_ids),
+        "restored_nodes": restored_ids,
+        "success": True,
+    }
+
+
 def explain_blast_radius(root_id: str, token: str) -> Dict[str, Any]:
     """Auditor tool: Dry-run blast radius calculation."""
     auth = _get_auth(token)

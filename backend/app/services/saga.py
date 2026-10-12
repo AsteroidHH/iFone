@@ -33,12 +33,14 @@ class OutboxSagaWorker:
             if node.kind != NodeKind.ACTION or not node.action or not node.action.compensation:
                 continue
 
-            comp = node.action.compensation
-            if comp.status != CompensationStatus.PENDING_COMPENSATION:
-                continue
+            with store._lock:
+                comp = node.action.compensation
+                if not comp or comp.status != CompensationStatus.PENDING_COMPENSATION:
+                    continue
 
-            # Lease row
-            comp.status = CompensationStatus.DISPATCHING
+                # Lease row atomically
+                comp.status = CompensationStatus.DISPATCHING
+
             event_bus.publish(
                 tenant,
                 "compensation_updated",
@@ -54,35 +56,31 @@ class OutboxSagaWorker:
                 action_type=node.action.type,
             )
 
-            if resp.get("status") == 200:
-                comp.status = CompensationStatus.COMPENSATED
-                event_bus.publish(
-                    tenant,
-                    "compensation_updated",
-                    {"action_id": node.id, "status": comp.status.value, "attempts": comp.attempts},
-                )
-                processed.append(node)
-            else:
-                comp.attempts += 1
-                if comp.attempts >= self.max_attempts:
-                    comp.status = CompensationStatus.FAILED
-                    # Create ESCALATION handoff for human
-                    handoff = Handoff(
-                        id=f"hand_comp_fail_{uuid.uuid4().hex[:6]}",
-                        kind=HandoffKind.ESCALATION,
-                        task=f"Compensation failed for action '{node.id}' after {comp.attempts} attempts. Manual intervention required.",
-                        status=HandoffStatus.PENDING,
-                        context_root_id=node.id,
-                    )
-                    event_bus.publish(tenant, "handoff_updated", {"handoff": handoff.dict()})
+            with store._lock:
+                if resp.get("status") == 200:
+                    comp.status = CompensationStatus.COMPENSATED
+                    processed.append(node)
                 else:
-                    comp.status = CompensationStatus.PENDING_COMPENSATION
+                    comp.attempts += 1
+                    if comp.attempts >= self.max_attempts:
+                        comp.status = CompensationStatus.FAILED
+                        # Create ESCALATION handoff for human
+                        handoff = Handoff(
+                            id=f"hand_comp_fail_{uuid.uuid4().hex[:6]}",
+                            kind=HandoffKind.ESCALATION,
+                            task=f"Compensation failed for action '{node.id}' after {comp.attempts} attempts. Manual intervention required.",
+                            status=HandoffStatus.PENDING,
+                            context_root_id=node.id,
+                        )
+                        event_bus.publish(tenant, "handoff_updated", {"handoff": handoff.dict()})
+                    else:
+                        comp.status = CompensationStatus.PENDING_COMPENSATION
 
-                event_bus.publish(
-                    tenant,
-                    "compensation_updated",
-                    {"action_id": node.id, "status": comp.status.value, "attempts": comp.attempts},
-                )
+            event_bus.publish(
+                tenant,
+                "compensation_updated",
+                {"action_id": node.id, "status": comp.status.value, "attempts": comp.attempts},
+            )
 
         return processed
 
