@@ -87,3 +87,16 @@ def test_brain_ask_with_citations_and_refusal():
 def test_x_request_id_header():
     resp = client.get("/api/meta", headers={"Authorization": "Bearer token_human", "X-Request-Id": "custom_req_123"})
     assert resp.headers.get("X-Request-Id") == "custom_req_123"
+
+
+def test_graph_seq_matches_event_stream_numbering():
+    """A client opens the SSE stream from graph.seq; if it drifts from the bus, the console resyncs forever."""
+    from app.services.event_bus import event_bus
+
+    h = {"Authorization": "Bearer token_human"}
+    client.post("/api/scenario/reset", headers=h)
+    client.post("/api/scenario/inject_poison", headers=h)
+    graph = client.get("/api/graph", headers=h).json()
+    meta = client.get("/api/meta", headers=h).json()
+    assert graph["seq"] == event_bus.get_tenant_buffer("acme").current_seq
+    assert graph["seq"] == meta["seq"]

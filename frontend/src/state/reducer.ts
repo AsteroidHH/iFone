@@ -327,6 +327,7 @@ export function applyEvent(prev: CoreState, ev: SseEvent): { state: CoreState; e
       effects.push({ kind: 'resync' });
       break;
     case 'heartbeat':
+    case 'unknown':
       break;
   }
   return { state: s, effects };

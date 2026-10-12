@@ -9,8 +9,10 @@ if _repo_root not in sys.path:
 if _backend_dir not in sys.path:
     sys.path.insert(0, _backend_dir)
 
+import os
 import uuid
 import time
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,7 +36,24 @@ from app.routes import (
     system,
 )
 
+_mcp_app = None
+if os.getenv("QUORUM_EMBED_MCP") == "1":
+    from app.mcp_embed import build_mcp_app
+
+    _mcp_app = build_mcp_app()
+
+
+@asynccontextmanager
+async def lifespan(_app):
+    if _mcp_app is not None:
+        async with _mcp_app.router.lifespan_context(_mcp_app):
+            yield
+    else:
+        yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="Quorum API",
     version=settings.CONTRACT_VERSION,
     description="Quorum Graph Memory & Multi-Agent Coordination Engine",
@@ -108,6 +127,12 @@ app.include_router(procedures.router, prefix=api_prefix, tags=["Procedures"])
 app.include_router(prompt_diff.router, prefix=api_prefix, tags=["Prompt Diff"])
 app.include_router(brain.router, prefix=api_prefix, tags=["Company Brain"])
 app.include_router(system.router, prefix=api_prefix, tags=["System & Benchmarks"])
+
+
+if _mcp_app is not None:
+    from app.mcp_embed import mount
+
+    mount(app, _mcp_app)
 
 
 @app.get("/")

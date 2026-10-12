@@ -192,7 +192,7 @@ function Members() {
                   <td>{team(m.teamId)}</td>
                   <td>{CLIENTS.find((c) => c.id === m.client)?.name}</td>
                   <td>
-                    <span className={`pres ${p}`} aria-hidden="true" /> {p}
+                    <span className={`pres ${p}`} aria-hidden="true" /> {presence[m.id] ?? 'not tracked'}
                   </td>
                   <td className="num">{pm ? fmt(pm.calls) : '0'}</td>
                   <td className="num">{pm ? fmt(Math.max(0, pm.naive - pm.used)) : '0'}</td>

@@ -18,8 +18,13 @@ function accept(raw: unknown, onEvent: (e: SseEvent) => void) {
     onEvent(r.data);
     return;
   }
-  const t = (raw as { type?: string } | null)?.type ?? 'unknown';
-  devLog('warn', `Ignored SSE event "${t}": ${r.error.issues[0]?.path.join('.') ?? ''} ${r.error.issues[0]?.message ?? ''}`, true);
+  const env = raw as { seq?: unknown; type?: unknown } | null;
+  const t = typeof env?.type === 'string' ? env.type : 'unknown';
+  devLog('warn', `Unrecognized SSE event "${t}" kept in sequence, no state change: ${r.error.issues[0]?.path.join('.') ?? ''} ${r.error.issues[0]?.message ?? ''}`, true);
+  if (typeof env?.seq === 'number') {
+    const wrapped = SseEvent.safeParse({ ...(raw as object), type: 'unknown', data: { original_type: t } });
+    if (wrapped.success) onEvent(wrapped.data);
+  }
 }
 
 /** Opens the event stream and returns a close function. Mock mode and live mode share the same validation path. */
@@ -44,6 +49,10 @@ export function openEventStream(h: Handlers): () => void {
       h.onStatus('live');
     },
     onmessage(msg) {
+      if (msg.event === 'resync_required') {
+        h.onEvent({ seq: 0, ts: Date.now(), epoch: 0, type: 'resync_required', data: {} } as SseEvent);
+        return;
+      }
       if (!msg.data) return;
       try {
         accept(JSON.parse(msg.data), h.onEvent);

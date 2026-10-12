@@ -65,23 +65,23 @@ export const GraphNode = z
   .object({
     id: z.string(),
     kind: NodeKind,
-    is_decision: z.boolean().optional(),
+    is_decision: z.boolean().nullish().transform((v) => v ?? undefined),
     label: z.string(),
-    text: z.string().optional(),
-    key: z.string().optional(),
-    value: z.string().optional(),
+    text: z.string().nullish().transform((v) => v ?? undefined),
+    key: z.string().nullish().transform((v) => v ?? undefined),
+    value: z.string().nullish().transform((v) => v ?? undefined),
     status: Status,
     stale: z.boolean(),
-    valid_from: Ms.optional(),
+    valid_from: Ms.nullish().transform((v) => v ?? undefined),
     valid_to: Ms.nullish(),
     quarantined_at: Ms.nullish(),
     released_at: Ms.nullish(),
     quarantine_root: z.string().nullish(),
     depth: z.number().nullish(),
-    source_ref: z.string().optional(),
-    quote: z.string().optional(),
-    origin: z.string().optional(),
-    asserted_by: z.object({ id: z.string(), name: z.string(), tier: Tier }).passthrough().optional(),
+    source_ref: z.string().nullish().transform((v) => v ?? undefined),
+    quote: z.string().nullish().transform((v) => v ?? undefined),
+    origin: z.string().nullish().transform((v) => v ?? undefined),
+    asserted_by: z.object({ id: z.string(), name: z.string(), tier: Tier }).passthrough().nullish().transform((v) => v ?? undefined),
     source: z
       .object({
         kind: lenientEnum('source kind', ['DOC', 'TICKET', 'CHAT', 'WEBHOOK'] as const),
@@ -90,9 +90,9 @@ export const GraphNode = z
         version: z.string(),
       })
       .passthrough()
-      .optional(),
-    owner_team: z.string().optional(),
-    action: ActionInfo.optional(),
+      .nullish().transform((v) => v ?? undefined),
+    owner_team: z.string().nullish().transform((v) => v ?? undefined),
+    action: ActionInfo.nullish().transform((v) => v ?? undefined),
   })
   .passthrough();
 export type GraphNode = z.infer<typeof GraphNode>;
@@ -123,11 +123,11 @@ export const Handoff = z
     kind: lenientEnum('handoff kind', ['TASK', 'REVIEW', 'ESCALATION'] as const),
     task: z.string(),
     status: lenientEnum('handoff status', ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'TIMED_OUT'] as const),
-    assigned_to: z.string().optional(),
-    claimed_by: z.string().optional(),
-    claimed_at: Ms.optional(),
-    lease_until: Ms.optional(),
-    context_root_id: z.string().optional(),
+    assigned_to: z.string().nullish().transform((v) => v ?? undefined),
+    claimed_by: z.string().nullish().transform((v) => v ?? undefined),
+    claimed_at: Ms.nullish().transform((v) => v ?? undefined),
+    lease_until: Ms.nullish().transform((v) => v ?? undefined),
+    context_root_id: z.string().nullish().transform((v) => v ?? undefined),
     correction_notice: CorrectionNotice.nullish(),
   })
   .passthrough();
@@ -192,7 +192,7 @@ export const BlastReport = z
 export type BlastReport = z.infer<typeof BlastReport>;
 
 export const Agent = z
-  .object({ id: z.string(), name: z.string(), role: z.string(), tier: Tier, last_active: Ms.optional() })
+  .object({ id: z.string(), name: z.string(), role: z.string(), tier: Tier, last_active: Ms.nullish().transform((v) => v ?? undefined) })
   .passthrough();
 export type Agent = z.infer<typeof Agent>;
 
@@ -236,8 +236,8 @@ export type PromptDiff = z.infer<typeof PromptDiff>;
 export const BrainAnswer = z
   .object({
     refused: z.boolean(),
-    reason: z.string().optional(),
-    answer: z.string().optional(),
+    reason: z.string().nullish().transform((v) => v ?? undefined),
+    answer: z.string().nullish().transform((v) => v ?? undefined),
     citations: z.array(
       z
         .object({
@@ -287,7 +287,7 @@ export const CypherLog = z.array(
   z
     .object({
       ts: Ms,
-      request_id: z.string().optional(),
+      request_id: z.string().nullish().transform((v) => v ?? undefined),
       name: z.string(),
       cypher: z.string(),
       ms: z.number(),
@@ -343,13 +343,13 @@ export type DeniedDemo = z.infer<typeof DeniedDemo>;
 export const ErrorBody = z
   .object({
     error: z
-      .object({ code: z.string(), message: z.string(), details: z.record(z.unknown()).optional() })
+      .object({ code: z.string(), message: z.string(), details: z.record(z.unknown()).nullish().transform((v) => v ?? undefined) })
       .passthrough(),
   })
   .passthrough();
 
 /* SSE envelope + typed events */
-const base = { seq: z.number(), ts: Ms, epoch: z.number(), request_id: z.string().optional() };
+const base = { seq: z.number(), ts: Ms, epoch: z.number(), request_id: z.string().nullish().transform((v) => v ?? undefined) };
 const ev = <T extends string, D extends z.ZodTypeAny>(type: T, data: D) =>
   z.object({ ...base, type: z.literal(type), data }).passthrough();
 
@@ -362,9 +362,9 @@ export const SseEvent = z.discriminatedUnion('type', [
       .object({
         id: z.string(),
         status: Status,
-        stale: z.boolean().optional(),
-        depth: z.number().optional(),
-        root_id: z.string().optional(),
+        stale: z.boolean().nullish().transform((v) => v ?? undefined),
+        depth: z.number().nullish().transform((v) => v ?? undefined),
+        root_id: z.string().nullish().transform((v) => v ?? undefined),
       })
       .passthrough(),
   ),
@@ -395,11 +395,13 @@ export const SseEvent = z.discriminatedUnion('type', [
         run_id: z.string(),
         step: z.string(),
         state: lenientEnum('scenario state', ['started', 'finished', 'failed'] as const),
-        detail: z.string().optional(),
+        detail: z.string().nullish().transform((v) => v ?? undefined),
       })
       .passthrough(),
   ),
   ev('resync_required', z.object({}).passthrough()),
   ev('heartbeat', z.object({}).passthrough()),
+  // A sequenced event this console does not know yet. It keeps seq contiguous so one new backend event type cannot stall the stream.
+  ev('unknown', z.object({ original_type: z.string() }).passthrough()),
 ]);
 export type SseEvent = z.infer<typeof SseEvent>;

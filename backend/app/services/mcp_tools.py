@@ -18,6 +18,15 @@ from app.services.gate import quorum_gate
 from app.services.executor import action_executor
 from app.services.auditor import auditor_service
 from app.config import settings
+from app.services.event_bus import event_bus
+
+
+def _emit(tenant: str, nodes: List[GraphNode] = (), edges: List[GraphEdge] = ()) -> None:
+    """Tell connected consoles about what an agent just wrote, so MCP writes show up live like scenario writes do."""
+    for n in nodes:
+        event_bus.publish(tenant, "node_added", {"node": n.model_dump()})
+    for e in edges:
+        event_bus.publish(tenant, "edge_added", {"edge": e.model_dump()})
 
 
 def _get_auth(token: str) -> Dict[str, Any]:
@@ -68,6 +77,7 @@ def remember_fact(
         ),
     )
     store.add_node(fact)
+    _emit(auth["tenant"], nodes=[fact])
 
     # Check contradiction with Auditor
     verdict = auditor_service.check_contradiction(store, fact, tenant=auth["tenant"])
@@ -115,13 +125,17 @@ def derive(
         )
         store.add_node(conc)
 
+        new_edges = []
         for p in parents:
-            store.add_edge(GraphEdge(
+            edge = GraphEdge(
                 id=f"e_{uuid.uuid4().hex[:6]}",
                 source=p.id,
                 target=conc.id,
                 type=EdgeType.LEADS_TO,
-            ))
+            )
+            store.add_edge(edge)
+            new_edges.append(edge)
+        _emit(auth["tenant"], nodes=[conc], edges=new_edges)
 
         return {
             "epoch": store.epoch,
@@ -207,13 +221,17 @@ def stage_action(
         )
         store.add_node(action_node)
 
+        new_edges = []
         for p in parents:
-            store.add_edge(GraphEdge(
+            edge = GraphEdge(
                 id=f"e_{uuid.uuid4().hex[:6]}",
                 source=p.id,
                 target=action_node.id,
                 type=EdgeType.LEADS_TO,
-            ))
+            )
+            store.add_edge(edge)
+            new_edges.append(edge)
+        _emit(auth["tenant"], nodes=[action_node], edges=new_edges)
 
         # 2. Evaluate Quorum Gate
         gate_status, reason, handoff = quorum_gate.evaluate(store, action_node, tenant=auth["tenant"])

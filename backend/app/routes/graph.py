@@ -7,6 +7,7 @@ from app.services.fixtures import get_fixture_graph
 
 from app.graph.queries import get_graph_store
 from app.config import settings
+from app.services.event_bus import event_bus
 import time
 
 router = APIRouter()
@@ -31,7 +32,8 @@ def get_graph(as_of: Optional[int] = None, auth: AuthContext = Depends(get_auth_
         contract_version=settings.CONTRACT_VERSION,
         tenant=auth.tenant,
         epoch=store.epoch,
-        seq=len(store.query_log),
+        # Must match the SSE stream's numbering, or a client that opens the stream from this seq replays or misses events.
+        seq=event_bus.get_tenant_buffer(auth.tenant).current_seq,
         as_of=as_of,
         generated_at=now_ms,
         truncated=False,

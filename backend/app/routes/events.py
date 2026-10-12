@@ -20,6 +20,9 @@ async def sse_events(
     buf = event_bus.get_tenant_buffer(auth.tenant)
 
     async def event_generator():
+        # Flush the response headers right away so clients can tell the stream is open before the first real event.
+        yield f"event: heartbeat\ndata: {{\"ts\": {int(time.time() * 1000)}}}\n\n"
+
         # Check re-sync
         if effective_last_id is not None:
             missed = buf.get_events_since(effective_last_id)

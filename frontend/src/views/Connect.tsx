@@ -353,6 +353,51 @@ function Feeds() {
   );
 }
 
+const GROUPS = ['all', 'graph', 'actions', 'handoffs', 'system'] as const;
+
+/** Live mode: the real event stream from the backend, not a simulation. */
+function BackendFeed() {
+  const feed = useStore((s) => s.feed);
+  const conn = useStore((s) => s.conn);
+  const [group, setGroup] = useState<(typeof GROUPS)[number]>('all');
+  const rows = feed.filter((f) => group === 'all' || f.group === group);
+  return (
+    <section className="card wide cn-feeds" aria-label="Live activity from the backend">
+      <header className="card-h">
+        <h2>Live feed</h2>
+        <span className="chip" title="Every event the backend streams to this console, including writes made by agents over MCP">
+          From the backend · stream {conn}
+        </span>
+      </header>
+      <div className="cn-filters" role="group" aria-label="Event type">
+        {GROUPS.map((g) => (
+          <button key={g} className={`cn-client${group === g ? ' on' : ''}`} aria-pressed={group === g} onClick={() => setGroup(g)}>
+            {g}
+          </button>
+        ))}
+      </div>
+      {rows.length ? (
+        <ul className="cn-list" aria-live="polite" aria-relevant="additions">
+          {rows.slice(0, 80).map((f) => (
+            <li key={f.id} className="cn-row">
+              <span className={`avatar tone-${f.tone}`}>{f.group[0]?.toUpperCase()}</span>
+              <div className="cn-row-main">
+                <p>{f.text}</p>
+                <small className="muted">{f.group} · event {f.seq}</small>
+              </div>
+              <span />
+              <time className="muted small">{ago(f.ts)}</time>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="muted cn-empty">Nothing yet. Writes from agents, scenario steps and handoffs appear here as they happen.</p>
+      )}
+      <p className="cn-help">Per-agent chats and presence need the workspace service, which the backend does not have yet (docs/CONTRACT_PROPOSALS.md).</p>
+    </section>
+  );
+}
+
 export function Connect() {
   return (
     <div className="page cn">
@@ -365,7 +410,7 @@ export function Connect() {
       </header>
       <Status />
       <Setup />
-      <Feeds />
+      {API_MODE === 'mock' ? <Feeds /> : <BackendFeed />}
       <Tools />
     </div>
   );

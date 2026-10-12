@@ -141,7 +141,7 @@ export function Header() {
         <span className={`pill mode ${mode}`} title={copy.modeHint[mode] ?? ''}>
           {copy.mode[mode] ?? mode}
         </span>
-        <SavedPill />
+        {API_MODE === 'mock' && <SavedPill />}
         <EpochBadge />
         <InvariantLight />
         <span className={`pill conn ${conn}`} role="status">

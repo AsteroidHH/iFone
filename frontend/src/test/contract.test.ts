@@ -140,3 +140,33 @@ describe('zod boundary', () => {
     expect(S.GraphNode.safeParse({ id: 'x', kind: 'fact', label: 'x', stale: false }).success).toBe(false);
   });
 });
+
+describe('real backend shapes', () => {
+  it('accepts explicit nulls for optional node fields, as the FastAPI backend sends them', () => {
+    const node = {
+      id: 'src_policy_v3',
+      kind: 'source',
+      is_decision: null,
+      label: 'Refund policy v3',
+      text: null,
+      key: null,
+      value: null,
+      status: 'HEALTHY',
+      stale: false,
+      valid_from: 1,
+      valid_to: null,
+      source_ref: null,
+      quote: null,
+      origin: null,
+      asserted_by: null,
+      source: { kind: 'DOC', title: 'Refund policy', url: 'https://acme.example/policy', version: '3' },
+      owner_team: 'Support Ops',
+      action: null,
+      correction_notice: null,
+    };
+    const out = S.GraphNode.parse(node);
+    expect(out.text).toBeUndefined();
+    expect(out.asserted_by).toBeUndefined();
+    expect(out.source?.title).toBe('Refund policy');
+  });
+});

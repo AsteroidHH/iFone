@@ -30,6 +30,14 @@ describe('planEvents', () => {
   it('ignores duplicates already applied', () => {
     expect(planEvents(5, [e(5), e(4)]).apply).toHaveLength(0);
   });
+  it('keeps seq contiguous across an event type the console does not know', () => {
+    const unknown = { seq: 6, ts: 0, epoch: 1, type: 'unknown', data: { original_type: 'correction_notice_created' } } as unknown as SseEvent;
+    const r = planEvents(4, [e(5), unknown, e(7)]);
+    expect(r.gap).toBe(false);
+    expect(r.apply.map((x) => x.seq)).toEqual([5, 6, 7]);
+    const next = applyEvent(emptyCore(), unknown);
+    expect(next.state.nodes).toEqual({});
+  });
   it('flags a gap', () => {
     const r = planEvents(4, [e(5), e(7)]);
     expect(r.apply.map((x) => x.seq)).toEqual([5]);

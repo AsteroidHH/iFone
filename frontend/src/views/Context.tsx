@@ -1,4 +1,5 @@
 import { useDeferredValue, useMemo, useState } from 'react';
+import { API_MODE } from '../api/client';
 import { Icon } from '../components/Icon';
 import { MindMap } from '../components/MindMap';
 import { useCountUp } from '../components/ui';
@@ -48,7 +49,7 @@ export function Context() {
   const totals = useLive((s) => s.totals);
   const pushToast = useStore((s) => s.pushToast);
 
-  const [source, setSource] = useState<Source>('400');
+  const [source, setSource] = useState<Source>(API_MODE === 'live' ? 'live' : '400');
   const [query, setQuery] = useState('refund window');
   const [budget, setBudget] = useState(420);
   const dq = useDeferredValue(query);
@@ -64,7 +65,7 @@ export function Context() {
   const cut = pct(sv.ragTokens - sentTokens, sv.ragTokens);
   const shown = useCountUp(cut);
   const max = Math.max(sv.rawTokens, sv.proseTokens, 1);
-  const saved = Math.max(0, totals.naive - totals.used);
+  const saved = API_MODE === 'mock' ? Math.max(0, totals.naive - totals.used) : 0;
 
   const copy = (text: string, what: string) => {
     void copyText(text).then((ok) => pushToast(ok ? `${what} copied` : 'Copy was blocked by the browser', ok ? 'good' : 'warn'));
@@ -135,7 +136,11 @@ export function Context() {
             <h2>This session</h2>
           </header>
           <div className="ctx-pct small num">{fmt(saved)}</div>
-          <p className="muted">tokens saved across {fmt(totals.calls)} tool calls in the live feed. Counted per call against a typical top-8 RAG lookup, so it is the conservative number.</p>
+          {API_MODE === 'mock' ? (
+            <p className="muted">tokens saved across {fmt(totals.calls)} tool calls in the live feed. Counted per call against a typical top-8 RAG lookup, so it is the conservative number.</p>
+          ) : (
+            <p className="muted">Per-call token counts need the backend to report them (docs/CONTRACT_PROPOSALS.md). The sizes above are computed from the live graph.</p>
+          )}
         </section>
       </div>
 

@@ -103,6 +103,8 @@ export const useLive = create<Live>((set, get) => ({
     set({ running: true });
     void get().checkMcp();
     ping = setInterval(() => void get().checkMcp(), 15000);
+    // Live mode has no workspace service yet: presence and activity are not simulated, only the real MCP probe runs.
+    if (API_MODE !== 'mock') return;
 
     // Presence: deterministic-ish so the page looks alive but stable. Real presence needs the workspace service.
     const refreshPresence = () => {

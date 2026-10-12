@@ -196,6 +196,15 @@ def run_handoff_race_test(num_handoffs: int = 100, num_claimers: int = 30) -> Di
 
     winners_per_handoff: Dict[str, List[str]] = {f"race_h_{i}": [] for i in range(num_handoffs)}
 
+    if USE_LIVE_FALKORDB:
+        # The in-memory path above seeds handoffs locally; against FalkorDB they must exist as nodes or every claim is "not found".
+        g = falkor_queries.get_graph(TENANT, "commons")
+        for hid in handoffs_store:
+            g.query(
+                "MERGE (h:Handoff {id: $id}) SET h.kind = 'TASK', h.task = $task, h.status = 'PENDING', h.created_at = timestamp()",
+                {"id": hid, "task": f"Task {hid}"},
+            )
+
     def claimer_worker(claimer_id: int):
         agent_name = f"racer_agent_{claimer_id}"
         now_ms = int(time.time() * 1000)
