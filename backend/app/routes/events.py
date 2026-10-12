@@ -27,14 +27,14 @@ async def sse_events(
                 yield f"event: resync_required\ndata: {{}}\n\n"
             else:
                 for ev in missed:
-                    yield f"id: {ev.seq}\nevent: {ev.type}\ndata: {json.dumps(ev.dict())}\n\n"
+                    yield f"id: {ev.seq}\nevent: {ev.type}\ndata: {json.dumps(ev.model_dump())}\n\n"
 
         queue = buf.subscribe()
         try:
             while True:
                 try:
                     ev = await asyncio.wait_for(queue.get(), timeout=15.0)
-                    yield f"id: {ev.seq}\nevent: {ev.type}\ndata: {json.dumps(ev.dict())}\n\n"
+                    yield f"id: {ev.seq}\nevent: {ev.type}\ndata: {json.dumps(ev.model_dump())}\n\n"
                 except asyncio.TimeoutError:
                     # Heartbeat
                     now_ms = int(time.time() * 1000)

@@ -72,7 +72,7 @@ class OutboxSagaWorker:
                             status=HandoffStatus.PENDING,
                             context_root_id=node.id,
                         )
-                        event_bus.publish(tenant, "handoff_updated", {"handoff": handoff.dict()})
+                        event_bus.publish(tenant, "handoff_updated", {"handoff": handoff.model_dump()})
                     else:
                         comp.status = CompensationStatus.PENDING_COMPENSATION
 

@@ -103,7 +103,7 @@ def review_handoff(
         event_bus.publish(
             auth.tenant,
             "handoff_updated",
-            {"handoff": target.dict()},
+            {"handoff": target.model_dump()},
         )
 
         return target

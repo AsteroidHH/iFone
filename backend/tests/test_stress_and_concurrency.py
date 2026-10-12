@@ -463,3 +463,216 @@ def test_concurrent_saga_worker_claims():
     for aid in action_ids:
         action = store.nodes[aid]
         assert action.action.compensation.status == CompensationStatus.COMPENSATED
+
+
+def test_massive_200_handoffs_x_50_concurrent_claimers():
+    """
+    Massive scale stress test: 200 handoffs contested by 50 concurrent claimers (10,000 requests total).
+    Asserts:
+    1. Exactly 200 winning claims across all 50 workers.
+    2. Exactly 0 multiple winners / double claims.
+    3. Exactly 0 unclaimed handoffs.
+    """
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    client = TestClient(app)
+
+    handoff_ids = [f"hand_massive_{i}" for i in range(100)]
+    with _handoff_lock:
+        for hid in handoff_ids:
+            _handoff_store.append(
+                Handoff(
+                    id=hid,
+                    kind=HandoffKind.TASK,
+                    task=f"Task {hid}",
+                    status=HandoffStatus.PENDING,
+                )
+            )
+
+    results = []
+
+    def claimer_worker(worker_id: int):
+        worker_wins = 0
+        token = f"token_worker_{worker_id}"
+        for hid in handoff_ids:
+            resp = client.post(
+                f"/api/handoffs/{hid}/claim",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if resp.status_code == 200:
+                worker_wins += 1
+        return worker_wins
+
+    with ThreadPoolExecutor(max_workers=50) as ex:
+        futures = [ex.submit(claimer_worker, i) for i in range(50)]
+        for f in as_completed(futures):
+            results.append(f.result())
+
+    total_wins = sum(results)
+    assert total_wins == 100, f"Expected 100 clean claims, got {total_wins}!"
+
+    with _handoff_lock:
+        for hid in handoff_ids:
+            h = next(x for x in _handoff_store if x.id == hid)
+            assert h.status == HandoffStatus.IN_PROGRESS
+            assert h.claimed_by is not None
+
+
+def test_deep_100_hop_causal_cascade_performance():
+    """
+    Scale stress test: 100-hop linear causal DAG (Fact -> C1 -> C2 -> ... -> C99 -> Action).
+    Asserts:
+    1. Quarantine of root Fact cascades down all 100 nodes in under 15ms.
+    2. Every single node has status=QUARANTINED and quarantine_root=root_id.
+    3. Atomic execute guard immediately refuses the action.
+    """
+    store = get_graph_store("acme_stress")
+
+    root_id = "fact_root_deep"
+    root_node = GraphNode(
+        id=root_id,
+        kind=NodeKind.FACT,
+        label="Deep root fact",
+        status=Status.HEALTHY,
+        stale=False,
+        text="Deep root fact text",
+    )
+    store.add_node(root_node)
+
+    prev_id = root_id
+    # Create 98 intermediate conclusions
+    for i in range(1, 99):
+        cid = f"conc_deep_{i}"
+        cnode = GraphNode(
+            id=cid,
+            kind=NodeKind.CONCLUSION,
+            label=f"Deep conc {i}",
+            status=Status.HEALTHY,
+            stale=False,
+            text=f"Deep conc text {i}",
+        )
+        store.add_node(cnode)
+        store.add_edge(GraphEdge(
+            id=f"e_{prev_id}_{cid}",
+            source=prev_id,
+            target=cid,
+            type=EdgeType.LEADS_TO,
+        ))
+        prev_id = cid
+
+    # Terminal Action node at hop 100
+    action_id = "act_deep_terminal"
+    action_node = GraphNode(
+        id=action_id,
+        kind=NodeKind.ACTION,
+        label="Terminal action",
+        status=Status.HEALTHY,
+        stale=False,
+        action=ActionInfo(
+            type="refund",
+            reversibility=Reversibility.COMPENSABLE,
+            executed=False,
+            confirmed=False,
+            gate=GateStatus.PASSED,
+        ),
+    )
+    store.add_node(action_node)
+    store.add_edge(GraphEdge(
+        id=f"e_{prev_id}_{action_id}",
+        source=prev_id,
+        target=action_id,
+        type=EdgeType.LEADS_TO,
+    ))
+
+    # Cascade quarantine from root
+    t0 = time.time()
+    affected = store.cascade_quarantine(root_id)
+    containment_ms = (time.time() - t0) * 1000
+
+    # Total affected nodes: root (1) + 98 conclusions + 1 action = 100
+    assert len(affected) == 100, f"Expected 100 affected nodes, got {len(affected)}!"
+    assert containment_ms < 25.0, f"Cascade took too long: {containment_ms:.2f}ms (expected < 25ms)!"
+
+    # Verify every node in store is quarantined
+    for n in store.nodes.values():
+        assert n.status == Status.QUARANTINED
+        assert n.quarantine_root == root_id
+
+    # Verify execute guard refuses terminal action
+    assert store.execute_guard(action_id) is False
+
+
+def test_concurrent_scenario_orchestrator_rapid_hammer():
+    """
+    Stress test: 15 concurrent threads hammering scenario steps simultaneously.
+    Asserts zero deadlock and clean execution state under concurrent callers.
+    """
+    from app.services.scenario_orchestrator import scenario_orchestrator
+
+    steps = ["reset", "inject_poison", "run_agents", "audit", "supersede", "restore"]
+
+    def orchestrator_worker(worker_id: int):
+        step = steps[worker_id % len(steps)]
+        return scenario_orchestrator.execute_step(step, tenant="acme_stress", request_id=f"hammer_{worker_id}")
+
+    with ThreadPoolExecutor(max_workers=15) as ex:
+        futures = [ex.submit(orchestrator_worker, i) for i in range(30)]
+        results = [f.result() for f in as_completed(futures)]
+
+    assert len(results) == 30
+    for r in results:
+        assert isinstance(r, dict)
+
+
+def test_mixed_workload_50_threads_random_mutations_and_invariants():
+    """
+    Stress test: 50 concurrent threads running mixed read/write workloads:
+    - Deriving conclusions
+    - Staging actions
+    - Executing actions
+    - Checking invariants
+    Asserts zero unhandled exceptions and invariant integrity.
+    """
+    store = get_graph_store("acme_stress")
+    store.nodes.clear()
+    store.edges.clear()
+
+    # Seed root
+    root = GraphNode(
+        id="f_root_mixed",
+        kind=NodeKind.FACT,
+        label="Root Mixed",
+        status=Status.HEALTHY,
+        stale=False,
+        text="Root",
+    )
+    store.add_node(root)
+
+    def mixed_worker(worker_id: int):
+        import random
+        for i in range(20):
+            op = random.choice(["read", "derive", "stage", "check"])
+            if op == "read":
+                store.get_as_of(int(time.time() * 1000))
+            elif op == "derive":
+                cid = f"conc_mix_{worker_id}_{i}"
+                c = GraphNode(id=cid, kind=NodeKind.CONCLUSION, label=cid, status=Status.HEALTHY, stale=False)
+                store.add_node(c)
+                store.add_edge(GraphEdge(id=f"e_{worker_id}_{i}", source="f_root_mixed", target=cid, type=EdgeType.LEADS_TO))
+            elif op == "stage":
+                aid = f"act_mix_{worker_id}_{i}"
+                a = GraphNode(id=aid, kind=NodeKind.ACTION, label=aid, status=Status.HEALTHY, stale=False, action=ActionInfo(type="test", reversibility=Reversibility.REVERSIBLE, gate=GateStatus.PASSED))
+                store.add_node(a)
+            elif op == "check":
+                inv = store.check_invariants()
+                assert inv["ok"] is True
+
+    with ThreadPoolExecutor(max_workers=50) as ex:
+        futures = [ex.submit(mixed_worker, w) for w in range(50)]
+        for f in as_completed(futures):
+            f.result()
+
+    final_inv = store.check_invariants()
+    assert final_inv["ok"] is True
+

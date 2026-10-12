@@ -35,7 +35,7 @@ class IngestGatewayService:
         )
 
         store.add_node(source_node, request_id)
-        event_bus.publish(tenant, "node_added", {"node": source_node.dict()}, request_id)
+        event_bus.publish(tenant, "node_added", {"node": source_node.model_dump()}, request_id)
         return source_node
 
 

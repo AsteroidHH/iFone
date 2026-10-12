@@ -42,8 +42,20 @@ def get_graph(as_of: Optional[int] = None, auth: AuthContext = Depends(get_auth_
 
 @router.get("/node/{node_id}", response_model=NodeDetailResponse)
 def get_node(node_id: str, auth: AuthContext = Depends(get_auth_context)):
-    graph = get_fixture_graph(tenant=auth.tenant)
-    target = next((n for n in graph.nodes if n.id == node_id), None)
+    store = get_graph_store(tenant=auth.tenant)
+    with store._lock:
+        if node_id in store.nodes:
+            target = store.nodes[node_id]
+            edges = list(store.edges)
+            all_nodes = dict(store.nodes)
+            base_ts = target.valid_from or int(time.time() * 1000)
+        else:
+            graph = get_fixture_graph(tenant=auth.tenant)
+            target = next((n for n in graph.nodes if n.id == node_id), None)
+            edges = graph.edges
+            all_nodes = {n.id: n for n in graph.nodes}
+            base_ts = graph.generated_at
+
     if not target:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -58,22 +70,24 @@ def get_node(node_id: str, auth: AuthContext = Depends(get_auth_context)):
     # Compute provenance path to root
     path = [target]
     curr_id = node_id
+    visited_ids = {curr_id}
     while True:
-        parent_edge = next((e for e in graph.edges if e.target == curr_id and e.type in ["LEADS_TO", "FROM_SOURCE"]), None)
-        if not parent_edge:
+        parent_edge = next((e for e in edges if e.target == curr_id and (e.type.value in ["LEADS_TO", "FROM_SOURCE"] if hasattr(e.type, 'value') else str(e.type) in ["LEADS_TO", "FROM_SOURCE"])), None)
+        if not parent_edge or parent_edge.source in visited_ids:
             break
-        parent_node = next((n for n in graph.nodes if n.id == parent_edge.source), None)
+        parent_node = all_nodes.get(parent_edge.source)
         if not parent_node:
             break
         path.insert(0, parent_node)
+        visited_ids.add(parent_node.id)
         curr_id = parent_node.id
 
     # Descendants count
-    descendant_count = sum(1 for e in graph.edges if e.source == node_id)
+    descendant_count = sum(1 for e in edges if e.source == node_id)
 
     status_history = [
         StatusHistoryEntry(
-            ts=target.valid_from or graph.generated_at,
+            ts=target.valid_from or base_ts,
             status=Status.HEALTHY,
             reason="Node created from source",
         )
@@ -81,9 +95,17 @@ def get_node(node_id: str, auth: AuthContext = Depends(get_auth_context)):
     if target.status == Status.QUARANTINED:
         status_history.append(
             StatusHistoryEntry(
-                ts=target.quarantined_at or graph.generated_at,
+                ts=target.quarantined_at or base_ts,
                 status=Status.QUARANTINED,
-                reason="Cascade invalidation from root fact_90d",
+                reason=f"Cascade invalidation from root {target.quarantine_root or 'poison'}",
+            )
+        )
+    elif target.status == Status.SUPERSEDED:
+        status_history.append(
+            StatusHistoryEntry(
+                ts=base_ts,
+                status=Status.SUPERSEDED,
+                reason="Superseded by verified newer policy",
             )
         )
 

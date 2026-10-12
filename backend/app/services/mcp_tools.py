@@ -1,3 +1,4 @@
+import time
 import uuid
 from typing import Optional, List, Dict, Any
 from app.graph.queries import get_graph_store
@@ -147,7 +148,7 @@ def retrieve_context(query: str, token: str, k: int = 5) -> Dict[str, Any]:
                 "value": f.value,
                 "text": f.text,
                 "quote": f.quote,
-                "asserted_by": f.asserted_by.dict() if f.asserted_by else None,
+                "asserted_by": f.asserted_by.model_dump() if f.asserted_by else None,
             })
 
     return {
@@ -251,22 +252,37 @@ def claim_handoff(id: str, token: str) -> Dict[str, Any]:
     auth = _get_auth(token)
     store = get_graph_store(auth["tenant"])
 
-    from app.routes.handoffs import _handoff_store
+    from app.routes.handoffs import _handoff_store, _handoff_lock
 
-    target = next((h for h in _handoff_store if h.id == id), None)
-    if not target:
-        return {"epoch": store.epoch, "error": f"Handoff '{id}' not found", "success": False}
+    with _handoff_lock:
+        target = next((h for h in _handoff_store if h.id == id), None)
+        if not target:
+            return {"epoch": store.epoch, "error": f"Handoff '{id}' not found", "success": False}
 
-    if auth["role"] == "agent" and target.kind != HandoffKind.TASK:
-        return {
-            "epoch": store.epoch,
-            "error": f"Agent tokens are forbidden from claiming '{target.kind.value}' handoffs.",
-            "success": False,
-        }
+        if auth["role"] == "agent" and target.kind != HandoffKind.TASK:
+            return {
+                "epoch": store.epoch,
+                "error": f"Agent tokens are forbidden from claiming '{target.kind.value}' handoffs.",
+                "success": False,
+            }
 
-    target.status = HandoffStatus.IN_PROGRESS
-    target.claimed_by = auth.get("agent_id", "agent")
-    return {"epoch": store.epoch, "handoff_id": id, "status": target.status.value, "success": True}
+        now_ms = int(time.time() * 1000)
+        is_claimable = (
+            target.status == HandoffStatus.PENDING
+            or (target.status == HandoffStatus.IN_PROGRESS and target.lease_until and target.lease_until < now_ms)
+        )
+        if not is_claimable:
+            return {
+                "epoch": store.epoch,
+                "error": f"Handoff '{id}' already claimed by '{target.claimed_by}' with active lease until {target.lease_until}.",
+                "success": False,
+            }
+
+        target.status = HandoffStatus.IN_PROGRESS
+        target.claimed_by = auth.get("agent_id", "agent")
+        target.claimed_at = now_ms
+        target.lease_until = now_ms + 60000
+        return {"epoch": store.epoch, "handoff_id": id, "status": target.status.value, "success": True}
 
 
 def quarantine(root_id: str, token: str, reason: str = "Manual auditor quarantine") -> Dict[str, Any]:

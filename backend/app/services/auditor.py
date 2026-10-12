@@ -81,7 +81,7 @@ class AuditorService:
             event_bus.publish(
                 tenant,
                 "handoff_updated",
-                {"handoff": handoff.dict()},
+                {"handoff": handoff.model_dump()},
                 request_id=request_id,
             )
             return {"verdict": "REVIEW_HANDOFF", "handoff_id": handoff.id}
@@ -145,7 +145,7 @@ class AuditorService:
                         status=HandoffStatus.PENDING,
                         context_root_id=node.id,
                     )
-                    event_bus.publish(tenant, "handoff_updated", {"handoff": handoff.dict()}, request_id=request_id)
+                    event_bus.publish(tenant, "handoff_updated", {"handoff": handoff.model_dump()}, request_id=request_id)
                 else:
                     # Enqueue compensation
                     node.action.compensation = CompensationInfo(

@@ -48,47 +48,48 @@ def stage_action(
 ):
     store = get_graph_store(tenant=auth.tenant)
 
-    # 1. Atomic derivation check: all parents must exist and be HEALTHY
-    parents = [store.nodes.get(pid) for pid in req.parent_ids if store.nodes.get(pid)]
-    if len(parents) != len(req.parent_ids) or any(p.status != Status.HEALTHY for p in parents):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "error": {
-                    "code": ErrorCode.CONFLICT.value,
-                    "message": "Atomic derivation guard failed: one or more parents do not exist or are not HEALTHY.",
-                }
-            },
+    with store._lock:
+        # 1. Atomic derivation check: all parents must exist and be HEALTHY
+        parents = [store.nodes.get(pid) for pid in req.parent_ids if store.nodes.get(pid)]
+        if len(parents) != len(req.parent_ids) or any(p.status != Status.HEALTHY for p in parents):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": {
+                        "code": ErrorCode.CONFLICT.value,
+                        "message": "Atomic derivation guard failed: one or more parents do not exist or are not HEALTHY.",
+                    }
+                },
+            )
+
+        action_id = req.id or f"act_{uuid.uuid4().hex[:6]}"
+        action_node = GraphNode(
+            id=action_id,
+            kind=NodeKind.ACTION,
+            label=req.label[:60],
+            status=Status.HEALTHY,
+            stale=False,
+            action=ActionInfo(
+                type=req.action_type,
+                reversibility=req.reversibility,
+                executed=False,
+                confirmed=False,
+                gate=GateStatus.PASSED,  # Evaluated by gate below
+                procedure_id=req.procedure_id,
+            ),
         )
+        if req.idempotency_key:
+            action_node.action.idempotency_key = req.idempotency_key
 
-    action_id = req.id or f"act_{uuid.uuid4().hex[:6]}"
-    action_node = GraphNode(
-        id=action_id,
-        kind=NodeKind.ACTION,
-        label=req.label[:60],
-        status=Status.HEALTHY,
-        stale=False,
-        action=ActionInfo(
-            type=req.action_type,
-            reversibility=req.reversibility,
-            executed=False,
-            confirmed=False,
-            gate=GateStatus.PASSED,  # Evaluated by gate below
-            procedure_id=req.procedure_id,
-        ),
-    )
-    if req.idempotency_key:
-        action_node.action.idempotency_key = req.idempotency_key
-
-    # Add node and causal edges
-    store.add_node(action_node)
-    for p in parents:
-        store.add_edge(GraphEdge(
-            id=f"e_{uuid.uuid4().hex[:6]}",
-            source=p.id,
-            target=action_node.id,
-            type=EdgeType.LEADS_TO,
-        ))
+        # Add node and causal edges
+        store.add_node(action_node)
+        for p in parents:
+            store.add_edge(GraphEdge(
+                id=f"e_{uuid.uuid4().hex[:6]}",
+                source=p.id,
+                target=action_node.id,
+                type=EdgeType.LEADS_TO,
+            ))
 
     # 2. Evaluate Quorum Gate
     gate_status, reason, handoff = quorum_gate.evaluate(store, action_node, tenant=auth.tenant)
