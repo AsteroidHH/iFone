@@ -42,7 +42,7 @@ export const tools = {
     explain: 'In plain words',
     degree: (n: number) => `${n} connection${n === 1 ? '' : 's'}`,
   },
-  mini: { title: 'Minimap', aria: 'Minimap. Click to move the view.' },
+  mini: { title: 'Minimap', aria: 'Minimap. Click to move the view.', toggle: 'Show or hide the minimap' },
   insights: {
     title: 'Graph insights',
     sub: 'What the graph says about itself, computed from the live nodes and edges.',

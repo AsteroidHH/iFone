@@ -19,8 +19,19 @@ export function Timeline() {
   const graph = useStore((s) => visibleGraph(s));
   const [now, setNow] = useState(Date.now());
   const [playing, setPlaying] = useState(false);
+  const root = useRef<HTMLElement>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    const apply = () => document.documentElement.style.setProperty('--timeline-h', `${el.getBoundingClientRect().height + 34}px`);
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -90,7 +101,7 @@ export function Timeline() {
   const diff = compareBase ? diffGraphs(compareBase.nodes, graph.nodes) : null;
 
   return (
-    <section className="timeline" aria-label={copy.timeline.title}>
+    <section className="timeline" ref={root} aria-label={copy.timeline.title}>
       <h2 className="sr">{copy.timeline.title}</h2>
       <div className="tl-controls">
         <button className="btn" disabled={empty} onClick={togglePlay}>

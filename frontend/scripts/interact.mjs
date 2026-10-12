@@ -146,7 +146,7 @@ await page.evaluate(() => {
   el.dispatchEvent(new Event('input', { bubbles: true }));
 });
 await wait(900);
-check('slider enters the "Viewing the past" frame', await page.locator('.past-bar').isVisible());
+check('slider enters the "Viewing the past" frame', await page.locator('.status-chip.past').isVisible());
 await btn('Compare from here').click();
 await page.evaluate(() => {
   const el = document.querySelector('.tl-track input');
@@ -157,7 +157,7 @@ await page.evaluate(() => {
 await wait(900);
 const diffText = await text('.belief-diff');
 check('belief diff counts quarantined nodes between the two moments', /[1-9]\d* quarantined/.test(diffText), diffText.split('\n').slice(-1)[0]);
-check('Back to now is gone at the present', !(await page.locator('.past-bar').count()));
+check('Back to now is gone at the present', !(await page.locator('.status-chip.past').count()));
 
 // navigation and analysis features
 await page.keyboard.press('Control+k');
@@ -187,6 +187,8 @@ await page.getByRole('tab', { name: 'Links' }).click();
 await wait(300);
 check('Links tab lists what the node is built from', (await text('.links')).includes('Approve refunds up to 90 days'));
 
+await page.getByRole('button', { name: 'Show or hide the minimap' }).click();
+await wait(300);
 await page.getByRole('button', { name: 'Filters' }).click();
 const mmBefore = await page.locator(".mm-node").count();
 await page.getByLabel('Show only what needs attention').check();
@@ -213,8 +215,8 @@ await wait(300);
 check('right-clicking a node opens its context menu', await page.locator('.ctxmenu').isVisible());
 await page.getByRole('menuitem', { name: 'Trace back to its sources' }).click();
 await wait(500);
-check('Trace back highlights the path on the graph', await page.locator('.path-chip').isVisible());
-await page.locator('.path-chip .iconbtn').click();
+check('Trace back highlights the path on the graph', await page.locator('.status-chip.path').isVisible());
+await page.locator('.status-chip.path .iconbtn').click();
 
 await page.getByRole('tab', { name: 'Insights' }).click();
 await wait(500);
@@ -223,8 +225,8 @@ check('Insights lists the most connected nodes', (await page.locator('.ins-gods 
 check('Insights has a quarantined count', (await text('.ins-kpi.bad')).includes('07'));
 await page.getByRole('button', { name: 'Show on graph' }).click();
 await wait(500);
-check('shortest path can be shown on the graph', await page.locator('.path-chip').isVisible());
-await page.locator('.path-chip .iconbtn').click();
+check('shortest path can be shown on the graph', await page.locator('.status-chip.path').isVisible());
+await page.locator('.status-chip.path .iconbtn').click();
 await page.getByRole('tab', { name: 'Graph', exact: true }).click();
 
 for (const [key, name] of [['2', 'Memory'], ['3', 'Brain'], ['1', 'Console']]) {
@@ -232,6 +234,76 @@ for (const [key, name] of [['2', 'Memory'], ['3', 'Brain'], ['1', 'Console']]) {
   await wait(250);
   check(`key ${key} switches to ${name}`, (await text('.navbtn.on')).includes(name));
 }
+
+// overlays: layering, dismissal and collisions
+const rect = (sel) => page.locator(sel).first().evaluate((el) => { const r = el.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; });
+const hit = (a, b) => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
+
+await page.getByRole('tab', { name: 'Graph', exact: true }).click();
+await wait(400);
+const parts = {};
+for (const [k, sel] of [['search', '.ov-toolbar .search'], ['view', '.ov-toolbar .seg'], ['filters', '.filters-wrap'], ['collapse', '.ov-toolbar .iconbtn.boxed'], ['mini', '.minimap'], ['legend', '.legend-toggle'], ['zoom', '.zoomdock']]) parts[k] = await rect(sel);
+const names = Object.keys(parts);
+const clashes = [];
+for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++) if (hit(parts[names[i]], parts[names[j]])) clashes.push(`${names[i]}/${names[j]}`);
+check('canvas controls never overlap each other', clashes.length === 0, clashes.join(', '));
+const railTop = await page.locator('.rail-label').first().evaluate((el) => el.getBoundingClientRect().top);
+check('rail labels sit below the toolbar and status line', railTop >= parts.search.b + 8, `${Math.round(railTop)} vs ${Math.round(parts.search.b)}`);
+const cyBox = await rect('.cy');
+check('the graph area stays clear of the minimap and zoom dock', cyBox.b <= parts.mini.t + 1 && cyBox.r <= parts.zoom.l + 1);
+
+// popovers: one at a time, close on outside click and Escape, focus returns to the trigger
+await page.getByRole('button', { name: /Filters/ }).click();
+check('filters popover opens', await page.locator('.filters').isVisible());
+await page.getByRole('button', { name: /Invariants hold/ }).click();
+check('opening another popover closes the first', !(await page.locator('.filters').count()) && (await page.locator('.popover').isVisible()));
+await page.mouse.click(700, 500);
+await wait(200);
+check('clicking outside closes a popover', (await page.locator('.popover').count()) === 0);
+await page.getByRole('button', { name: /Filters/ }).click();
+await page.keyboard.press('Escape');
+await wait(200);
+check('Escape closes the popover and returns focus to its button', (await page.locator('.filters').count()) === 0 && (await page.evaluate(() => document.activeElement?.getAttribute('data-popover-trigger'))) === 'filters');
+
+// Escape closes only the topmost layer: the palette, not the selection behind it
+await page.getByRole('button', { name: 'List view' }).click();
+await page.locator('.list-row', { hasText: 'Refund window is 90 days' }).first().click();
+await page.getByRole('button', { name: 'Graph view' }).click();
+await wait(300);
+await page.keyboard.press('Control+k');
+await page.keyboard.press('Escape');
+await wait(250);
+check('Escape closes the palette without clearing the selection', (await page.locator('.palette').count()) === 0 && (await text('.crumb-trail')).includes('Refund window is 90 days'));
+check('focus returns to the page after the palette closes', await page.evaluate(() => document.activeElement?.tagName !== 'INPUT' || document.activeElement?.id === 'graph-search'));
+
+// toasts: stack, dedupe, pause while hovered, auto-dismiss, never cover the timeline
+await page.evaluate(() => { const b = document.querySelector('.crumbs'); void b; });
+await page.getByRole('button', { name: 'Inject poisoned webhook' }).isDisabled();
+for (let i = 0; i < 3; i++) {
+  await page.evaluate(() => window.__toast?.('Same message', 'info'));
+}
+const toastApi = await page.evaluate(() => typeof window.__toast);
+check('toast test hook is available', toastApi === 'function');
+await wait(200);
+check('identical toasts are counted, not stacked', (await page.locator('.toast').count()) === 1 && (await text('.toast-count')).includes('x3'));
+const tbox = await rect('.toast');
+const tl = await rect('.timeline');
+check('toasts stay above the timeline', tbox.b <= tl.t + 1, `${Math.round(tbox.b)} vs ${Math.round(tl.t)}`);
+await page.locator('.toast').first().hover();
+await wait(5200);
+check('a hovered toast stays put past its normal lifetime', (await page.locator('.toast').count()) === 1);
+await page.mouse.move(700, 600);
+await wait(5600);
+check('a toast disappears by itself once the pointer leaves', (await page.locator('.toast').count()) === 0);
+
+// dev drawer is docked: it pushes the layout up instead of floating over it
+await page.getByRole('button', { name: 'Dev console' }).click();
+await wait(300);
+const drawer = await rect('.dev-drawer');
+const tl2 = await rect('.timeline');
+check('the dev console docks below the timeline without overlapping it', drawer.t >= tl2.b - 1, `${Math.round(drawer.t)} vs ${Math.round(tl2.b)}`);
+await page.getByRole('button', { name: 'Dev console' }).click();
+await wait(200);
 
 // tenant switch
 await page.selectOption('.tenant select', 'globex');

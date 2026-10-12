@@ -45,7 +45,24 @@ Borrowed as ideas from Obsidian (graph view, local graph, backlinks, quick switc
 | Path highlight | Insights, or the context menu | The shortest chain between two nodes, drawn on the graph |
 | Insights tab | Centre card | Belief flow ribbons, health bar, activity over time, most connected nodes, communities, shortest path, explain the selection |
 | Activity strip | Timeline | Event density behind the slider |
-| Keyboard | `?` for the full list | 1 to 5 switch views; F fit; / search; L list; P presentation |
+| Keyboard | `?` for the full list | 1 to 5 switch views; F fit; / search; L list; P presentation; Ctrl K palette |
+
+## Layers, overlays and dismissal
+
+Everything that floats follows one set of rules (`src/styles/layers.css`, `src/components/focus.ts`, `src/state/toasts.ts`).
+
+| Rule | How |
+|---|---|
+| One z-index scale | Tokens `--z-canvas` 1, `--z-overlay` 4, `--z-chrome` 20, `--z-popover` 40, `--z-dev` 50, `--z-menu` 60, `--z-modal` 80, `--z-toast` 90; no raw numbers in components |
+| Canvas overlays cannot collide | They sit in a grid (toolbar row, one status line, bottom-left dock, bottom-right dock) and the graph area is inset to leave them clear; rail labels sit below the status line |
+| One status line at a time | Past view, path, blast-radius preview and the welcome hint share one slot, chosen by priority |
+| Popovers | One open at a time; close on outside click and Escape; focus returns to the button that opened them |
+| Layers close in order | Escape closes the palette, then the context menu, then popovers, then the shortcuts dialog, then presentation mode, then the selection |
+| Dialogs | The palette and shortcuts dialog trap Tab and give focus back to where it was; the context menu focuses its first item and supports arrow keys |
+| Toasts | At most three, identical messages are counted not stacked, lifetime scales with length (problems stay longer), the timer pauses while the pointer or focus is on a toast, and they sit above the measured height of the timeline |
+| Transient previews | The blast-radius preview lingers 450 ms after the pointer leaves, so it does not flicker |
+| Docked, not floating | The dev console is a drawer below the stage; toasts move up to make room |
+| Minimap | Off by default and remembered; when on, the graph area shrinks to leave room instead of drawing underneath it |
 
 ## Motion
 

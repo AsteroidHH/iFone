@@ -7,6 +7,7 @@ import { startAutopilot, stopAutopilot } from '../state/autopilot';
 import { runStep } from '../state/endpoints';
 import { navMove, useStore, type Tab, type View } from '../state/store';
 import { goToTime } from '../state/timetravel';
+import { restoreFocus } from './focus';
 import { Icon } from './Icon';
 
 interface Item {
@@ -143,6 +144,10 @@ export function CommandPalette() {
     return sorted.slice(0, 40).map((r) => r.it);
   }, [items, q]);
 
+  useEffect(() => {
+    if (!open) return;
+    return () => restoreFocus();
+  }, [open]);
   useEffect(() => setIdx(0), [q]);
   useEffect(() => {
     list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
@@ -177,7 +182,10 @@ export function CommandPalette() {
             run(results[idx]);
           } else if (e.key === 'Escape') {
             e.preventDefault();
+            e.stopPropagation();
             close();
+          } else if (e.key === 'Tab') {
+            e.preventDefault();
           }
         }}
       >

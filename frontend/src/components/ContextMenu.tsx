@@ -27,6 +27,10 @@ export function ContextMenu() {
     };
   }, [menu]);
 
+  useEffect(() => {
+    if (menu) ref.current?.querySelector<HTMLButtonElement>('button[role="menuitem"]')?.focus();
+  }, [menu]);
+
   if (!menu) return null;
   const node = nodes[menu.id];
   if (!node) return null;
@@ -96,10 +100,24 @@ export function ContextMenu() {
     },
   ];
 
+  const onKey = (e: React.KeyboardEvent) => {
+    const btns = [...(ref.current?.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]') ?? [])];
+    const i = btns.indexOf(document.activeElement as HTMLButtonElement);
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      btns[(i + 1) % btns.length]?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      btns[(i - 1 + btns.length) % btns.length]?.focus();
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+    }
+  };
+
   const x = Math.min(menu.x, window.innerWidth - 260);
   const y = Math.min(menu.y, window.innerHeight - items.length * 38 - 60);
   return (
-    <div className="ctxmenu" ref={ref} style={{ left: x, top: y }} role="menu" aria-label={node.label} onPointerDown={(e) => e.stopPropagation()}>
+    <div className="ctxmenu" ref={ref} style={{ left: x, top: y }} role="menu" aria-label={node.label} onPointerDown={(e) => e.stopPropagation()} onKeyDown={onKey}>
       <p className="ctx-head">
         <span className="kind">{node.is_decision ? copy.kind.decision : (copy.kind[node.kind] ?? node.kind)}</span>
         <strong>{node.label}</strong>

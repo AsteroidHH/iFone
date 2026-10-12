@@ -190,9 +190,74 @@ export function GraphCanvas({ active }: { active: boolean }) {
 
   const dry = preview.data;
 
+  // Hover previews linger briefly so they do not flicker as the pointer crosses a gap.
+  const [dryShown, setDryShown] = useState<typeof dry>(undefined);
+  useEffect(() => {
+    if (hover && dry && dry.node_ids.length > 1 && !asOf) {
+      setDryShown(dry);
+      return;
+    }
+    const t = setTimeout(() => setDryShown(undefined), 450);
+    return () => clearTimeout(t);
+  }, [hover, dry, asOf]);
+
+  // The welcome strip goes away on first interaction, not on a timer.
+  useEffect(() => {
+    if (selectedId) setWelcomeGone(true);
+  }, [selectedId]);
+
+  const showWelcome = !started && !welcomeGone && !asOf && nodeCount > 0;
+  const showMini = useStore((s) => s.showMini);
+
+  // One status line at a time, in priority order, so overlays never stack on the graph.
+  const status = asOf ? (
+    <div className="status-chip past" role="status">
+      <Icon name="clock" size={15} />
+      <strong>{copy.canvas.pastFrame}</strong>
+      <span className="mono">{new Date(asOf).toLocaleTimeString([], { hour12: false })}</span>
+      <button className="btn" onClick={() => void goToTime(null)}>
+        <Icon name="back" size={14} />
+        {copy.canvas.backToNow}
+      </button>
+    </div>
+  ) : pathIds.length > 0 ? (
+    <div className="status-chip path" role="status">
+      <Icon name="path" size={14} />
+      {tools.insights.hops(pathIds.length - 1)}
+      <button className="iconbtn" aria-label={tools.insights.clearPath} onClick={() => set({ pathIds: [] })}>
+        <Icon name="x" size={13} />
+      </button>
+    </div>
+  ) : dryShown ? (
+    <div className="status-chip dry" role="status">
+      <strong>{copy.containment.dryRun}</strong>
+      <span>
+        {copy.containment.dryRunLine(
+          dryShown.facts,
+          dryShown.conclusions,
+          dryShown.actions.staged,
+          dryShown.actions.executed_reversible + dryShown.actions.executed_compensable,
+          dryShown.actions.executed_irreversible,
+        )}
+      </span>
+    </div>
+  ) : showWelcome ? (
+    <div className="status-chip hint" role="note">
+      <span className="hint-ico">
+        <Icon name="sparkle" size={16} />
+      </span>
+      <p className="hint-text">
+        <strong>{copy.welcome.title}.</strong> {copy.welcome.body}
+      </p>
+      <button className="iconbtn" aria-label={copy.dismiss} onClick={() => setWelcomeGone(true)}>
+        <Icon name="x" size={14} />
+      </button>
+    </div>
+  ) : null;
+
   return (
     <div className={`canvas-wrap${asOf ? ' is-past' : ''}`} hidden={!active}>
-      <div className="canvas-stage">
+      <div className={`canvas-stage${showMini ? ' has-mini' : ''}`}>
         <div className="grid" aria-hidden="true" />
         <div className="rails" aria-hidden="true">
           {copy.rails.map((r, i) => (
@@ -206,129 +271,97 @@ export function GraphCanvas({ active }: { active: boolean }) {
         </div>
         <div ref={host} className="cy" role="img" aria-label={copy.canvas.graphAria} />
 
-        <div className="canvas-tools" role="toolbar" aria-label="Graph tools">
-          <label className="search">
-            <Icon name="search" size={15} />
-            <span className="sr">{copy.canvas.search}</span>
-            <input
-              id="graph-search"
-              type="search"
-              placeholder={`${copy.canvas.search}  /`}
-              value={search}
-              onChange={(e) => set({ search: e.target.value })}
-            />
-          </label>
-          <div className="seg" role="group" aria-label="View">
-            <button className={`seg-btn${!listView ? ' on' : ''}`} aria-pressed={!listView} onClick={() => set({ listView: false })}>
-              <Icon name="graph" size={14} />
-              {copy.canvas.graph}
-            </button>
-            <button className={`seg-btn${listView ? ' on' : ''}`} aria-pressed={listView} onClick={() => set({ listView: true })} title="L">
-              <Icon name="list" size={14} />
-              {copy.canvas.list}
-            </button>
-          </div>
-          <div className="filters-wrap">
-            <button className={`btn${filterCount ? ' primary' : ''}`} aria-expanded={filtersOpen} onClick={() => set({ filtersOpen: !filtersOpen })}>
-              <Icon name="sliders" size={14} />
-              {tools.filters.button}
-              {filterCount > 0 && <b className="f-count num">{filterCount}</b>}
-            </button>
-            {filtersOpen && <FiltersPanel />}
-          </div>
-          <button
-            className="iconbtn boxed"
-            disabled={!selectedId}
-            onClick={() => graphBus.collapse.emit()}
-            aria-label={collapsed ? copy.canvas.expand : copy.canvas.collapse}
-            title={collapsed ? copy.canvas.expand : copy.canvas.collapse}
-          >
-            <Icon name="collapse" size={15} />
-          </button>
-        </div>
-
-        <div className="zoomdock" role="group" aria-label="Zoom">
-          <button className="iconbtn" aria-label={copy.canvas.fit} title={`${copy.canvas.fit} (F)`} onClick={() => graphBus.fit.emit()}>
-            <Icon name="fit" size={16} />
-          </button>
-          <button className="iconbtn" aria-label="Zoom in" onClick={() => adapter.current?.zoomBy(1.25)}>
-            +
-          </button>
-          <button className="iconbtn" aria-label="Zoom out" onClick={() => adapter.current?.zoomBy(0.8)}>
-            -
-          </button>
-          <button className="iconbtn" aria-label={copy.canvas.relayout} title={copy.canvas.relayout} onClick={() => graphBus.relayout.emit()}>
-            <Icon name="refresh" size={15} />
-          </button>
-          <button className="iconbtn" aria-pressed={locked} aria-label={locked ? copy.canvas.unlock : copy.canvas.lock} title={locked ? copy.canvas.unlock : copy.canvas.lock} onClick={() => set({ lockLayout: !locked })}>
-            <Icon name="lock" size={15} />
-          </button>
-        </div>
-
-        <div className={`legend${legendOpen ? ' open' : ''}`}>
-          <button className="legend-toggle" aria-expanded={legendOpen} onClick={() => set({ legendOpen: !legendOpen })}>
-            <Icon name="help" size={14} />
-            {copy.canvas.legendTitle}
-          </button>
-          {legendOpen && (
-            <div className="legend-body" role="note">
-              <p>{copy.canvas.legend.shapes}</p>
-              <p>{copy.canvas.legend.state}</p>
+        <div className="overlay">
+          <div className="ov-toolbar canvas-tools" role="toolbar" aria-label="Graph tools">
+            <label className="search">
+              <Icon name="search" size={15} />
+              <span className="sr">{copy.canvas.search}</span>
+              <input
+                id="graph-search"
+                type="search"
+                placeholder={`${copy.canvas.search}  /`}
+                value={search}
+                onChange={(e) => set({ search: e.target.value })}
+              />
+            </label>
+            <div className="seg" role="group" aria-label="View">
+              <button className={`seg-btn${!listView ? ' on' : ''}`} aria-pressed={!listView} onClick={() => set({ listView: false })}>
+                <Icon name="graph" size={14} />
+                <span className="seg-label">{copy.canvas.graph}</span>
+              </button>
+              <button className={`seg-btn${listView ? ' on' : ''}`} aria-pressed={listView} onClick={() => set({ listView: true })} title="L">
+                <Icon name="list" size={14} />
+                <span className="seg-label">{copy.canvas.list}</span>
+              </button>
             </div>
-          )}
-        </div>
-
-        <Minimap data={mini} selected={selectedId} onPan={(x, y) => adapter.current?.panToModel(x, y)} />
-        {pathIds.length > 0 && (
-          <div className="path-chip" role="status">
-            <Icon name="path" size={14} />
-            {tools.insights.hops(pathIds.length - 1)}
-            <button className="iconbtn" aria-label={tools.insights.clearPath} onClick={() => set({ pathIds: [] })}>
-              <Icon name="x" size={13} />
-            </button>
-          </div>
-        )}
-        {loaded && nodeCount === 0 && <p className="canvas-empty">{copy.canvas.empty}</p>}
-        {!started && !welcomeGone && !asOf && nodeCount > 0 && (
-          <div className="welcome" role="note">
-            <span className="welcome-ico">
-              <Icon name="sparkle" size={18} />
-            </span>
-            <div>
-              <h3>{copy.welcome.title}</h3>
-              <p>{copy.welcome.body}</p>
+            <div className="filters-wrap">
+              <button
+                className={`btn${filterCount ? ' primary' : ''}`}
+                aria-expanded={filtersOpen}
+                data-popover-trigger="filters"
+                onClick={() => set({ filtersOpen: !filtersOpen })}
+              >
+                <Icon name="sliders" size={14} />
+                {tools.filters.button}
+                {filterCount > 0 && <b className="f-count num">{filterCount}</b>}
+              </button>
+              {filtersOpen && <FiltersPanel />}
             </div>
-            <button className="iconbtn" aria-label={copy.dismiss} onClick={() => setWelcomeGone(true)}>
-              <Icon name="x" size={14} />
+            <button
+              className="iconbtn boxed"
+              disabled={!selectedId}
+              onClick={() => graphBus.collapse.emit()}
+              aria-label={collapsed ? copy.canvas.expand : copy.canvas.collapse}
+              title={collapsed ? copy.canvas.expand : copy.canvas.collapse}
+            >
+              <Icon name="collapse" size={15} />
             </button>
           </div>
-        )}
-        {listView && <ListView />}
-        {asOf && (
-          <div className="past-bar" role="status">
-            <Icon name="clock" size={15} />
-            <strong>{copy.canvas.pastFrame}</strong>
-            <span className="mono">{new Date(asOf).toLocaleTimeString([], { hour12: false })}</span>
-            <button className="btn" onClick={() => void goToTime(null)}>
-              <Icon name="back" size={14} />
-              {copy.canvas.backToNow}
-            </button>
-          </div>
-        )}
-        {dry && hover && dry.node_ids.length > 1 && !asOf && (
-          <div className="dry-run" role="status">
-            <strong>{copy.containment.dryRun}</strong>
-            <span>
-              {copy.containment.dryRunLine(
-                dry.facts,
-                dry.conclusions,
-                dry.actions.staged,
-                dry.actions.executed_reversible + dry.actions.executed_compensable,
-                dry.actions.executed_irreversible,
+
+          <div className="ov-status">{status}</div>
+
+          <div className="ov-bl">
+            {showMini && <Minimap data={mini} selected={selectedId} onPan={(x, y) => adapter.current?.panToModel(x, y)} />}
+            <div className={`legend${legendOpen ? ' open' : ''}`}>
+              <button className="legend-toggle" aria-expanded={legendOpen} data-popover-trigger="legend" onClick={() => set({ legendOpen: !legendOpen })}>
+                <Icon name="help" size={14} />
+                {copy.canvas.legendTitle}
+              </button>
+              {legendOpen && (
+                <div className="legend-body" role="note" data-popover="legend">
+                  <p>{copy.canvas.legend.shapes}</p>
+                  <p>{copy.canvas.legend.state}</p>
+                </div>
               )}
-            </span>
+            </div>
           </div>
-        )}
+
+          <div className="ov-br">
+            <div className="zoomdock" role="group" aria-label="Zoom">
+              <button className="iconbtn" aria-label={copy.canvas.fit} title={`${copy.canvas.fit} (F)`} onClick={() => graphBus.fit.emit()}>
+                <Icon name="fit" size={16} />
+              </button>
+              <button className="iconbtn" aria-label="Zoom in" onClick={() => adapter.current?.zoomBy(1.25)}>
+                +
+              </button>
+              <button className="iconbtn" aria-label="Zoom out" onClick={() => adapter.current?.zoomBy(0.8)}>
+                -
+              </button>
+              <button className="iconbtn" aria-label={copy.canvas.relayout} title={copy.canvas.relayout} onClick={() => graphBus.relayout.emit()}>
+                <Icon name="refresh" size={15} />
+              </button>
+              <button className="iconbtn" aria-pressed={showMini} aria-label={tools.mini.toggle} title={tools.mini.toggle} onClick={() => set({ showMini: !showMini })}>
+                <Icon name="map" size={15} />
+              </button>
+              <button className="iconbtn" aria-pressed={locked} aria-label={locked ? copy.canvas.unlock : copy.canvas.lock} title={locked ? copy.canvas.unlock : copy.canvas.lock} onClick={() => set({ lockLayout: !locked })}>
+                <Icon name="lock" size={15} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {loaded && nodeCount === 0 && <p className="canvas-empty">{copy.canvas.empty}</p>}
+        {listView && <ListView />}
       </div>
     </div>
   );

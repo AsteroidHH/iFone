@@ -74,7 +74,7 @@ await wait(700);
 await shot('07-path-on-graph');
 
 await page.getByRole('button', { name: 'Clear path' }).click().catch(() => undefined);
-await page.locator('.path-chip .iconbtn').click().catch(() => undefined);
+await page.locator('.status-chip.path .iconbtn').click().catch(() => undefined);
 if (await page.locator('.filters').count()) await btn('Filters').click();
 await wait(200);
 const pos = await page.locator('.cy').evaluate((el) => {

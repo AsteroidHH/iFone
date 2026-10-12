@@ -24,7 +24,7 @@ export function FiltersPanel() {
   const upd = (p: Partial<GraphFilters>) => set({ filters: { ...f, ...p } });
 
   return (
-    <div className="filters" role="dialog" aria-label={tools.filters.title}>
+    <div className="filters" role="dialog" aria-label={tools.filters.title} data-popover="filters">
       <header>
         <h3>{tools.filters.title}</h3>
         <button className="btn quiet" onClick={() => set({ filters: defaultFilters() })}>

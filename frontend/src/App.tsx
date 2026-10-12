@@ -9,7 +9,8 @@ import { startSession, stopSession } from './state/pipeline';
 import { startAutopilot } from './state/autopilot';
 import { Landing } from './landing/Landing';
 import { useRoute } from './landing/hooks';
-import { navMove, useStore } from './state/store';
+import { closePopovers, navMove, POPOVERS, useStore } from './state/store';
+import { focusTrigger, rememberFocus } from './components/focus';
 import { CommandPalette } from './components/CommandPalette';
 import { ContextMenu } from './components/ContextMenu';
 import { Benchmark } from './views/Benchmark';
@@ -26,6 +27,7 @@ function useShortcuts() {
       const st = useStore.getState();
       if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K' || e.key === 'p' || e.key === 'P')) {
         e.preventDefault();
+        if (!st.paletteOpen) rememberFocus();
         flushSync(() => st.set({ paletteOpen: !st.paletteOpen }));
         return;
       }
@@ -36,12 +38,25 @@ function useShortcuts() {
         return;
       }
       if (e.key === 'Escape') {
-        if (st.ctxMenu) st.set({ ctxMenu: null });
-        else if (st.filtersOpen) st.set({ filtersOpen: false });
-        if (typing) (t as HTMLElement).blur();
-        if (st.shortcutsOpen) st.set({ shortcutsOpen: false });
-        else if (st.presentation) st.set({ presentation: false });
-        else st.set({ selectedId: null, search: '' });
+        if (st.paletteOpen) return;
+        if (st.ctxMenu) {
+          st.set({ ctxMenu: null });
+          return;
+        }
+        if (POPOVERS.some((k) => st[k])) {
+          const which = st.filtersOpen ? 'filters' : st.invariantsOpen ? 'invariants' : 'legend';
+          closePopovers();
+          focusTrigger(which);
+          return;
+        }
+        if (st.shortcutsOpen) return;
+        if (typing) {
+          (t as HTMLElement).blur();
+          if (st.search) st.set({ search: '' });
+          return;
+        }
+        if (st.presentation) st.set({ presentation: false });
+        else st.set({ selectedId: null, search: '', pathIds: [] });
         return;
       }
       if (typing || st.paletteOpen || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -63,6 +78,7 @@ function useShortcuts() {
           st.set({ presentation: !st.presentation });
           break;
         case '?':
+          rememberFocus();
           st.set({ shortcutsOpen: true });
           break;
         case '1':
@@ -82,8 +98,17 @@ function useShortcuts() {
           break;
       }
     };
+    const onPointer = (e: PointerEvent) => {
+      const el = e.target as Element | null;
+      if (el?.closest('[data-popover],[data-popover-trigger]')) return;
+      closePopovers();
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('pointerdown', onPointer, true);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('pointerdown', onPointer, true);
+    };
   }, []);
 }
 
