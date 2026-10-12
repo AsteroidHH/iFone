@@ -1,7 +1,0 @@
-{
-  "tokens": {
-    "acme": { "human": "<token>", "auditor": "<token>", "agent": "<token>" }
-  },
-  "tenants": ["acme"],
-  "note": "Copy to config.json at deploy time and fill in real tokens. config.json is git-ignored."
-}

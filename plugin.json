@@ -1,0 +1,15 @@
+{
+  "name": "quorum",
+  "displayName": "Quorum Agent Memory & Safety Gateway",
+  "version": "1.0.0",
+  "description": "Quorum causal memory graph, handoff task orchestration, blast radius analysis, and execution safety gateway for multi-agent systems.",
+  "keywords": [
+    "quorum",
+    "mcp",
+    "causal-memory",
+    "graph",
+    "agent-safety",
+    "handoffs",
+    "blast-radius"
+  ]
+}
