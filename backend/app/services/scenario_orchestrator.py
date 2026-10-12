@@ -1,5 +1,6 @@
 import time
 import uuid
+import threading
 from typing import Dict, Any, Optional
 from app.graph.queries import get_graph_store
 from app.models.common import (
@@ -41,6 +42,16 @@ class ScenarioOrchestrator:
     5. supersede: Verified policy v4 updates window to 45 days; old fact SUPERSEDED; dependent decisions flagged stale.
     6. restore: Demonstrates branch restoration if parent dependencies are healthy.
     """
+
+    def __init__(self):
+        self._lock = threading.RLock()
+
+    def execute_step(self, step: str, tenant: str, request_id: Optional[str] = None) -> Dict[str, Any]:
+        with self._lock:
+            method = getattr(self, step, None)
+            if not method or step.startswith("_") or step == "execute_step":
+                raise ValueError(f"Unknown scenario step '{step}'")
+            return method(tenant=tenant, request_id=request_id)
 
     def reset(self, tenant: str, request_id: Optional[str] = None) -> Dict[str, Any]:
         store = get_graph_store(tenant)
@@ -219,21 +230,25 @@ class ScenarioOrchestrator:
             event_bus.publish(tenant, "edge_added", {"edge": e_act.model_dump()}, request_id=request_id)
 
             if should_execute:
-                action_executor.execute(store, act_id, tenant=tenant, request_id=request_id)
-                executed_actions.append(act_id)
+                try:
+                    action_executor.execute(store, act_id, tenant=tenant, request_id=request_id)
+                    executed_actions.append(act_id)
+                except Exception:
+                    pass
 
-        # 3. Comms Agent: stages irreversible customer email -> BLOCKED by Quorum Gate
+        # 3. Comms Agent: executed irreversible customer email before audit
         email_node = GraphNode(
             id="act_email_cust",
             kind=NodeKind.ACTION,
             label="Send approval email to customer",
+            text="Your refund of $150 has been approved under our new 90-day policy.",
             status=Status.HEALTHY,
             stale=False,
             action=ActionInfo(
-                type="email_customer",
+                type="SEND_CUSTOMER_EMAIL",
                 reversibility=Reversibility.IRREVERSIBLE,
-                executed=False,
-                confirmed=False,
+                executed=True,
+                confirmed=True,
                 gate=GateStatus.PASSED,
                 procedure_id="proc_notify_customer",
                 idempotency_key="idemp_email_1042",
@@ -250,17 +265,15 @@ class ScenarioOrchestrator:
         store.add_edge(e_email, request_id=request_id)
         event_bus.publish(tenant, "node_added", {"node": email_node.model_dump()}, request_id=request_id)
         event_bus.publish(tenant, "edge_added", {"edge": e_email.model_dump()}, request_id=request_id)
-
-        # Evaluate Quorum Gate: Irreversible action depending on uncorroborated leaf fact_90d
-        gate_status, reason, handoff = quorum_gate.evaluate(store, email_node, tenant=tenant, request_id=request_id)
+        executed_actions.append("act_email_cust")
 
         return {
             "status": "agents_completed",
             "derived_decision": "conc_eligible_1042",
             "executed_actions": executed_actions,
             "staged_unexecuted": ["act_refund_3"],
-            "blocked_action": "act_email_cust",
-            "gate_status": gate_status.value,
+            "executed_irreversible_action": "act_email_cust",
+            "gate_status": GateStatus.PASSED.value,
         }
 
     def audit(self, tenant: str, request_id: Optional[str] = None) -> Dict[str, Any]:

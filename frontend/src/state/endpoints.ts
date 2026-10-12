@@ -23,3 +23,6 @@ export const getInvariants = () => api(S.Invariants, 'GET', 'invariants');
 export const getCypher = (requestId: string) => api(S.CypherLog, 'GET', 'cypher-log', { query: { request_id: requestId, limit: 50 } });
 export const getBench = () => api(S.BenchResults, 'GET', 'bench/results');
 export const getDenied = () => api(S.DeniedDemo, 'GET', 'tenants/denied-demo');
+export const approveCorrection = (actionId: string) =>
+  api(z.any(), 'POST', `actions/${encodeURIComponent(actionId)}/approve-correction`);
+

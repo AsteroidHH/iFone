@@ -50,8 +50,8 @@ def get_auth_context(authorization: Optional[str] = Header(None)) -> AuthContext
                     token=token,
                 )
         elif len(parts) >= 3:
-            tenant = parts[1]
-            role = parts[2]
+            role = parts[-1]
+            tenant = "_".join(parts[1:-1])
             if role in ["agent", "auditor", "human"]:
                 return AuthContext(
                     tenant=tenant,

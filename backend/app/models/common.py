@@ -14,6 +14,7 @@ class NodeKind(str, Enum):
     FACT = "fact"
     CONCLUSION = "conclusion"
     ACTION = "action"
+    ALERT = "alert"
 
 
 class EdgeType(str, Enum):

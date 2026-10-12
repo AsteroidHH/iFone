@@ -92,6 +92,27 @@ class GraphStore:
 
             return ancestors
 
+    def get_descendants(self, node_id: str, edge_types: List[str] = ["LEADS_TO", "SUPPORTS"]) -> List[GraphNode]:
+        """Traverses forwards from node_id along outgoing edges of given types."""
+        with self._lock:
+            visited = set()
+            queue = [node_id]
+            descendants = []
+
+            while queue:
+                curr = queue.pop(0)
+                outgoing = [e for e in self.edges if e.source == curr and e.type.value in edge_types]
+                for edge in outgoing:
+                    child_id = edge.target
+                    if child_id not in visited and child_id != node_id:
+                        visited.add(child_id)
+                        child = self.nodes.get(child_id)
+                        if child:
+                            descendants.append(child)
+                            queue.append(child_id)
+
+            return descendants
+
     def get_leaf_facts(self, node_id: str) -> List[GraphNode]:
         """Finds all leaf ancestor Facts (ancestor Facts that have no incoming LEADS_TO edges)."""
         with self._lock:

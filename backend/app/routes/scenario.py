@@ -27,15 +27,13 @@ async def run_scenario_step(
         {"run_id": run_id, "step": step, "state": "started"},
     )
 
-    method = getattr(scenario_orchestrator, step, None)
-    if not method:
+    try:
+        scenario_orchestrator.execute_step(step, tenant=auth.tenant, request_id=run_id)
+    except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": {"code": ErrorCode.VALIDATION.value, "message": f"Unknown scenario step '{step}'"}},
+            detail={"error": {"code": ErrorCode.VALIDATION.value, "message": str(e)}},
         )
-
-    # Execute live step logic
-    method(tenant=auth.tenant, request_id=run_id)
 
     # Broadcast step completion
     event_bus.publish(

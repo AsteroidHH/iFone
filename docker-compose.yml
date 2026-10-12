@@ -7,47 +7,58 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - falkordb_data:/data
+      - falkordb_data:/var/lib/falkordb/data
       - ./scripts/users.acl:/etc/redis/users.acl:ro
-    command: ["falkordb", "--aclfile", "/etc/redis/users.acl", "--save", "60", "1"]
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+    restart: unless-stopped
+    command: ["--loadmodule", "/usr/lib/redis/modules/falkordb.so"]
 
-  mock_helpdesk:
+  falkordb-browser:
+    image: falkordb/falkordb-browser:latest
+    ports:
+      - "8080:8080"
+    environment:
+      - FALKORDB_HOST=falkordb
+      - FALKORDB_PORT=6379
+    depends_on:
+      - falkordb
+    restart: unless-stopped
+
+  mock-helpdesk:
     build:
       context: ./mock_helpdesk
       dockerfile: Dockerfile
-    container_name: quorum-mock-helpdesk
     ports:
-      - "8001:8001"
-    environment:
-      - PORT=8001
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+      - "8002:8002"
+    restart: unless-stopped
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: quorum-backend
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
       - "8000:8000"
     environment:
       - FALKORDB_HOST=falkordb
       - FALKORDB_PORT=6379
-      - MOCK_HELPDESK_URL=http://mock_helpdesk:8001
-      - PORT=8000
+      - HELPDESK_URL=http://mock-helpdesk:8002
+      - MCP_SERVER_URL=http://mcp-server:8001
+      - QUORUM_MODE=replay
     depends_on:
-      falkordb:
-        condition: service_healthy
-      mock_helpdesk:
-        condition: service_healthy
+      - falkordb
+      - mock-helpdesk
+    restart: unless-stopped
+
+  mcp-server:
+    build:
+      context: .
+      dockerfile: mcp/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - API_URL=http://backend:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
 
   frontend:
     build:
@@ -60,6 +71,7 @@ services:
       - VITE_API_URL=http://localhost:8000
     depends_on:
       - backend
+    restart: unless-stopped
 
 volumes:
   falkordb_data:

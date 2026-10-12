@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { ApiError } from '../api/client';
-import type { Handoff } from '../api/schemas';
+import type { CorrectionNotice, Handoff } from '../api/schemas';
 import { copy } from '../copy';
 import { graphBus } from '../graph/bus';
 import { actionDisplayState, actionTone } from '../state/actionState';
 import { getActions, getHandoffs, reviewHandoff } from '../state/endpoints';
 import { queryClient } from '../state/queries';
 import { useStore } from '../state/store';
+import { DamageControlModal } from './DamageControlModal';
 import { Chip, Empty, ErrorState, Skeleton } from './ui';
 
 function useNow(ms = 500) {
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), ms);
     return () => clearInterval(t);
@@ -47,7 +48,7 @@ function LeaseRing({ until }: { until: number }) {
   );
 }
 
-function HandoffCard({ h }: { h: Handoff }) {
+function HandoffCard({ h, onOpenNotice }: { h: Handoff; onOpenNotice?: (n: CorrectionNotice) => void }) {
   const race = useStore((s) => s.claimRace);
   const pushToast = useStore((s) => s.pushToast);
   const set = useStore((s) => s.set);
@@ -98,7 +99,21 @@ function HandoffCard({ h }: { h: Handoff }) {
             Show in graph
           </button>
         )}
-        {needsHuman && (
+        {h.correction_notice && onOpenNotice && (
+          <button
+            className="btn"
+            style={{
+              borderColor: 'var(--warn-line, #b87500)',
+              background: 'var(--warn-dim, rgba(184, 117, 0, 0.14))',
+              color: 'var(--text)',
+              fontWeight: 600,
+            }}
+            onClick={() => onOpenNotice(h.correction_notice!)}
+          >
+            ⚠️ Review Retraction Draft
+          </button>
+        )}
+        {needsHuman && !h.correction_notice && (
           <>
             <button className="btn review" disabled={decide.isPending} onClick={() => decide.mutate('approve')}>
               {copy.ledger.approve}
@@ -117,11 +132,59 @@ export function Ledger() {
   const actions = useQuery({ queryKey: ['actions'], queryFn: getActions });
   const handoffs = useQuery({ queryKey: ['handoffs'], queryFn: getHandoffs });
   const set = useStore((s) => s.set);
+  const [modalNotice, setModalNotice] = useState<CorrectionNotice | null>(null);
+
+  const activeNotice =
+    handoffs.data?.find((h) => h.correction_notice)?.correction_notice ??
+    actions.data?.find((a) => a.action?.correction_notice)?.action?.correction_notice ??
+    null;
+
   const reviews = (handoffs.data ?? []).filter((h) => h.kind !== 'TASK');
   const tasks = (handoffs.data ?? []).filter((h) => h.kind === 'TASK');
 
   return (
     <div className="ledger">
+      {activeNotice && (
+        <div
+          className="damage-control-banner"
+          style={{
+            gridColumn: '1 / -1',
+            padding: '14px 18px',
+            background: 'var(--warn-dim, rgba(184, 117, 0, 0.14))',
+            border: '1px solid var(--warn-line, #b87500)',
+            borderRadius: 'var(--r-m, 12px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            boxShadow: 'var(--shadow-2, 4px 4px 0 #000)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '1.4rem' }}>⚠️</span>
+            <div>
+              <strong style={{ fontSize: '0.95rem', color: 'var(--text)', display: 'block' }}>
+                DAMAGE CONTROL ACTIVE: Retraction Email Drafted
+              </strong>
+              <span className="muted small" style={{ color: 'var(--text-2)' }}>
+                Executed irreversible action (<span className="mono">{activeNotice.target_action_id}</span>) hit by quarantine cascade. Retraction email auto-generated for human review.
+              </span>
+            </div>
+          </div>
+          <button
+            className="btn review"
+            onClick={() => setModalNotice(activeNotice)}
+            style={{
+              background: 'var(--warn, #8f5a00)',
+              color: '#fff',
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Review Retraction Draft
+          </button>
+        </div>
+      )}
       <section className="panel" aria-label={copy.ledger.actionsTitle}>
         <h2 className="panel-h">{copy.ledger.actionsTitle}</h2>
         {actions.isLoading && <Skeleton lines={4} />}
@@ -141,6 +204,26 @@ export function Ledger() {
                 >
                   <strong>{a.label}</strong>
                   <Chip tone={actionTone(ds)}>{copy.actionState[ds]}</Chip>
+                  {a.action?.correction_notice && (
+                    <button
+                      className="btn ghost small"
+                      style={{
+                        marginLeft: 'auto',
+                        borderColor: 'var(--warn-line, #b87500)',
+                        background: 'var(--warn-dim, rgba(184, 117, 0, 0.14))',
+                        color: 'var(--text)',
+                        fontWeight: 600,
+                        fontSize: '0.78rem',
+                        padding: '2px 8px',
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setModalNotice(a.action!.correction_notice!);
+                      }}
+                    >
+                      ⚠️ Retraction Drafted
+                    </button>
+                  )}
                   <span className="muted meta">
                     {a.action ? (copy.ledger.reversibility[a.action.reversibility] ?? a.action.reversibility) : ''}
                     {a.action?.compensation
@@ -158,11 +241,14 @@ export function Ledger() {
         {handoffs.isLoading && <Skeleton lines={3} />}
         {handoffs.isError && <ErrorState error={handoffs.error} onRetry={() => void handoffs.refetch()} />}
         {handoffs.data && reviews.length === 0 && <Empty>{copy.ledger.noHandoffs}</Empty>}
-        <ul className="handoffs">{reviews.map((h) => <HandoffCard key={h.id} h={h} />)}</ul>
+        <ul className="handoffs">{reviews.map((h) => <HandoffCard key={h.id} h={h} onOpenNotice={setModalNotice} />)}</ul>
         <h2 className="panel-h second">{copy.ledger.handoffsTitle}</h2>
         {handoffs.data && tasks.length === 0 && <Empty>{copy.ledger.noHandoffs}</Empty>}
-        <ul className="handoffs">{tasks.map((h) => <HandoffCard key={h.id} h={h} />)}</ul>
+        <ul className="handoffs">{tasks.map((h) => <HandoffCard key={h.id} h={h} onOpenNotice={setModalNotice} />)}</ul>
       </section>
+      {modalNotice && (
+        <DamageControlModal notice={modalNotice} onClose={() => setModalNotice(null)} />
+      )}
     </div>
   );
 }

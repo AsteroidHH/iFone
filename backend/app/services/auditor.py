@@ -10,8 +10,9 @@ from app.models.common import (
     CompensationStatus,
     HandoffKind,
     HandoffStatus,
+    EdgeType,
 )
-from app.models.graph import GraphNode, CompensationInfo
+from app.models.graph import GraphNode, GraphEdge, CompensationInfo
 from app.models.handoffs import Handoff
 from app.services.event_bus import event_bus
 
@@ -81,7 +82,7 @@ class AuditorService:
             event_bus.publish(
                 tenant,
                 "handoff_updated",
-                {"handoff": handoff.dict()},
+                {"handoff": handoff.model_dump()},
                 request_id=request_id,
             )
             return {"verdict": "REVIEW_HANDOFF", "handoff_id": handoff.id}
@@ -137,15 +138,51 @@ class AuditorService:
             node = store.nodes.get(node_info["id"])
             if node and node.kind == NodeKind.ACTION and node.action and node.action.executed:
                 if node.action.reversibility == Reversibility.IRREVERSIBLE:
-                    # Escalation handoff for human
+                    # Automated damage control: generate structured CorrectionNotice
+                    from app.services.saga import generate_correction_notice
+                    notice = generate_correction_notice(node, store, tenant=tenant)
+                    node.action.correction_notice = notice
+                    node.correction_notice = notice
+
+                    # Store on an :Alert:MemoryNode in GraphStore
+                    alert_id = f"alert_retraction_{node.id}"
+                    alert_node = GraphNode(
+                        id=alert_id,
+                        kind=NodeKind.ALERT,
+                        label=f"⚠️ Damage Control: Retraction for {node.id}",
+                        text=notice["drafted_body"],
+                        status=Status.HEALTHY,
+                        stale=False,
+                        owner_team="Support Ops",
+                        valid_from=int(time.time() * 1000),
+                    )
+                    store.add_node(alert_node, request_id=request_id)
+                    store.add_edge(
+                        GraphEdge(
+                            id=f"e_{alert_id}",
+                            source=alert_id,
+                            target=node.id,
+                            type=EdgeType.LEADS_TO,
+                        ),
+                        request_id=request_id,
+                    )
+
+                    # Escalation handoff for human with CorrectionNotice payload
                     handoff = Handoff(
                         id=f"hand_escl_{uuid.uuid4().hex[:6]}",
                         kind=HandoffKind.ESCALATION,
-                        task=f"Irreversible action '{node.id}' quarantined! Draft customer correction notice.",
+                        task=f"Irreversible action '{node.id}' quarantined! Automated damage control retraction notice drafted.",
                         status=HandoffStatus.PENDING,
                         context_root_id=node.id,
+                        correction_notice=notice,
                     )
-                    event_bus.publish(tenant, "handoff_updated", {"handoff": handoff.dict()}, request_id=request_id)
+                    from app.routes.handoffs import _handoff_store, _handoff_lock
+                    with _handoff_lock:
+                        _handoff_store.append(handoff)
+
+                    event_bus.publish(tenant, "node_added", {"node": alert_node.model_dump()}, request_id=request_id)
+                    event_bus.publish(tenant, "handoff_updated", {"handoff": handoff.model_dump()}, request_id=request_id)
+                    event_bus.publish(tenant, "correction_notice_created", {"action_id": node.id, "notice": notice}, request_id=request_id)
                 else:
                     # Enqueue compensation
                     node.action.compensation = CompensationInfo(

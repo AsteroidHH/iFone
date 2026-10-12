@@ -19,6 +19,7 @@ mcp_server.tool()(mcp_tools.stage_action)
 mcp_server.tool()(mcp_tools.execute_action)
 mcp_server.tool()(mcp_tools.claim_handoff)
 mcp_server.tool()(mcp_tools.quarantine)
+mcp_server.tool()(mcp_tools.restore)
 mcp_server.tool()(mcp_tools.explain_blast_radius)
 mcp_server.tool()(mcp_tools.review_handoff)
 
@@ -36,7 +37,22 @@ def main():
     if args.stdio:
         asyncio.run(mcp_server.run_stdio_async())
     else:
-        app = mcp_server.streamable_http_app()
+        from starlette.applications import Starlette
+        import contextlib
+
+        stream_app = mcp_server.streamable_http_app()
+        sse_app = mcp_server.sse_app()
+
+        @contextlib.asynccontextmanager
+        async def lifespan(app):
+            async with stream_app.router.lifespan_context(app):
+                async with sse_app.router.lifespan_context(app):
+                    yield
+
+        app = Starlette(
+            routes=[*stream_app.routes, *sse_app.routes],
+            lifespan=lifespan,
+        )
         uvicorn.run(app, host=args.host, port=args.port)
 
 

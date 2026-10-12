@@ -100,10 +100,29 @@ def review_handoff(
 
         target.status = HandoffStatus.COMPLETED
 
+        if body.decision in [ReviewDecision.APPROVE, "approve", "APPROVE"] and target.context_root_id:
+            from app.graph.queries import get_graph_store
+            from app.models.common import GateStatus
+            store = get_graph_store(auth.tenant)
+            with store._lock:
+                action_node = store.nodes.get(target.context_root_id)
+                if action_node and action_node.action:
+                    action_node.action.gate = GateStatus.PASSED
+                    if getattr(action_node.action, "correction_notice", None):
+                        action_node.action.correction_notice["status"] = "DISPATCHED"
+                        action_node.correction_notice = action_node.action.correction_notice
+                if target.correction_notice:
+                    target.correction_notice["status"] = "DISPATCHED"
+
+                alert_node = store.nodes.get(f"alert_retraction_{target.context_root_id}")
+                if alert_node:
+                    alert_node.label = f"✅ Retraction Dispatched for {target.context_root_id}"
+                    event_bus.publish(auth.tenant, "node_updated", {"node": alert_node.model_dump()})
+
         event_bus.publish(
             auth.tenant,
             "handoff_updated",
-            {"handoff": target.dict()},
+            {"handoff": target.model_dump()},
         )
 
         return target

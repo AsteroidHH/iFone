@@ -39,6 +39,7 @@ class ActionInfo(BaseModel):
     procedure_id: Optional[str] = None
     idempotency_key: Optional[str] = None
     compensation: Optional[CompensationInfo] = None
+    correction_notice: Optional[Dict[str, Any]] = None
 
 
 class GraphNode(BaseModel):
@@ -64,6 +65,7 @@ class GraphNode(BaseModel):
     source: Optional[SourceInfo] = None
     owner_team: Optional[str] = None
     action: Optional[ActionInfo] = None
+    correction_notice: Optional[Dict[str, Any]] = None
 
 
 class GraphEdge(BaseModel):
