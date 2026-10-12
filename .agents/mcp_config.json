@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "quorum": {
+      "command": "python",
+      "args": [
+        "mcp/server.py",
+        "--stdio"
+      ],
+      "env": {
+        "PYTHONPATH": ".;./backend"
+      }
+    },
+    "quorum-sse": {
+      "serverUrl": "http://127.0.0.1:8001/sse"
+    }
+  }
+}
