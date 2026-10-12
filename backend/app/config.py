@@ -1,5 +1,9 @@
+import os
+import logging
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Dict, Any
+from typing import Dict, Any, Literal
+
+logger = logging.getLogger("quorum.config")
 
 
 class Settings(BaseSettings):
@@ -7,8 +11,9 @@ class Settings(BaseSettings):
     API_PREFIX: str = "/api"
     HOST: str = "0.0.0.0"
     PORT: int = 8000
+    MCP_PORT: int = 8001
     DEBUG: bool = True
-    MODE: str = "replay"  # "replay" | "live"
+    MODE: Literal["replay", "live"] = "replay"
     REPLAY_AVAILABLE: bool = True
     DEFAULT_TENANT: str = "acme"
     FALKORDB_URL: str = "redis://localhost:6379"
@@ -25,6 +30,16 @@ class Settings(BaseSettings):
     }
 
     model_config = SettingsConfigDict(env_prefix="QUORUM_")
+
+    def get_effective_mode(self) -> Literal["replay", "live"]:
+        requested = self.MODE
+        if requested == "live":
+            has_key = any(os.getenv(k) for k in ["GEMINI_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"])
+            if not has_key:
+                logger.info("QUORUM_MODE is 'live' but no LLM API key detected. Gracefully falling back to 'replay' mode.")
+                return "replay"
+            return "live"
+        return "replay"
 
 
 settings = Settings()

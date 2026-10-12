@@ -12,7 +12,7 @@ def get_meta(auth: AuthContext = Depends(get_auth_context)):
     buf = event_bus.get_tenant_buffer(auth.tenant)
     return MetaResponse(
         contract_version=settings.CONTRACT_VERSION,
-        mode=settings.MODE,
+        mode=settings.get_effective_mode(),
         tenant=auth.tenant,
         role=auth.role,
         epoch=buf.current_epoch,
