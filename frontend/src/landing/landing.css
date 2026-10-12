@@ -1470,3 +1470,35 @@ body.on-landing {
 
 @media (max-width: 900px) { .lp-float.h1, .lp-float.h2, .lp-float.h3 { display: none; } }
 @media (max-width: 700px) { .lp-float.f1, .lp-float.f3 { display: none; } .lp-float.f2 { top: 4%; right: 6%; opacity: 0.9; } }
+
+/* registration-mark cursor ring + dot */
+.cr { position: fixed; inset: 0; z-index: 95; pointer-events: none; opacity: 0; transition: opacity 0.25s; }
+.cr.on { opacity: 1; }
+.cr-dot { position: absolute; left: 0; top: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--lp-ink, #0b1218); }
+.cr.down .cr-dot { transform-origin: center; }
+.cr-ring { position: absolute; left: 0; top: 0; width: 38px; height: 38px; border: 1.5px solid var(--lp-ink, #0b1218); border-radius: 50%; display: grid; place-items: center; transition: background 0.2s, border-color 0.2s, box-shadow 0.2s; mix-blend-mode: normal; }
+.cr-ring::before, .cr-ring::after { content: ''; position: absolute; background: var(--lp-ink, #0b1218); transition: opacity 0.2s; }
+.cr-ring::before { width: 1.5px; height: 10px; top: -6px; left: calc(50% - 0.75px); box-shadow: 0 calc(100% + 0px) 0 var(--lp-ink, #0b1218); }
+.cr-ring::after { height: 1.5px; width: 10px; left: -6px; top: calc(50% - 0.75px); }
+.cr-ring.snap { background: rgba(61, 219, 176, 0.22); border-color: var(--lp-ink, #0b1218); box-shadow: 3px 3px 0 var(--lp-ink, #0b1218); }
+.cr-ring.snap::before, .cr-ring.snap::after { opacity: 0; }
+.cr-label { font: 600 11px 'JetBrains Mono', monospace; letter-spacing: 0.04em; text-transform: uppercase; background: var(--lp-ink, #0b1218); color: #fff; padding: 3px 8px; border-radius: 99px; position: absolute; top: 100%; left: 50%; transform: translate(-50%, 8px); white-space: nowrap; opacity: 0; transition: opacity 0.2s; }
+.cr-ring.has-label .cr-label { opacity: 1; }
+.cr-label:empty { display: none; }
+.cr-on .lp, .cr-on .lp * { cursor: none !important; }
+/* the liquid trail becomes a small ink wake behind the ring */
+.lq-dot { width: 20px; height: 20px; background: #16a37f; }
+.lq-goo { mix-blend-mode: normal; opacity: 0.55; }
+@media (hover: none), (pointer: coarse), (prefers-reduced-motion: reduce) { .cr { display: none; } }
+
+/* spotlight grid: a field of mint dots that only exists around the cursor */
+.lp-spot { position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background: radial-gradient(circle, #16a37f 1.6px, transparent 2px) 0 0 / 26px 26px;
+  -webkit-mask-image: radial-gradient(circle 230px at var(--mx, -400px) var(--my, -400px), #000 0%, rgba(0,0,0,0.5) 45%, transparent 100%);
+  mask-image: radial-gradient(circle 230px at var(--mx, -400px) var(--my, -400px), #000 0%, rgba(0,0,0,0.5) 45%, transparent 100%); }
+.lp-spot::after { content: ''; position: absolute; inset: 0;
+  background: radial-gradient(circle 160px at var(--mx, -400px) var(--my, -400px), rgba(61,219,176,0.20), transparent 70%); }
+.lp-spot.dark { background-image: radial-gradient(circle, #3ddbb0 1.6px, transparent 2px); }
+.lp .lp-spot { position: absolute !important; }
+.lp-dark { position: relative; }
+.lp-dark > *:not(.lp-spot) { position: relative; z-index: 1; }

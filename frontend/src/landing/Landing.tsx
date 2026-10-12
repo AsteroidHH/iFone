@@ -6,6 +6,7 @@ import { LandingGraph, useCascade, type Cascade } from './LandingGraph';
 import { Loader, useLoaderNeeded } from './Loader';
 import { prefetchConsole, prefetchOnIdle } from './prefetch';
 import { LazyMount, ScrollChrome, useMagnetic } from './fx/Chrome';
+import { CursorRing } from './fx/CursorRing';
 import { LiquidCursor } from './fx/LiquidCursor';
 import { NetworkCanvas } from './fx/NetworkCanvas';
 import { Parallax } from './fx/Parallax';
@@ -115,7 +116,8 @@ function Hero() {
   const caption = [L.hero.caption.healthy, L.hero.caption.poisoned, L.hero.caption.contained][step];
   const { held, rolled, rolling, cancelled } = cascade.stats;
   return (
-    <section className="lp-hero" id="top">
+    <section className="lp-hero" id="top" data-spot>
+      <div className="lp-spot" aria-hidden="true" />
       <NetworkCanvas />
       <Parallax speed={0.1} className="lp-float h1" innerClassName="lp-shape ci" />
       <Parallax speed={-0.12} className="lp-float h2" innerClassName="lp-shape sq" />
@@ -142,7 +144,7 @@ function Hero() {
       </div>
 
       <Parallax speed={-0.04}>
-      <div className="lp-window" role="img" aria-label={L.hero.windowLabel}>
+      <div className="lp-window" data-cursor="Live" role="img" aria-label={L.hero.windowLabel}>
         <div className="lp-window-bar">
           <i />
           <i />
@@ -266,6 +268,7 @@ export function Landing({ onEnter }: { onEnter?: () => void }) {
         <i className="crop br" />
       </div>
       <LiquidCursor />
+      <CursorRing />
       <ScrollChrome sections={L.nav.links as [string, string][]} />
       <Nav />
       <main id="lp-main">
