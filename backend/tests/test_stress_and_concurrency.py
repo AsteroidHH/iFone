@@ -676,3 +676,231 @@ def test_mixed_workload_50_threads_random_mutations_and_invariants():
     final_inv = store.check_invariants()
     assert final_inv["ok"] is True
 
+
+def test_concurrent_procedure_registry_mutations():
+    """
+    Stress test: 50 concurrent threads hammering ProcedureRegistry:
+    - Recording successes and failures
+    - Distilling new procedures
+    - Fetching best procedures and listing ranked procedures
+    Asserts zero race condition exceptions or iteration errors under load.
+    """
+    from agents.procedures import procedure_registry
+
+    def proc_worker(worker_id: int):
+        for i in range(20):
+            # Record outcome on existing procedure
+            procedure_registry.record_outcome("proc_refund_standard", success=(i % 2 == 0))
+            # Distill new procedure occasionally
+            if i % 5 == 0:
+                procedure_registry.distill_new_procedure(
+                    task_type=f"custom_{worker_id}",
+                    steps=["step1", "step2"],
+                    procedure_id=f"proc_dyn_{worker_id}_{i}",
+                )
+            # Query best and list
+            best = procedure_registry.get_best_procedure("refund")
+            assert best is not None
+            procs = procedure_registry.list_procedures()
+            assert len(procs) >= 3
+
+    with ThreadPoolExecutor(max_workers=50) as ex:
+        futures = [ex.submit(proc_worker, w) for w in range(50)]
+        for f in as_completed(futures):
+            f.result()
+
+    all_procs = procedure_registry.list_procedures()
+    assert len(all_procs) >= 3
+    # Check monotonic rank ordering
+    for i in range(len(all_procs) - 1):
+        assert all_procs[i].rank_score >= all_procs[i + 1].rank_score
+
+
+def test_concurrent_mcp_tools_derivation_and_blast_radius():
+    """
+    Stress test: 30 concurrent agent threads invoking MCP tool functions:
+    - remember_fact
+    - derive
+    - stage_action
+    - explain_blast_radius
+    Asserts zero invariant violations and accurate predicted impact counts.
+    """
+    from app.services import mcp_tools
+
+    token = "token_acme_agent"
+    root_res = mcp_tools.remember_fact(
+        key="test.mcp.policy",
+        value="100",
+        text="Root policy fact for MCP stress test",
+        token=token,
+        id="fact_mcp_root",
+    )
+    assert root_res["status"] == "HEALTHY"
+
+    def mcp_worker(worker_id: int):
+        # Derive conclusion
+        cid = f"conc_mcp_{worker_id}"
+        c_res = mcp_tools.derive(
+            text=f"Derived conclusion {worker_id}",
+            parent_ids=["fact_mcp_root"],
+            token=token,
+            id=cid,
+        )
+        assert c_res["success"] is True
+
+        # Stage action
+        aid = f"act_mcp_{worker_id}"
+        a_res = mcp_tools.stage_action(
+            label=f"Action {worker_id}",
+            action_type="refund",
+            reversibility="COMPENSABLE",
+            parent_ids=[cid],
+            token=token,
+            id=aid,
+        )
+        assert a_res["success"] is True
+
+        # Check blast radius
+        blast_res = mcp_tools.explain_blast_radius(root_id="fact_mcp_root", token="token_acme_auditor")
+        assert blast_res["predicted_impact_count"] >= 2
+
+    with ThreadPoolExecutor(max_workers=30) as ex:
+        futures = [ex.submit(mcp_worker, w) for w in range(30)]
+        for f in as_completed(futures):
+            f.result()
+
+    blast_final = mcp_tools.explain_blast_radius(root_id="fact_mcp_root", token="token_acme_auditor")
+    # Root has 30 conclusions + 30 actions = 60 descendants
+    assert blast_final["predicted_impact_count"] == 60
+
+
+def test_dynamic_blast_routes_under_concurrent_quarantine():
+    """
+    Stress test: 30 threads hammering /blast/{id}/preview and /blast/{id}/report
+    while concurrent quarantine cascades occur on the target chain.
+    Asserts HTTP 200 responses with consistent causal structures and zero deadlocks.
+    """
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    client = TestClient(app)
+    store = get_graph_store("acme_stress")
+
+    root_id = "fact_blast_stress_root"
+    store.add_node(GraphNode(
+        id=root_id,
+        kind=NodeKind.FACT,
+        label="Blast Stress Root",
+        status=Status.HEALTHY,
+        text="Root fact for blast stress",
+    ))
+
+    # Add 10 downstream conclusions and actions
+    for i in range(10):
+        cid = f"conc_blast_stress_{i}"
+        aid = f"act_blast_stress_{i}"
+        store.add_node(GraphNode(id=cid, kind=NodeKind.CONCLUSION, label=cid, status=Status.HEALTHY))
+        store.add_node(GraphNode(
+            id=aid,
+            kind=NodeKind.ACTION,
+            label=aid,
+            status=Status.HEALTHY,
+            action=ActionInfo(type="refund", reversibility=Reversibility.COMPENSABLE, executed=(i < 5), confirmed=(i < 5), gate=GateStatus.PASSED),
+        ))
+        store.add_edge(GraphEdge(id=f"e_b_{i}_1", source=root_id, target=cid, type=EdgeType.LEADS_TO))
+        store.add_edge(GraphEdge(id=f"e_b_{i}_2", source=cid, target=aid, type=EdgeType.LEADS_TO))
+
+    def reader_worker():
+        for _ in range(10):
+            r1 = client.get(f"/api/blast/{root_id}/preview", headers={"Authorization": "Bearer token_acme_stress_auditor"})
+            assert r1.status_code == 200
+            data1 = r1.json()
+            assert data1["root_id"] == root_id
+            assert data1["facts"] >= 1
+            assert data1["conclusions"] >= 10
+
+            r2 = client.get(f"/api/blast/{root_id}/report", headers={"Authorization": "Bearer token_acme_stress_auditor"})
+            assert r2.status_code == 200
+            data2 = r2.json()
+            assert data2["root_id"] == root_id
+            assert len(data2["node_ids_by_depth"]) >= 2
+
+    def mutator_worker():
+        auditor_service.quarantine(store, root_id, tenant="acme_stress")
+
+    with ThreadPoolExecutor(max_workers=30) as ex:
+        futures = [ex.submit(reader_worker) for _ in range(25)]
+        futures.append(ex.submit(mutator_worker))
+        for f in as_completed(futures):
+            f.result()
+
+
+def test_concurrent_review_handoff_gate_unblock():
+    """
+    Stress test: 20 actions blocked by Quorum Gate with corresponding REVIEW handoffs.
+    20 concurrent human reviewer threads approve the handoffs.
+    Asserts:
+    1. All 20 handoffs transition to COMPLETED.
+    2. All 20 actions have their action.gate atomically flipped to PASSED.
+    """
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    client = TestClient(app)
+    store = get_graph_store("acme_stress")
+
+    action_ids = []
+    handoff_ids = []
+
+    for i in range(20):
+        aid = f"act_blocked_{i}"
+        hid = f"hand_rev_blocked_{i}"
+        action_ids.append(aid)
+        handoff_ids.append(hid)
+
+        store.add_node(GraphNode(
+            id=aid,
+            kind=NodeKind.ACTION,
+            label=f"Blocked Action {i}",
+            status=Status.HEALTHY,
+            action=ActionInfo(
+                type="refund",
+                reversibility=Reversibility.IRREVERSIBLE,
+                executed=False,
+                confirmed=False,
+                gate=GateStatus.BLOCKED,
+                idempotency_key=f"key_blk_{i}",
+            ),
+        ))
+
+        with _handoff_lock:
+            _handoff_store.append(Handoff(
+                id=hid,
+                kind=HandoffKind.REVIEW,
+                task=f"Review gate block for {aid}",
+                status=HandoffStatus.PENDING,
+                context_root_id=aid,
+            ))
+
+    def human_approver(hid: str):
+        resp = client.post(
+            f"/api/handoffs/{hid}/review",
+            headers={"Authorization": "Bearer token_acme_stress_human"},
+            json={"decision": "APPROVE", "notes": "Approved by supervisor"},
+        )
+        assert resp.status_code == 200
+        return resp.json()
+
+    with ThreadPoolExecutor(max_workers=20) as ex:
+        futures = [ex.submit(human_approver, hid) for hid in handoff_ids]
+        for f in as_completed(futures):
+            res = f.result()
+            assert res["status"] == "COMPLETED"
+
+    # Invariant: ALL 20 actions must now have gate=PASSED!
+    with store._lock:
+        for aid in action_ids:
+            act = store.nodes[aid]
+            assert act.action.gate == GateStatus.PASSED, f"Action {aid} was not released to PASSED!"
+
+

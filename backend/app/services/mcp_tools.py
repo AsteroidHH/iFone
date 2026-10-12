@@ -25,7 +25,10 @@ def _get_auth(token: str) -> Dict[str, Any]:
         return settings.DEMO_TOKENS[token]
     parts = token.split("_")
     if len(parts) >= 3 and parts[0] == "token":
-        return {"tenant": parts[1], "role": parts[2], "agent_id": f"{parts[2]}_{parts[1]}"}
+        role = parts[-1]
+        tenant = "_".join(parts[1:-1])
+        if role in ["agent", "auditor", "human"]:
+            return {"tenant": tenant, "role": role, "agent_id": f"{role}_{tenant}"}
     if len(parts) >= 2 and parts[0] == "token":
         return {"tenant": settings.DEFAULT_TENANT, "role": parts[1], "agent_id": f"{parts[1]}_demo"}
     return {"tenant": settings.DEFAULT_TENANT, "role": "agent", "agent_id": "agent_demo"}
@@ -90,41 +93,42 @@ def derive(
     store = get_graph_store(auth["tenant"])
 
     # Atomic derivation check
-    parents = [store.nodes.get(pid) for pid in parent_ids if store.nodes.get(pid)]
-    if len(parents) != len(parent_ids) or any(p.status != Status.HEALTHY for p in parents):
+    with store._lock:
+        parents = [store.nodes.get(pid) for pid in parent_ids if store.nodes.get(pid)]
+        if len(parents) != len(parent_ids) or any(p.status != Status.HEALTHY for p in parents):
+            return {
+                "epoch": store.epoch,
+                "error": "Atomic derivation check failed: one or more parents do not exist or are not HEALTHY.",
+                "success": False,
+            }
+
+        conc_id = id or f"conc_{uuid.uuid4().hex[:6]}"
+        conc = GraphNode(
+            id=conc_id,
+            kind=NodeKind.CONCLUSION,
+            is_decision=is_decision,
+            label=text[:60],
+            status=Status.HEALTHY,
+            stale=False,
+            text=text,
+            owner_team=owner_team,
+        )
+        store.add_node(conc)
+
+        for p in parents:
+            store.add_edge(GraphEdge(
+                id=f"e_{uuid.uuid4().hex[:6]}",
+                source=p.id,
+                target=conc.id,
+                type=EdgeType.LEADS_TO,
+            ))
+
         return {
             "epoch": store.epoch,
-            "error": "Atomic derivation check failed: one or more parents do not exist or are not HEALTHY.",
-            "success": False,
+            "conclusion_id": conc.id,
+            "status": conc.status.value,
+            "success": True,
         }
-
-    conc_id = id or f"conc_{uuid.uuid4().hex[:6]}"
-    conc = GraphNode(
-        id=conc_id,
-        kind=NodeKind.CONCLUSION,
-        is_decision=is_decision,
-        label=text[:60],
-        status=Status.HEALTHY,
-        stale=False,
-        text=text,
-        owner_team=owner_team,
-    )
-    store.add_node(conc)
-
-    for p in parents:
-        store.add_edge(GraphEdge(
-            id=f"e_{uuid.uuid4().hex[:6]}",
-            source=p.id,
-            target=conc.id,
-            type=EdgeType.LEADS_TO,
-        ))
-
-    return {
-        "epoch": store.epoch,
-        "conclusion_id": conc.id,
-        "status": conc.status.value,
-        "success": True,
-    }
 
 
 def retrieve_context(query: str, token: str, k: int = 5) -> Dict[str, Any]:
@@ -175,53 +179,54 @@ def stage_action(
     rev_enum = getattr(Reversibility, reversibility.upper(), Reversibility.COMPENSABLE)
 
     # 1. Atomic derivation check
-    parents = [store.nodes.get(pid) for pid in parent_ids if store.nodes.get(pid)]
-    if len(parents) != len(parent_ids) or any(p.status != Status.HEALTHY for p in parents):
+    with store._lock:
+        parents = [store.nodes.get(pid) for pid in parent_ids if store.nodes.get(pid)]
+        if len(parents) != len(parent_ids) or any(p.status != Status.HEALTHY for p in parents):
+            return {
+                "epoch": store.epoch,
+                "error": "Atomic derivation check failed: one or more parents do not exist or are not HEALTHY.",
+                "success": False,
+            }
+
+        act_id = id or f"act_{uuid.uuid4().hex[:6]}"
+        action_node = GraphNode(
+            id=act_id,
+            kind=NodeKind.ACTION,
+            label=label[:60],
+            status=Status.HEALTHY,
+            stale=False,
+            action=ActionInfo(
+                type=action_type,
+                reversibility=rev_enum,
+                executed=False,
+                confirmed=False,
+                gate=GateStatus.PASSED,
+                procedure_id=procedure_id,
+                idempotency_key=idempotency_key,
+            ),
+        )
+        store.add_node(action_node)
+
+        for p in parents:
+            store.add_edge(GraphEdge(
+                id=f"e_{uuid.uuid4().hex[:6]}",
+                source=p.id,
+                target=action_node.id,
+                type=EdgeType.LEADS_TO,
+            ))
+
+        # 2. Evaluate Quorum Gate
+        gate_status, reason, handoff = quorum_gate.evaluate(store, action_node, tenant=auth["tenant"])
+
         return {
             "epoch": store.epoch,
-            "error": "Atomic derivation check failed: one or more parents do not exist or are not HEALTHY.",
-            "success": False,
+            "action_id": action_node.id,
+            "gate": action_node.action.gate.value,
+            "status": action_node.status.value,
+            "blocked_reason": reason,
+            "handoff_id": handoff.id if handoff else None,
+            "success": True,
         }
-
-    act_id = id or f"act_{uuid.uuid4().hex[:6]}"
-    action_node = GraphNode(
-        id=act_id,
-        kind=NodeKind.ACTION,
-        label=label[:60],
-        status=Status.HEALTHY,
-        stale=False,
-        action=ActionInfo(
-            type=action_type,
-            reversibility=rev_enum,
-            executed=False,
-            confirmed=False,
-            gate=GateStatus.PASSED,
-            procedure_id=procedure_id,
-            idempotency_key=idempotency_key,
-        ),
-    )
-    store.add_node(action_node)
-
-    for p in parents:
-        store.add_edge(GraphEdge(
-            id=f"e_{uuid.uuid4().hex[:6]}",
-            source=p.id,
-            target=action_node.id,
-            type=EdgeType.LEADS_TO,
-        ))
-
-    # 2. Evaluate Quorum Gate
-    gate_status, reason, handoff = quorum_gate.evaluate(store, action_node, tenant=auth["tenant"])
-
-    return {
-        "epoch": store.epoch,
-        "action_id": action_node.id,
-        "gate": action_node.action.gate.value,
-        "status": action_node.status.value,
-        "blocked_reason": reason,
-        "handoff_id": handoff.id if handoff else None,
-        "success": True,
-    }
 
 
 def execute_action(id: str, token: str) -> Dict[str, Any]:
@@ -323,11 +328,13 @@ def explain_blast_radius(root_id: str, token: str) -> Dict[str, Any]:
     """Auditor tool: Dry-run blast radius calculation."""
     auth = _get_auth(token)
     store = get_graph_store(auth["tenant"])
-    descendants = [n.id for n in store.nodes.values() if n.id != root_id]
+    with store._lock:
+        descendants = store.get_descendants(root_id, edge_types=["LEADS_TO", "SUPPORTS"])
     return {
         "epoch": store.epoch,
         "root_id": root_id,
         "predicted_impact_count": len(descendants),
+        "predicted_impact_nodes": [d.id for d in descendants],
     }
 
 
@@ -337,23 +344,25 @@ def review_handoff(id: str, decision: str, token: str, note: Optional[str] = Non
     if auth["role"] != "human":
         return {"error": "Only human reviewers may complete REVIEW handoffs.", "success": False}
 
-    from app.routes.handoffs import _handoff_store
-    target = next((h for h in _handoff_store if h.id == id), None)
-    if not target:
-        return {"error": f"Handoff '{id}' not found.", "success": False}
+    from app.routes.handoffs import _handoff_store, _handoff_lock
+    with _handoff_lock:
+        target = next((h for h in _handoff_store if h.id == id), None)
+        if not target:
+            return {"error": f"Handoff '{id}' not found.", "success": False}
 
-    target.status = HandoffStatus.COMPLETED
-    store = get_graph_store(auth["tenant"])
+        target.status = HandoffStatus.COMPLETED
+        store = get_graph_store(auth["tenant"])
 
-    if decision.lower() == "approve" and target.context_root_id:
-        action_node = store.nodes.get(target.context_root_id)
-        if action_node and action_node.action:
-            action_node.action.gate = GateStatus.PASSED
+        if decision.lower() == "approve" and target.context_root_id:
+            with store._lock:
+                action_node = store.nodes.get(target.context_root_id)
+                if action_node and action_node.action:
+                    action_node.action.gate = GateStatus.PASSED
 
-    return {
-        "epoch": store.epoch,
-        "handoff_id": id,
-        "decision": decision,
-        "status": target.status.value,
-        "success": True,
-    }
+        return {
+            "epoch": store.epoch,
+            "handoff_id": id,
+            "decision": decision,
+            "status": target.status.value,
+            "success": True,
+        }

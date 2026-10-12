@@ -20,7 +20,16 @@ class ReviewDecision(str, Enum):
     APPROVE = "approve"
     REJECT = "reject"
 
+    @classmethod
+    def _missing_(cls, value):
+        if isinstance(value, str):
+            for member in cls:
+                if member.value.lower() == value.lower():
+                    return member
+        return None
+
 
 class ReviewRequest(BaseModel):
     decision: ReviewDecision
     note: Optional[str] = None
+    notes: Optional[str] = None

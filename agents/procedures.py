@@ -1,3 +1,4 @@
+import threading
 from typing import Dict, List, Optional
 from pydantic import BaseModel
 
@@ -20,8 +21,10 @@ class Procedure(BaseModel):
 class ProcedureRegistry:
     """
     Manages procedural memory with Laplace-smoothed ranking and adaptive selection.
+    Guarded with an RLock for thread-safe concurrent agent execution.
     """
     def __init__(self):
+        self._lock = threading.RLock()
         self._procedures: Dict[str, Procedure] = {
             "proc_refund_standard": Procedure(
                 id="proc_refund_standard",
@@ -53,36 +56,40 @@ class ProcedureRegistry:
         }
 
     def get_best_procedure(self, task_type: str) -> Optional[Procedure]:
-        matching = [p for p in self._procedures.values() if p.task_type == task_type]
-        if not matching:
-            return None
-        return max(matching, key=lambda p: p.rank_score)
+        with self._lock:
+            matching = [p for p in self._procedures.values() if p.task_type == task_type]
+            if not matching:
+                return None
+            return max(matching, key=lambda p: p.rank_score)
 
     def record_outcome(self, procedure_id: str, success: bool):
-        proc = self._procedures.get(procedure_id)
-        if proc:
-            proc.uses += 1
-            if success:
-                proc.successes += 1
-            else:
-                proc.failures += 1
+        with self._lock:
+            proc = self._procedures.get(procedure_id)
+            if proc:
+                proc.uses += 1
+                if success:
+                    proc.successes += 1
+                else:
+                    proc.failures += 1
 
     def distill_new_procedure(self, task_type: str, steps: List[str], procedure_id: Optional[str] = None) -> Procedure:
-        pid = procedure_id or f"proc_{task_type}_{len(self._procedures) + 1}"
-        proc = Procedure(
-            id=pid,
-            task_type=task_type,
-            steps=steps,
-            uses=1,
-            successes=1,
-            failures=0,
-            seeded=False,
-        )
-        self._procedures[pid] = proc
-        return proc
+        with self._lock:
+            pid = procedure_id or f"proc_{task_type}_{len(self._procedures) + 1}"
+            proc = Procedure(
+                id=pid,
+                task_type=task_type,
+                steps=steps,
+                uses=1,
+                successes=1,
+                failures=0,
+                seeded=False,
+            )
+            self._procedures[pid] = proc
+            return proc
 
     def list_procedures(self) -> List[Procedure]:
-        return sorted(self._procedures.values(), key=lambda p: p.rank_score, reverse=True)
+        with self._lock:
+            return sorted(list(self._procedures.values()), key=lambda p: p.rank_score, reverse=True)
 
 
 procedure_registry = ProcedureRegistry()

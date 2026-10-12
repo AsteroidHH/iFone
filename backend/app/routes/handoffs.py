@@ -100,6 +100,15 @@ def review_handoff(
 
         target.status = HandoffStatus.COMPLETED
 
+        if body.decision in [ReviewDecision.APPROVE, "approve", "APPROVE"] and target.context_root_id:
+            from app.graph.queries import get_graph_store
+            from app.models.common import GateStatus
+            store = get_graph_store(auth.tenant)
+            with store._lock:
+                action_node = store.nodes.get(target.context_root_id)
+                if action_node and action_node.action:
+                    action_node.action.gate = GateStatus.PASSED
+
         event_bus.publish(
             auth.tenant,
             "handoff_updated",
