@@ -110,27 +110,28 @@ QUORUM COMPREHENSIVE BENCHMARK & PROOF HARNESS (make proof)
 ======================================================================
 
 [1/4] 30-Agent Concurrency Benchmark (30 threads, 70/30 read/write):
-      Throughput: 33,111.8 ops/sec | p50: 0.02ms | p95: 0.06ms | p99: 0.08ms
+      Throughput: 757.6 ops/sec | p50: 31.5ms | p95: 78.01ms | p99: 100.0ms
       Invariant Violations: 0
 
 [2/4] Handoff Claim Race (100 handoffs x 30 concurrent claimers):
       Single-Winner Guarantee: 100.0% (100/100 clean claims, 0 double-claims)
 
 [3/4] Atomic Execute-vs-Quarantine Race (50 actions under concurrent audit):
-      Executed before quarantine: 0 | Refused after: 50 | Invariant Violations: 0
+      Executed before quarantine: 1 | Refused after: 49 | Invariant Violations: 0
 
 [4/4] Poison Benchmark across 3 Causal Depths (Fixed Seeds, No LLM):
       Depth 1: Containment: 0.4ms | Quorum Leakage: 0.0% vs Baselines: 100.0%
-      Depth 2: Containment: 0.4ms | Quorum Leakage: 0.0% vs Baselines: 100.0%
-      Depth 3: Containment: 0.4ms | Quorum Leakage: 0.0% vs Baselines: 100.0%
+      Depth 2: Containment: 4.53ms | Quorum Leakage: 0.0% vs Baselines: 100.0%
+      Depth 3: Containment: 8.94ms | Quorum Leakage: 0.0% vs Baselines: 100.0%
 ```
 
-| Metric | Flat Vector Store | Graph RAG Baseline | Quorum (FalkorDB) | Advantage |
-|---|---|---|---|---|
-| **Poison Leakage Rate** | 100.0% (leaked) | 100.0% (leaked) | **0.0% (contained)** | **Complete immunity** |
-| **Quarantine Latency** | N/A (cannot rollback) | 142.5ms | **0.4ms** | **350x faster** |
-| **Atomic Guard Overhead** | N/A | 18.2ms | **0.02ms** | **900x faster** |
-| **Throughput (30 agents)**| ~1,200 ops/sec | ~4,500 ops/sec | **33,111 ops/sec** | **7.3x higher** |
+Measured on FalkorDB 8.10.2, on one developer laptop, by the harness above. The baselines are the harness's own two models (flat store with a TTL, and delete-the-root-fact-only); they are models, not products. Numbers depend on the machine: re-run `python bench/run.py` for yours.
+
+| Metric | Flat store + TTL (model) | Delete root fact only (model) | Quorum |
+|---|---|---|---|
+| **Poison leakage at depth 1 / 2 / 3** | 100.0% / 100.0% / 100.0% | 100.0% / 100.0% / 100.0% | **0.0% / 0.0% / 0.0%** |
+| **Time to containment, depth 1 / 2 / 3** | not measured | not measured | **0.4 / 4.53 / 8.94 ms** |
+| **Throughput, 30 agents** | not measured | not measured | **757.6 ops/sec** |
 
 ---
 
@@ -140,7 +141,7 @@ QUORUM COMPREHENSIVE BENCHMARK & PROOF HARNESS (make proof)
 |---|---|---|---|
 | **Frontend Console & Landing** | `3000` / `5173` | HTTP (React + Vite + Cytoscape) | Dual interface: Landing page (`#/`) and Incident Command Room (`#/app`) |
 | **Backend REST & SSE** | `8000` | HTTP / Server-Sent Events | FastAPI core causal API, event streaming, scenario driver |
-| **Standalone MCP Server** | `8001` | Streamable HTTP (`/mcp`) & Stdio | Model Context Protocol server exposing 10 agent and auditor tools |
+| **MCP Server** (embedded in the backend; standalone only with `--profile standalone-mcp`) | `8000` (`/mcp`) / `8001` standalone | Streamable HTTP (`/mcp`) & Stdio | Model Context Protocol server exposing 10 agent and auditor tools |
 | **Mock Helpdesk API** | `8002` | HTTP / JSON | External ticketing and refund API with atomic Tombstone protection |
 | **FalkorDB Graph Engine** | `6379` | Redis / Cypher | Graph database engine with vector indexing and per-tenant Redis ACLs |
 | **FalkorDB Web Browser** | `8080` | HTTP | Interactive FalkorDB graph visualizer |
@@ -189,47 +190,46 @@ QUORUM COMPREHENSIVE BENCHMARK & PROOF HARNESS (make proof)
 
 ## 🚀 Quickstart & Reproduction Guide
 
-### Option 1: Full-Stack Docker Compose (Recommended)
+> **FalkorDB is required.** Quorum stores every belief, handoff and action in FalkorDB. Without it the API answers `503 FALKORDB_UNAVAILABLE`, the MCP server refuses tool calls and the console shows a locked setup screen with the steps to fix it. There is no sample-data fallback in a normal build. Full guide: [`docs/SETUP.md`](docs/SETUP.md).
 
-Run the complete multi-container stack with one command:
 ```bash
-docker compose up --build
+docker compose up -d
+python scripts/doctor.py      # checks FalkorDB, backend and MCP, and prints the fix for anything missing
 ```
-Once booted:
-- Open **Frontend Landing & Console:** `http://localhost:3000` (or `http://localhost:3000/#/app`)
-- Backend API Docs: `http://localhost:8000/docs`
-- MCP Server: `http://localhost:8001/mcp`
-- FalkorDB Browser: `http://localhost:8080`
 
-### Option 2: Local Python & Node Development
+Then open:
+- **Console:** `http://localhost:5173` (it opens by itself once FalkorDB is ready)
+- Backend API docs: `http://localhost:8000/docs`
+- MCP server (embedded in the backend): `http://localhost:8000/mcp`
+- FalkorDB Browser (optional): `docker compose --profile tools up -d falkordb-browser`, then `http://localhost:8080`
 
-1. **Start FalkorDB & Mock Services:**
-   ```bash
-   docker compose up -d falkordb mock-helpdesk
-   ```
+Connect an AI in one line (the console's **Connect** page has the same for Cursor, VS Code, Claude Desktop and others):
 
-2. **Start Backend & MCP Server:**
-   ```bash
-   pip install -r backend/requirements.txt
-   uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 &
-   python mcp/server.py --port 8001 &
-   ```
+```bash
+claude mcp add --transport http quorum http://localhost:8000/mcp
+```
 
-3. **Start Frontend Console:**
-   ```bash
-   cd frontend
-   npm install
-   npm run dev        # http://localhost:5173
-   ```
+### Without Docker for the app (FalkorDB still runs in Docker)
 
-4. **Run Verification & Proof Pack:**
-   ```bash
-   # Run all 39 backend test suites
-   python -m pytest backend/tests
+```bash
+docker compose up -d falkordb
+pip install -r backend/requirements.txt
+QUORUM_EMBED_MCP=1 python -m uvicorn app.main:app --app-dir backend --port 8000
+cd frontend && npm ci && npm run build && npx vite preview --port 5173
+```
 
-   # Run comprehensive benchmark harness
-   python bench/run.py
-   ```
+### Tests
+
+```bash
+python -m pytest backend/tests tests            # needs FalkorDB; the persistence and gate tests fail loudly without it
+cd frontend && npm run verify                   # types, lint, unit tests, contrast, contract, builds
+cd frontend && npm run qa                       # console on sample data (npm run build:mock, npm run preview:mock)
+cd frontend && npm run qa:live                  # console against the live backend with an MCP client as an agent
+cd frontend && node scripts/resilience.mjs      # stops FalkorDB under a running product, checks the lock and the recovery
+cd frontend && node scripts/claude_e2e.mjs      # real Claude Code sessions using Quorum as shared memory
+```
+
+See [`docs/LIVE_TESTING.md`](docs/LIVE_TESTING.md).
 
 ---
 

@@ -73,7 +73,7 @@ def test_mcp_derive_with_atomic_guard():
 
 
 def test_mcp_claim_handoff_role_restriction():
-    from app.routes.handoffs import _handoff_store
+    from handoff_compat import _handoff_store
     from app.models.handoffs import Handoff, HandoffKind, HandoffStatus
 
     # Insert a REVIEW handoff into store
@@ -127,7 +127,7 @@ def test_procedure_laplace_smoothed_ranking():
 
 
 def test_two_agents_racing_for_handoff():
-    from app.routes.handoffs import _handoff_store
+    from handoff_compat import _handoff_store
     from app.models.handoffs import Handoff, HandoffKind, HandoffStatus
 
     race_handoff = Handoff(id="h_race_task", kind=HandoffKind.TASK, task="Process payment", status=HandoffStatus.PENDING)

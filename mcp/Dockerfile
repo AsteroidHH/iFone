@@ -13,8 +13,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ ./backend/
 COPY mcp/ ./mcp/
 COPY contracts/ ./contracts/
+COPY graph/ ./graph/
+COPY agents/ ./agents/
 
-ENV PYTHONPATH="/app/backend:/app/mcp"
+ENV PYTHONPATH="/app/backend:/app/mcp:/app"
 
 EXPOSE 8001
 

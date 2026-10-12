@@ -27,7 +27,6 @@ from app.services.executor import action_executor
 from app.services.auditor import auditor_service
 from app.services.saga import saga_worker
 from app.services.helpdesk import helpdesk_service
-from app.routes.handoffs import _handoff_store, _handoff_lock
 from agents.procedures import procedure_registry
 
 
@@ -61,8 +60,8 @@ class ScenarioOrchestrator:
             store.epoch = 1
 
         helpdesk_service.reset()
-        with _handoff_lock:
-            _handoff_store.clear()
+        with store.handoff_lock:
+            store.handoffs.clear()
 
         # Seed initial canonical policy (Beat 0)
         now_ms = int(time.time() * 1000)

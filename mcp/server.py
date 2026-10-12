@@ -2,6 +2,7 @@ import sys
 import os
 import asyncio
 
+os.environ.setdefault("QUORUM_STANDALONE_MCP", "1")
 backend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend"))
 if backend_path not in sys.path:
     sys.path.insert(0, backend_path)
@@ -12,16 +13,16 @@ from app.services import mcp_tools
 mcp_server = MCPServer("quorum")
 
 # Register tools directly on the server instance
-mcp_server.tool()(mcp_tools.remember_fact)
-mcp_server.tool()(mcp_tools.derive)
-mcp_server.tool()(mcp_tools.retrieve_context)
-mcp_server.tool()(mcp_tools.stage_action)
-mcp_server.tool()(mcp_tools.execute_action)
-mcp_server.tool()(mcp_tools.claim_handoff)
-mcp_server.tool()(mcp_tools.quarantine)
-mcp_server.tool()(mcp_tools.restore)
-mcp_server.tool()(mcp_tools.explain_blast_radius)
-mcp_server.tool()(mcp_tools.review_handoff)
+mcp_server.tool()(mcp_tools.guarded(mcp_tools.remember_fact))
+mcp_server.tool()(mcp_tools.guarded(mcp_tools.derive))
+mcp_server.tool()(mcp_tools.guarded(mcp_tools.retrieve_context))
+mcp_server.tool()(mcp_tools.guarded(mcp_tools.stage_action))
+mcp_server.tool()(mcp_tools.guarded(mcp_tools.execute_action))
+mcp_server.tool()(mcp_tools.guarded(mcp_tools.claim_handoff))
+mcp_server.tool()(mcp_tools.guarded(mcp_tools.quarantine))
+mcp_server.tool()(mcp_tools.guarded(mcp_tools.restore))
+mcp_server.tool()(mcp_tools.guarded(mcp_tools.explain_blast_radius))
+mcp_server.tool()(mcp_tools.guarded(mcp_tools.review_handoff))
 
 
 def main():

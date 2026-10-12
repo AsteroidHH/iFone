@@ -21,7 +21,9 @@ from app.services.helpdesk import helpdesk_service
 from app.services.auditor import auditor_service
 from app.services.saga import saga_worker
 from app.services.event_bus import event_bus
-from app.routes.handoffs import _handoff_store, _handoff_lock
+from handoff_compat import make_proxies
+
+_handoff_store, _handoff_lock = make_proxies("acme_stress")
 
 
 @pytest.fixture(autouse=True)
@@ -62,7 +64,7 @@ def test_100_handoffs_x_30_concurrent_claimers():
 
     def claim_worker(worker_id: int):
         worker_wins = 0
-        token = f"token_worker_{worker_id}"
+        token = "token_acme_stress_human"
         # Each worker attempts to claim all 100 handoffs
         for hid in handoff_ids:
             resp = client.post(
@@ -494,7 +496,7 @@ def test_massive_200_handoffs_x_50_concurrent_claimers():
 
     def claimer_worker(worker_id: int):
         worker_wins = 0
-        token = f"token_worker_{worker_id}"
+        token = "token_acme_stress_human"
         for hid in handoff_ids:
             resp = client.post(
                 f"/api/handoffs/{hid}/claim",

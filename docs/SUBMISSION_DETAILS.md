@@ -121,7 +121,7 @@ All performance numbers are verified and reproducible via `python bench/run.py`:
 
 | Benchmark Suite | Measured Metric | Quorum Result | Comparison / Invariant |
 |---|---|---|---|
-| **30-Agent Load Test** | Throughput & Latency | **33,111.8 ops/sec** | p50: 0.02ms, p95: 0.06ms, p99: 0.08ms |
+| **30-Agent Load Test** | Throughput & Latency | **757.6 ops/sec** on FalkorDB 8.10.2 | p50: 31.5ms, p95: 78.01ms, p99: 100.0ms |
 | **Orphan Invariant** | Graph Integrity | **0 invariant violations** | 0 healthy nodes under quarantined parents |
 | **Handoff Claim Race** | 100 handoffs x 30 claimers | **100.0% single winner** | Exactly 100 winners, 0 collisions / double claims |
 | **Atomic Execute Race** | 50 actions under audit | **0 leaks** | 0 quarantined actions allowed to execute |

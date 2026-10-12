@@ -135,11 +135,11 @@ This document is the official shot list, narration script, and technical walkthr
     - The graph reconstructs its exact past state via `as_of` temporal traversal.
   - Click **"Restore"**: Quorum verifies all parent dependencies are healthy and cleanly restores safe nodes.
   - Flash the **Proof Pack** table (`docs/PROOF.md`):
-    - **33,111 ops/sec** throughput.
-    - **0.4ms** containment latency.
+    - **758 ops/sec** throughput on FalkorDB 8.10.2.
+    - **0.4ms to 8.94ms** containment latency (depth 1 to 3).
     - **0.0%** Quorum leakage vs **100.0%** baseline vector-store contamination.
 - **Voiceover:**
-  > *"With full temporal time-travel, atomic handoffs, and 33,000 ops per second, Quorum turns chaotic agent memory into an auditable, correctable ledger. Zero leakage. Zero orphans. Total control."*
+  > *"With full temporal time-travel, atomic handoffs, and 760 operations per second, Quorum turns chaotic agent memory into an auditable, correctable ledger. Zero leakage. Zero orphans. Total control."*
 - **Behind the Scenes:**
   - **API:** `GET /graph?as_of=...` & `POST /scenario/restore`
   - **Metrics:** `bench/results.json`

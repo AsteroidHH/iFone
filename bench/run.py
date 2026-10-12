@@ -16,6 +16,8 @@ Generates:
 
 import os
 import sys
+
+os.environ.setdefault("QUORUM_PERSISTENCE", "memory")  # the harness drives its own graph; it must not hydrate the API's tenant graphs
 import time
 import json
 import random
@@ -53,7 +55,28 @@ try:
         print("[Engine] Connected to live FalkorDB on port 6379.")
 except Exception:
     USE_LIVE_FALKORDB = False
-    print("[Engine] Live FalkorDB unreachable or offline; utilizing high-performance in-memory GraphStore.")
+
+ALLOW_MEMORY = "--memory" in sys.argv
+if not USE_LIVE_FALKORDB:
+    if not ALLOW_MEMORY:
+        print(
+            "\nFalkorDB is not running, so there is nothing real to measure.\n"
+            "  Start it:  docker compose up -d falkordb\n"
+            "  Check it:  python scripts/doctor.py\n"
+            "(Pass --memory to run against the in-memory model instead; the results are then labelled engine=memory.)"
+        )
+        sys.exit(1)
+    print("[Engine] --memory: running against the in-memory GraphStore. Results are labelled engine=memory, not FalkorDB.")
+
+
+def engine_info() -> Dict[str, Any]:
+    if not USE_LIVE_FALKORDB:
+        return {"engine": "memory", "falkordb_version": None}
+    try:
+        info = falkor_queries.get_db().connection.info("server")
+        return {"engine": "falkordb", "falkordb_version": info.get("redis_version")}
+    except Exception:
+        return {"engine": "falkordb", "falkordb_version": None}
 
 
 def setup_benchmark_tenant():
@@ -478,6 +501,7 @@ def generate_proof_md(results: Dict[str, Any]):
     md = f"""# Quorum Formal Verification & Proof Pack (`docs/PROOF.md`)
 
 **Generated:** {ts_str}  
+**Engine:** {results.get("engine", "unknown")}{(" " + str(results["falkordb_version"])) if results.get("falkordb_version") else ""}  
 **Commit/Branch:** `p2-backend-agents` (Milestone 5 Full-Stack Integration)  
 **Authors:** Team Quorum (Person 1: Janani, Person 2: Aaditya, Person 3: Hamza)
 
@@ -586,6 +610,7 @@ def main():
 
     results = {
         "timestamp": int(time.time() * 1000),
+        **engine_info(),
         "concurrency": run_concurrency_benchmark(num_agents=30, ops_per_agent=40),
         "handoff_race": run_handoff_race_test(num_handoffs=100, num_claimers=30),
         "execute_race": run_execute_vs_quarantine_race(num_actions=50),

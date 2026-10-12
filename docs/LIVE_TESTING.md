@@ -1,62 +1,60 @@
-# Testing the console against the live backend
+# Testing the product end to end
 
-`npm run qa` drives the console on sample data. `npm run qa:live` drives it against the real FastAPI backend, the real event stream and the real MCP server, with an outside MCP client acting as an agent.
+Everything below runs against a real FalkorDB. Nothing here uses the in-browser sample backend.
 
-## What the live run checks (31 checks)
+| Command | What it proves | Needs |
+| --- | --- | --- |
+| `python -m pytest backend/tests tests` | Backend logic, persistence in FalkorDB, the FalkorDB gate, auth hardening, the graph layer | FalkorDB. The persistence and gate tests fail loudly without it. |
+| `cd frontend && npm run verify` | Types, lint, 66 unit tests, contrast, contract, live and sample builds | nothing running |
+| `cd frontend && npm run qa` | The console on sample data (88 checks) | `npm run build:mock && npm run preview:mock` |
+| `cd frontend && npm run qa:live` | The console against the live backend with an outside MCP client acting as an agent (31 checks) | the stack below |
+| `cd frontend && node scripts/resilience.mjs [BASE] [API]` | FalkorDB stopped under a running product: lock screen, 503s, MCP refused, automatic recovery, data intact (15 checks) | the stack, Docker |
+| `cd frontend && node scripts/claude_e2e.mjs [API] [BASE]` | Real Claude Code sessions use Quorum as shared memory: write, read from a fresh session, revert a wrong fact (17 checks). Costs a little Claude usage (about $0.70 as reported by the CLI). | the stack, the `claude` CLI logged in |
+| `python bench/run.py` | The benchmark on FalkorDB. Refuses to run without it (`--memory` runs the model and labels the results so). | FalkorDB |
 
-- Live mode is really live: no sample chip, event stream connected, nothing simulated in the header.
-- The Connect page shows a real MCP handshake, not a simulated one.
-- An outside agent speaks MCP over HTTP: lists the ten tools, writes a fact, reads it back with `retrieve_context`, is refused when it tries `quarantine` with an agent token, succeeds with an auditor token, and no longer retrieves the quarantined fact. The console shows the fact and its quarantine without a reload.
-- The 90-second story (inject, run agents, audit, replace policy) runs with the real agents, in order, without getting stuck.
-- Insights, Prompt diff, Actions and handoffs, Memory, Company brain, Tenants, Benchmark, Context and Team render real data.
-- The dev console shows no schema-validation failures and no request failed.
+## The stack
 
-## Run it
+Everything in Docker (this is what a deployment looks like):
 
-1. FalkorDB (needed for the graph tests and the benchmark, not for the API itself, see Notes):
+```bash
+docker compose up -d --build
+python scripts/doctor.py
+cd frontend && npm run qa:live -- http://127.0.0.1:5173 http://127.0.0.1:8000
+```
 
-   ```bash
-   docker compose up -d falkordb
-   ```
+Or the app on your machine with FalkorDB in Docker:
 
-2. The backend with MCP embedded, so agents and the console share one graph and one event stream:
+```bash
+docker compose up -d falkordb
+QUORUM_EMBED_MCP=1 python -m uvicorn app.main:app --app-dir backend --port 8000
+cd frontend && npm run build && QUORUM_MCP=http://127.0.0.1:8000 npx vite preview --port 5174 --strictPort
+cd frontend && npm run qa:live
+```
 
-   ```bash
-   pip install -r backend/requirements.txt
-   QUORUM_EMBED_MCP=1 python -m uvicorn app.main:app --app-dir backend --port 8000
-   ```
+The default build is the live one and reads tokens from `frontend/public/config.json`, which holds the development demo tokens. `npm run build:mock` makes the sample-data build for screenshots and demos only.
 
-3. The console in live mode, with demo tokens (never commit this file):
+## What FalkorDB does here
 
-   ```bash
-   cd frontend
-   VITE_API_MODE=live npx vite build --outDir dist-live --emptyOutDir
-   echo '{"tokens":{"acme":{"human":"token_human","auditor":"token_auditor","agent":"token_agent_scout"},"globex":{"human":"token_globex_human","auditor":"token_globex_auditor","agent":"token_globex_agent"}},"tenants":["acme","globex"]}' > dist-live/config.json
-   QUORUM_MCP=http://127.0.0.1:8000 npx vite preview --outDir dist-live --port 5174 --strictPort
-   ```
+- It is the system of record. Each tenant is a graph named `quorum:<tenant>` with `(:QNode:<Kind>)` beliefs, typed causal links, `(:QHandoff)` handoffs and the context epoch. Look at it with `docker exec quorum-falkordb redis-cli GRAPH.QUERY quorum:acme "MATCH (n:QNode) RETURN n.id, n.status"`.
+- Writes are persisted before an API call or MCP tool call returns. Background work (agents, the saga) is persisted within half a second.
+- A tenant's graph is rebuilt from FalkorDB the first time it is used, so restarting the backend loses nothing. `docker restart` of the backend container returns the same nodes, epoch and quarantines.
+- If FalkorDB is not reachable every API route and MCP tool answers `503 FALKORDB_UNAVAILABLE`, `/api/health` says why, and the console shows the setup screen.
+- The Cypher shown in the console's drawer is the Cypher that ran.
 
-4. In another terminal:
+Still true: hot-path decisions (cascade, execute guard, quorum gate) run in the API process under locks, then are written to FalkorDB. Janani's atomic Cypher guards in `graph/queries.py` are exercised by the tests and the benchmark but are not what the API calls. Run one API process per FalkorDB.
 
-   ```bash
-   cd frontend && npm run qa:live
-   ```
-
-## What this run found and fixed
+## What the first end-to-end runs found and fixed
 
 | Where | Problem | Fix |
 | --- | --- | --- |
-| Console, schemas | The backend sends explicit `null` for optional fields; the console rejected the whole graph ("Couldn't load GET graph"). | Optional fields accept `null` (`schemas.ts`), with a regression test. |
-| Backend, `GET /graph` | `seq` was the query-log length, not the event bus sequence, so the console re-synced forever ("Out of sync"). | `seq` now comes from the event bus; test added. |
-| Console, events | One event type the console does not know (`correction_notice_created`) was dropped, leaving a hole in the sequence, which stalled the stream. | Unknown events keep their place in the sequence and change nothing. |
-| Backend, `GET /events` | Response headers were not sent until the first event, so the connection looked stuck at "connecting". | The stream sends a heartbeat immediately. |
-| Console, startup | A handoffs request fired before the session token existed (401 on every load). | The query waits for the session. |
-| Backend, MCP | The standalone MCP server has its own in-memory graph, so agent writes never reached the console. MCP writes also published no events. | `QUORUM_EMBED_MCP=1` serves MCP from the API process (`app/mcp_embed.py`), and `remember_fact`, `derive` and `stage_action` now publish `node_added` and `edge_added`. |
-| Backend, requirements | `mcp` was missing, so the MCP container could not start. | `mcp>=2.0.0,<3` added. |
-| Bench | Against FalkorDB the handoff race never created its handoff nodes, so it reported 0 winners. | The harness seeds them; the race is 100/100. |
-
-## Notes
-
-- The API server runs on the in-memory `GraphStore` (`backend/app/graph/queries.py`). FalkorDB is used by `graph/queries.py` in the graph tests and the benchmark. The API is not yet wired to it.
-- The Tenants page text comes from a canned response in `backend/app/routes/system.py`, not from a real Redis ACL denial.
-- Throughput depends on the machine and the engine. On one Windows laptop against FalkorDB: 477 ops/s, p99 133 ms, 100/100 claim winners, 0 leakage. Recorded runs elsewhere in the repo show different numbers. Publish one `make proof` run from the demo machine.
-- `docker compose build backend` failed here at `apt-get update` (the Docker engine had no network during the build). Running the services directly with Python worked.
+| Console | The backend sends `null` for optional fields; the console rejected the whole graph. | Optional fields accept `null`, with a regression test. |
+| Backend `GET /graph` | `seq` was the query-log length, not the event sequence, so the console re-synced forever. | `seq` comes from the event bus; test added. |
+| Console events | An event type it did not know was dropped and left a hole in the sequence, which stalled the stream. | Unknown events keep their place and change nothing. |
+| Backend `GET /events` | Headers were not sent until the first event, so the stream looked stuck at "connecting". The server also could not tell a restarted server from a client that was ahead. | Immediate heartbeat; a client ahead of the server gets `resync_required`. |
+| Console startup | A handoffs request fired before the session token existed. | The query waits for the session. |
+| Backend MCP | The standalone MCP server had its own in-memory graph, so agent writes never reached the console, and MCP writes published no events. | MCP is served from the API process (`QUORUM_EMBED_MCP=1`), and the write tools publish events. |
+| Backend | Handoffs were one global list shared by every tenant, and handoffs created by the gate, auditor and saga were never stored. | Handoffs live on the tenant's graph store and are persisted. |
+| Backend auth | Any unrecognised token became a human on tenant acme, and the MCP tools accepted any token as an agent. | One token resolver for API and MCP. Ad-hoc tokens only outside production; demo tokens are refused in production. |
+| Backend API | `/bench/results`, `/cypher-log` and `/tenants/denied-demo` returned canned numbers and text. | They return the recorded benchmark run, the real Cypher log and a live isolation check. |
+| Docs | Headline numbers (33,111 ops/s, "350x faster", "900x faster") came from the in-memory model or were not measured. | Replaced with the numbers from `bench/results.json` (FalkorDB, with the engine named); invented comparison columns removed. |
+| Docker | The backend image lacked `agents/`, the MCP image lacked `mcp`, the frontend ran the dev server against `localhost`, and compose had no health ordering. | All fixed; the full stack comes up with one command and passes `qa:live`. |

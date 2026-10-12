@@ -128,12 +128,11 @@ def approve_correction(
     action_node.action.correction_notice = notice
     action_node.correction_notice = notice
 
-    from app.routes.handoffs import _handoff_store, _handoff_lock
     from app.models.common import HandoffStatus
     from app.services.event_bus import event_bus
 
-    with _handoff_lock:
-        for h in _handoff_store:
+    with store.handoff_lock:
+        for h in store.handoffs:
             if h.context_root_id == action_id or (h.correction_notice and h.correction_notice.get("target_action_id") == action_id):
                 h.status = HandoffStatus.COMPLETED
                 if h.correction_notice:

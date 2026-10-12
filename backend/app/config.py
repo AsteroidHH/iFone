@@ -17,6 +17,15 @@ class Settings(BaseSettings):
     REPLAY_AVAILABLE: bool = True
     DEFAULT_TENANT: str = "acme"
     FALKORDB_URL: str = "redis://localhost:6379"
+    # "falkordb" is the only mode for real use. "memory" exists for unit tests and says so loudly in /api/health.
+    PERSISTENCE: Literal["falkordb", "memory"] = "falkordb"
+    ENV: Literal["development", "production"] = "development"
+    # Accept ad-hoc tokens shaped like token_<tenant>_<role>. Convenient in development, a forgery hole in production.
+    ALLOW_DYNAMIC_TOKENS: bool | None = None
+    # Comma separated browser origins allowed to call the API. Empty means localhost only.
+    CORS_ORIGINS: str = ""
+    # JSON object {"<token>": {"tenant": "...", "role": "agent|auditor|human", "agent_id": "..."}} added to the demo tokens.
+    TOKENS_JSON: str = ""
 
     # Static tokens for local dev and demo UI
     DEMO_TOKENS: Dict[str, Dict[str, Any]] = {
@@ -31,6 +40,14 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="QUORUM_")
 
+    def dynamic_tokens_allowed(self) -> bool:
+        return self.ALLOW_DYNAMIC_TOKENS if self.ALLOW_DYNAMIC_TOKENS is not None else self.ENV != "production"
+
+    def cors_origin_list(self) -> list:
+        if self.CORS_ORIGINS.strip():
+            return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+        return ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174"]
+
     def get_effective_mode(self) -> Literal["replay", "live"]:
         requested = self.MODE
         if requested == "live":
@@ -43,3 +60,17 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Compose files and older docs use FALKORDB_HOST / FALKORDB_PORT. Honour them unless the URL is set explicitly.
+if "QUORUM_FALKORDB_URL" not in os.environ and os.getenv("FALKORDB_HOST"):
+    settings.FALKORDB_URL = f"redis://{os.environ['FALKORDB_HOST']}:{os.getenv('FALKORDB_PORT', '6379')}"
+
+if settings.TOKENS_JSON.strip():
+    import json as _json
+
+    _configured = _json.loads(settings.TOKENS_JSON)
+    # In production the built-in demo tokens are not accepted: only tokens you configured are.
+    settings.DEMO_TOKENS = _configured if settings.ENV == "production" else {**settings.DEMO_TOKENS, **_configured}
+elif settings.ENV == "production":
+    settings.DEMO_TOKENS = {}
+    logger.warning("QUORUM_ENV=production and no QUORUM_TOKENS_JSON: every API call will be refused until tokens are configured.")

@@ -44,6 +44,8 @@ class TenantEventBuffer:
 
     def get_events_since(self, last_event_id: int) -> Optional[List[SSEEventEnvelope]]:
         with self._lock:
+            if last_event_id > self.current_seq:
+                return None  # The client is ahead of this server: the server restarted, so the client must reload.
             if not self.history:
                 return []
             earliest_seq = self.history[0].seq

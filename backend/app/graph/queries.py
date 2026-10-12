@@ -4,6 +4,8 @@ from typing import Dict, List, Optional, Any
 from pydantic import BaseModel
 from app.models.common import Status, NodeKind, EdgeType, Tier, Reversibility, GateStatus, CompensationStatus
 from app.models.graph import GraphNode, GraphEdge, GraphResponse
+from app.models.handoffs import Handoff
+from app.config import settings
 
 
 class CypherLogEntry(BaseModel):
@@ -27,6 +29,21 @@ class GraphStore:
         self.edges: List[GraphEdge] = []
         self.epoch: int = 1
         self.query_log: List[CypherLogEntry] = []
+        # Handoffs belong to the tenant's graph, like everything else.
+        self.handoffs: List[Handoff] = []
+        self.handoff_lock = threading.RLock()
+        self.persister = None  # set by get_graph_store when persistence is FalkorDB
+
+    def add_handoff(self, handoff: Handoff) -> Handoff:
+        with self.handoff_lock:
+            self.handoffs.append(handoff)
+        return handoff
+
+    def commit(self, request_id: Optional[str] = None) -> int:
+        """Persist what changed. Called at the end of every API request and tool call, and by the background flusher."""
+        if self.persister is None:
+            return 0
+        return self.persister.sync(request_id)
 
     def log_query(self, name: str, cypher: str, ms: float, rows: int, request_id: Optional[str] = None):
         entry = CypherLogEntry(
@@ -355,8 +372,43 @@ class GraphStore:
 _stores: Dict[str, GraphStore] = {}
 _stores_lock = threading.Lock()
 
+
+def _seed_handoffs(store: GraphStore) -> None:
+    from app.services.fixtures import get_fixture_handoffs
+
+    store.handoffs.extend(get_fixture_handoffs())
+
+
 def get_graph_store(tenant: str = "acme") -> GraphStore:
     with _stores_lock:
-        if tenant not in _stores:
-            _stores[tenant] = GraphStore(tenant)
-        return _stores[tenant]
+        store = _stores.get(tenant)
+        if store is not None:
+            return store
+        store = GraphStore(tenant)
+        if settings.PERSISTENCE == "falkordb":
+            from app import db
+            from app.persistence import Persister
+
+            db.require_db()  # raises FalkorUnavailable: no store is created, nothing is cached
+            store.persister = Persister(store)
+            existed = store.persister.load()
+            if not existed:
+                _seed_handoffs(store)
+                store.persister.sync()
+        else:
+            _seed_handoffs(store)
+        _stores[tenant] = store
+        return store
+
+
+def sync_all(request_id: Optional[str] = None) -> int:
+    """Persist every tenant that has been touched. Raises if FalkorDB is down."""
+    with _stores_lock:
+        stores = list(_stores.values())
+    return sum(s.commit(request_id) for s in stores)
+
+
+def forget_stores() -> None:
+    """Drop the in-memory view (not the data). The next access reloads from FalkorDB, like a restart."""
+    with _stores_lock:
+        _stores.clear()

@@ -79,6 +79,7 @@ class AuditorService:
                 status=HandoffStatus.PENDING,
                 context_root_id=new_fact.id,
             )
+            store.add_handoff(handoff)
             event_bus.publish(
                 tenant,
                 "handoff_updated",
@@ -176,9 +177,7 @@ class AuditorService:
                         context_root_id=node.id,
                         correction_notice=notice,
                     )
-                    from app.routes.handoffs import _handoff_store, _handoff_lock
-                    with _handoff_lock:
-                        _handoff_store.append(handoff)
+                    store.add_handoff(handoff)
 
                     event_bus.publish(tenant, "node_added", {"node": alert_node.model_dump()}, request_id=request_id)
                     event_bus.publish(tenant, "handoff_updated", {"handoff": handoff.model_dump()}, request_id=request_id)

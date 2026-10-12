@@ -133,7 +133,7 @@ All numbers below were measured using our automated benchmark harness (`python b
 QUORUM BENCHMARK & PROOF HARNESS (make proof)
 ======================================================================
 [1/4] 30-Agent Concurrency Benchmark (70/30 read/write):
-      Throughput: 33,111.8 ops/sec | p50: 0.02ms | p95: 0.06ms | p99: 0.08ms
+      Throughput: 757.6 ops/sec | p50: 31.5ms | p95: 78.01ms | p99: 100.0ms
       Invariant Violations: 0
 
 [2/4] Handoff Claim Race (100 handoffs x 30 concurrent claimers):

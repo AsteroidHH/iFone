@@ -1,3 +1,4 @@
+import os
 import time
 import uuid
 from typing import Optional, List, Dict, Any
@@ -18,6 +19,7 @@ from app.services.gate import quorum_gate
 from app.services.executor import action_executor
 from app.services.auditor import auditor_service
 from app.config import settings
+from app.auth import resolve_token
 from app.services.event_bus import event_bus
 
 
@@ -29,18 +31,48 @@ def _emit(tenant: str, nodes: List[GraphNode] = (), edges: List[GraphEdge] = ())
         event_bus.publish(tenant, "edge_added", {"edge": e.model_dump()})
 
 
+class AuthError(Exception):
+    pass
+
+
 def _get_auth(token: str) -> Dict[str, Any]:
-    if token in settings.DEMO_TOKENS:
-        return settings.DEMO_TOKENS[token]
-    parts = token.split("_")
-    if len(parts) >= 3 and parts[0] == "token":
-        role = parts[-1]
-        tenant = "_".join(parts[1:-1])
-        if role in ["agent", "auditor", "human"]:
-            return {"tenant": tenant, "role": role, "agent_id": f"{role}_{tenant}"}
-    if len(parts) >= 2 and parts[0] == "token":
-        return {"tenant": settings.DEFAULT_TENANT, "role": parts[1], "agent_id": f"{parts[1]}_demo"}
-    return {"tenant": settings.DEFAULT_TENANT, "role": "agent", "agent_id": "agent_demo"}
+    info = resolve_token(token)
+    if not info:
+        raise AuthError("Invalid token.")
+    return info
+
+
+def guarded(fn):
+    """
+    Wraps an MCP tool: refuses to run without FalkorDB, turns a bad token into a clear error, and persists the
+    tool's writes before returning. The signature is preserved so MCP can still describe the tool.
+    """
+    import functools
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        from app import db
+        from app.db import FalkorUnavailable
+        from app.graph.queries import sync_all
+
+        try:
+            if settings.PERSISTENCE == "falkordb":
+                db.require_db()
+                if os.getenv("QUORUM_STANDALONE_MCP") == "1":
+                    # A separate MCP process shares FalkorDB, not memory: start every call from the stored state.
+                    from app.graph.queries import forget_stores
+
+                    forget_stores()
+            out = fn(*args, **kwargs)
+            if settings.PERSISTENCE == "falkordb":
+                sync_all()
+            return out
+        except AuthError as e:
+            return {"error": str(e), "success": False}
+        except FalkorUnavailable as e:
+            raise RuntimeError(f"FALKORDB_UNAVAILABLE: {e.reason}. Start FalkorDB (docker compose up -d falkordb) and retry.")
+
+    return wrapper
 
 
 def remember_fact(
@@ -275,10 +307,8 @@ def claim_handoff(id: str, token: str) -> Dict[str, Any]:
     auth = _get_auth(token)
     store = get_graph_store(auth["tenant"])
 
-    from app.routes.handoffs import _handoff_store, _handoff_lock
-
-    with _handoff_lock:
-        target = next((h for h in _handoff_store if h.id == id), None)
+    with store.handoff_lock:
+        target = next((h for h in store.handoffs if h.id == id), None)
         if not target:
             return {"epoch": store.epoch, "error": f"Handoff '{id}' not found", "success": False}
 
@@ -362,9 +392,9 @@ def review_handoff(id: str, decision: str, token: str, note: Optional[str] = Non
     if auth["role"] != "human":
         return {"error": "Only human reviewers may complete REVIEW handoffs.", "success": False}
 
-    from app.routes.handoffs import _handoff_store, _handoff_lock
-    with _handoff_lock:
-        target = next((h for h in _handoff_store if h.id == id), None)
+    store = get_graph_store(auth["tenant"])
+    with store.handoff_lock:
+        target = next((h for h in store.handoffs if h.id == id), None)
         if not target:
             return {"error": f"Handoff '{id}' not found.", "success": False}
 

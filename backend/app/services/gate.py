@@ -128,6 +128,7 @@ class QuorumGateService:
             status=HandoffStatus.PENDING,
             context_root_id=action.id,
         )
+        store.add_handoff(handoff)
         event_bus.publish(
             tenant,
             "gate_blocked",

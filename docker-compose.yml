@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   falkordb:
     image: falkordb/falkordb:latest
@@ -11,6 +9,11 @@ services:
       - ./scripts/users.acl:/etc/redis/users.acl:ro
     restart: unless-stopped
     command: ["--loadmodule", "/usr/lib/redis/modules/falkordb.so"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
 
   falkordb-browser:
     image: falkordb/falkordb-browser:latest
@@ -20,8 +23,10 @@ services:
       - FALKORDB_HOST=falkordb
       - FALKORDB_PORT=6379
     depends_on:
-      - falkordb
+      falkordb:
+        condition: service_healthy
     restart: unless-stopped
+    profiles: ["tools"]
 
   mock-helpdesk:
     build:
@@ -31,6 +36,9 @@ services:
       - "8002:8002"
     restart: unless-stopped
 
+  # The API. MCP is served from the same process (QUORUM_EMBED_MCP=1) so agents and the console share one graph
+  # and one event stream. Everything is stored in FalkorDB; without it the API answers 503 and the console shows
+  # the setup screen.
   backend:
     build:
       context: .
@@ -38,16 +46,18 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - FALKORDB_HOST=falkordb
-      - FALKORDB_PORT=6379
-      - HELPDESK_URL=http://mock-helpdesk:8002
-      - MCP_SERVER_URL=http://mcp-server:8001
+      - QUORUM_FALKORDB_URL=redis://falkordb:6379
+      - QUORUM_EMBED_MCP=1
       - QUORUM_MODE=replay
+      - HELPDESK_URL=http://mock-helpdesk:8002
     depends_on:
-      - falkordb
-      - mock-helpdesk
+      falkordb:
+        condition: service_healthy
+      mock-helpdesk:
+        condition: service_started
     restart: unless-stopped
 
+  # Optional: a separate MCP server process. Not needed with the embedded MCP above, and it shares FalkorDB, not memory.
   mcp-server:
     build:
       context: .
@@ -55,20 +65,24 @@ services:
     ports:
       - "8001:8001"
     environment:
-      - API_URL=http://backend:8000
+      - QUORUM_FALKORDB_URL=redis://falkordb:6379
+      - HELPDESK_URL=http://mock-helpdesk:8002
     depends_on:
-      - backend
+      falkordb:
+        condition: service_healthy
     restart: unless-stopped
+    profiles: ["standalone-mcp"]
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
     container_name: quorum-frontend
     ports:
       - "5173:5173"
     environment:
-      - VITE_API_URL=http://localhost:8000
+      - QUORUM_BACKEND=http://backend:8000
+      - QUORUM_MCP=http://backend:8000
     depends_on:
       - backend
     restart: unless-stopped

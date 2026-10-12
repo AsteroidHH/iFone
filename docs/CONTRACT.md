@@ -27,6 +27,7 @@ Companion file: `contracts/events.schema.json` (JSON Schema for the SSE envelope
 | `CONFLICT` | 409 | state does not allow it (already claimed, already executed) |
 | `GUARD_REFUSED` | 409 | execute guard returned zero rows (an ancestor is not healthy) |
 | `VALIDATION` | 422 | bad request body or parameters |
+| `FALKORDB_UNAVAILABLE` | 503 | FalkorDB is not running or not set up. Every API and MCP call is refused; `error.details` has `reason`, `url` and `steps`. Sent with `Retry-After: 3`. |
 | `INTERNAL` | 500 | unexpected failure |
 
 ## 2. Core types
@@ -105,6 +106,8 @@ interface Handoff {
 | QUARANTINED, executed, IRREVERSIBLE | Needs a person |
 
 ## 3. REST endpoints
+
+`GET /api/health` needs no token. It answers 200 `{status:"ok", falkordb:{up,url,latency_ms,version,error}, steps[], warnings[]}` when FalkorDB is ready and 503 with `status:"blocked"` and the fix steps when it is not. The console polls it and shows its setup screen instead of the product.
 
 All require a valid token. "Roles" lists who may call.
 
@@ -247,3 +250,4 @@ Error body:
 | Version | Date | Change |
 |---|---|---|
 | 0.1.0 | draft | Initial proposal |
+- Added `FALKORDB_UNAVAILABLE` (503) and `GET /api/health`. `GET /graph` `seq` is now the event stream's sequence number. Optional fields may be `null`. Unknown SSE event types are tolerated and keep `seq` contiguous. `GET /bench/results` returns the last recorded `bench/results.json` run, with `engine`, and baselines' `ms_to_containment` may be `null` (not measured).

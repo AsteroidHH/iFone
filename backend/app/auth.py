@@ -11,6 +11,32 @@ class AuthContext(BaseModel):
     agent_id: Optional[str] = None
     token: str
 
+_ROLES = ("agent", "auditor", "human")
+
+
+def resolve_token(token: str) -> Optional[dict]:
+    """
+    The single place that turns a bearer token into {tenant, role, agent_id}, for the API and for MCP tools alike.
+
+    Configured tokens (demo tokens plus QUORUM_TOKENS_JSON) always work. Ad-hoc tokens shaped like token_<role> or
+    token_<tenant>_<role> only work when QUORUM_ALLOW_DYNAMIC_TOKENS is on (the default outside production), because
+    anyone could otherwise forge a token for any tenant.
+    """
+    if not token:
+        return None
+    if token in settings.DEMO_TOKENS:
+        return dict(settings.DEMO_TOKENS[token])
+    if not settings.dynamic_tokens_allowed():
+        return None
+    parts = token.split("_")
+    if parts[0] != "token" or len(parts) < 2 or parts[-1] not in _ROLES:
+        return None
+    role = parts[-1]
+    if len(parts) == 2:
+        return {"tenant": settings.DEFAULT_TENANT, "role": role, "agent_id": f"{role}_demo"}
+    tenant = "_".join(parts[1:-1])
+    return {"tenant": tenant, "role": role, "agent_id": f"{role}_{tenant}"}
+
 
 def get_auth_context(authorization: Optional[str] = Header(None)) -> AuthContext:
     if not authorization or not authorization.startswith("Bearer "):
@@ -25,58 +51,13 @@ def get_auth_context(authorization: Optional[str] = Header(None)) -> AuthContext
         )
 
     token = authorization.split("Bearer ", 1)[1].strip()
-
-    # Match demo/static tokens first
-    if token in settings.DEMO_TOKENS:
-        info = settings.DEMO_TOKENS[token]
-        return AuthContext(
-            tenant=info["tenant"],
-            role=info["role"],
-            agent_id=info.get("agent_id"),
-            token=token,
-        )
-
-    # Simple token heuristic for dynamic tokens (e.g. token_tenant_role)
-    parts = token.split("_")
-    if len(parts) >= 2 and parts[0] == "token":
-        # format: token_<role> or token_<tenant>_<role>
-        if len(parts) == 2:
-            role = parts[1]
-            if role in ["agent", "auditor", "human"]:
-                return AuthContext(
-                    tenant=settings.DEFAULT_TENANT,
-                    role=role,
-                    agent_id=f"{role}_demo",
-                    token=token,
-                )
-        elif len(parts) >= 3:
-            role = parts[-1]
-            tenant = "_".join(parts[1:-1])
-            if role in ["agent", "auditor", "human"]:
-                return AuthContext(
-                    tenant=tenant,
-                    role=role,
-                    agent_id=f"{role}_{tenant}",
-                    token=token,
-                )
-
-    # In debug/demo mode, accept fallback default
-    if settings.DEBUG:
-        return AuthContext(
-            tenant=settings.DEFAULT_TENANT,
-            role="human",
-            agent_id="human_dev",
-            token=token,
-        )
+    info = resolve_token(token)
+    if info:
+        return AuthContext(tenant=info["tenant"], role=info["role"], agent_id=info.get("agent_id"), token=token)
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail={
-            "error": {
-                "code": ErrorCode.UNAUTHENTICATED.value,
-                "message": "Invalid token.",
-            }
-        },
+        detail={"error": {"code": ErrorCode.UNAUTHENTICATED.value, "message": "Invalid token."}},
     )
 
 

@@ -2,8 +2,10 @@ import { z } from 'zod';
 import { devLog } from './devlog';
 import { ErrorBody } from './schemas';
 import { mockBackend } from '../mocks/backend';
+import { reportBlocked } from './blocked';
 
-export const API_MODE: 'mock' | 'live' = import.meta.env.VITE_API_MODE === 'live' ? 'live' : 'mock';
+/** Live is the default. The in-browser sample backend only runs when a build asks for it with VITE_API_MODE=mock. */
+export const API_MODE: 'mock' | 'live' = import.meta.env.VITE_API_MODE === 'mock' ? 'mock' : 'live';
 
 export type Role = 'human' | 'auditor' | 'agent';
 
@@ -111,6 +113,10 @@ export async function api<T>(
     const parsed = ErrorBody.safeParse(json);
     const e = parsed.success ? parsed.data.error : { code: 'INTERNAL', message: `HTTP ${status}` };
     devLog('warn', `${endpoint} -> ${status} ${e.code}`);
+    if (status === 503 && e.code === 'FALKORDB_UNAVAILABLE') {
+      const d = (parsed.success ? parsed.data.error.details : undefined) as { reason?: string; url?: string; steps?: string[] } | undefined;
+      reportBlocked({ reason: d?.reason ?? e.message, url: d?.url ?? '', steps: d?.steps ?? [] });
+    }
     throw new ApiError(e.code, e.message, status, endpoint);
   }
 

@@ -1,8 +1,8 @@
 {
   "tokens": {
-    "acme": { "human": "mock-acme-human", "auditor": "mock-acme-auditor", "agent": "mock-acme-agent" },
-    "globex": { "human": "mock-globex-human", "auditor": "mock-globex-auditor", "agent": "mock-globex-agent" }
+    "acme": { "human": "token_human", "auditor": "token_auditor", "agent": "token_agent_scout" },
+    "globex": { "human": "token_globex_human", "auditor": "token_globex_auditor", "agent": "token_globex_agent" }
   },
   "tenants": ["acme", "globex"],
-  "note": "Demo tokens only. Replace at deploy time; never commit real tokens."
+  "note": "Development tokens for the local backend. In production replace this file at deploy time with your own tokens and set QUORUM_ENV=production; these stop working there."
 }

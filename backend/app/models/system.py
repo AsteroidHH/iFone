@@ -53,7 +53,7 @@ class PoisonSystemMetrics(BaseModel):
     name: str
     leaked_rate: float
     wrongly_quarantined: int
-    ms_to_containment: float
+    ms_to_containment: Optional[float] = None
 
 
 class PoisonDepthMetrics(BaseModel):

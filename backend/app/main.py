@@ -10,16 +10,21 @@ if _backend_dir not in sys.path:
     sys.path.insert(0, _backend_dir)
 
 import os
+import threading
 import uuid
 import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import settings
+from app import db
+from app.db import FalkorUnavailable
+from app.graph.queries import sync_all
 from app.models.common import ErrorCode, ErrorResponse, ErrorDetail
 from app.routes import (
     meta,
@@ -34,6 +39,7 @@ from app.routes import (
     prompt_diff,
     brain,
     system,
+    health,
 )
 
 _mcp_app = None
@@ -43,13 +49,33 @@ if os.getenv("QUORUM_EMBED_MCP") == "1":
     _mcp_app = build_mcp_app()
 
 
+def _flusher(stop: threading.Event) -> None:
+    """Persists changes made by background work (agents, saga) that happen outside a request."""
+    while not stop.wait(0.5):
+        try:
+            sync_all()
+        except Exception:
+            pass  # the next request reports FalkorDB being down; the failed diff is retried on the next pass
+
+
 @asynccontextmanager
 async def lifespan(_app):
-    if _mcp_app is not None:
-        async with _mcp_app.router.lifespan_context(_mcp_app):
+    stop = threading.Event()
+    t = None
+    if settings.PERSISTENCE == "falkordb":
+        db.check_health(force=True)
+        t = threading.Thread(target=_flusher, args=(stop,), daemon=True, name="quorum-flusher")
+        t.start()
+    try:
+        if _mcp_app is not None:
+            async with _mcp_app.router.lifespan_context(_mcp_app):
+                yield
+        else:
             yield
-    else:
-        yield
+    finally:
+        stop.set()
+        if t is not None:
+            t.join(timeout=2)
 
 
 app = FastAPI(
@@ -64,8 +90,8 @@ app = FastAPI(
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=settings.cors_origin_list(),
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["X-Request-Id"],
@@ -79,6 +105,49 @@ async def request_id_middleware(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Request-Id"] = req_id
     return response
+
+
+_OPEN_PATHS = ("/api/health", "/docs", "/openapi.json", "/redoc")
+
+
+def _unavailable(reason: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content={
+            "error": {
+                "code": ErrorCode.FALKORDB_UNAVAILABLE.value,
+                "message": "FalkorDB is not set up or not running. Quorum needs it and will not run without it.",
+                "details": {"reason": reason, "url": db.redacted_url(), "steps": db.SETUP_STEPS},
+            }
+        },
+        headers={"Retry-After": "3"},
+    )
+
+
+@app.middleware("http")
+async def falkordb_gate(request: Request, call_next):
+    """Every API call needs FalkorDB. If it is down, nothing is served and the caller is told how to fix it."""
+    path = request.url.path
+    guarded = (path.startswith("/api/") or path.startswith("/mcp")) and not path.startswith(_OPEN_PATHS)
+    if settings.PERSISTENCE != "falkordb" or not guarded or request.method == "OPTIONS":
+        return await call_next(request)
+    h = db.check_health()
+    if not h["up"]:
+        return _unavailable(h["error"] or "unreachable")
+    try:
+        response = await call_next(request)
+        if path != "/api/events" and request.method != "GET":
+            # Writes are durable before the caller hears "accepted".
+            await run_in_threadpool(sync_all, getattr(request.state, "request_id", None))
+        return response
+    except FalkorUnavailable as e:
+        return _unavailable(e.reason)
+    except Exception as e:  # redis / falkordb driver errors mean the database went away mid-request
+        if e.__class__.__module__.split(".")[0] in ("redis", "falkordb"):
+            db.reset_client()
+            db.check_health(force=True)
+            return _unavailable(f"{type(e).__name__}: {e}"[:300])
+        raise
 
 
 # Standardized error responses matching docs/CONTRACT.md
@@ -115,6 +184,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 # Mount routes under /api
 api_prefix = settings.API_PREFIX
 
+app.include_router(health.router, prefix=api_prefix, tags=["Health"])
 app.include_router(meta.router, prefix=api_prefix, tags=["Meta"])
 app.include_router(graph.router, prefix=api_prefix, tags=["Graph"])
 app.include_router(events.router, prefix=api_prefix, tags=["Events"])

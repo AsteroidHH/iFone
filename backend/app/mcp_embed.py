@@ -31,7 +31,7 @@ def build_mcp_app():
 
     server = MCPServer("quorum")
     for name in TOOLS:
-        server.tool()(getattr(mcp_tools, name))
+        server.tool()(mcp_tools.guarded(getattr(mcp_tools, name)))
     return server.streamable_http_app()
 
 

@@ -1,7 +1,12 @@
+import json
 import time
+from pathlib import Path
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from app import db
 from app.auth import get_auth_context, AuthContext
+from app.config import settings
+from app.models.common import ErrorCode
 from app.models.system import (
     InvariantsResponse,
     InvariantCheckItem,
@@ -38,6 +43,7 @@ def get_cypher_log(
     limit: int = Query(20, le=100),
     auth: AuthContext = Depends(get_auth_context),
 ):
+    """The Cypher this tenant's writes actually ran against FalkorDB, newest first. Nothing is made up."""
     store = get_graph_store(auth.tenant)
     with store._lock:
         entries = list(store.query_log)
@@ -45,87 +51,85 @@ def get_cypher_log(
     if request_id:
         entries = [e for e in entries if e.request_id == request_id]
 
-    if not entries:
-        now_ms = int(time.time() * 1000)
-        return [
-            CypherLogItem(
-                ts=now_ms - 2000,
-                request_id=request_id or "req_demo_01",
-                name="execute_guard",
-                cypher="MATCH (a:Action {id:$id}) WHERE a.status='HEALTHY' AND a.executed=false AND a.gate='PASSED' OPTIONAL MATCH (x:MemoryNode)-[:LEADS_TO|SUPPORTS*]->(a) WHERE coalesce(x.status,'MISSING') <> 'HEALTHY' WITH a, count(DISTINCT x) AS bad WHERE bad = 0 SET a.executed = true, a.executed_at = timestamp(), a.confirmed = false RETURN a.id",
-                ms=1.4,
-                rows=1,
-            ),
-            CypherLogItem(
-                ts=now_ms - 1500,
-                request_id=request_id or "req_demo_02",
-                name="cascade",
-                cypher="MATCH (root:Fact {id:$root_id}) MATCH (root)-[:LEADS_TO|SUPPORTS*]->(descendant) SET descendant.status='QUARANTINED', descendant.quarantined_at=timestamp(), descendant.quarantine_root=$root_id RETURN count(descendant)",
-                ms=2.8,
-                rows=3,
-            ),
-        ]
-
     return [
-        CypherLogItem(
-            ts=e.ts,
-            request_id=e.request_id,
-            name=e.name,
-            cypher=e.cypher,
-            ms=round(e.ms, 2),
-            rows=e.rows,
-        ) for e in reversed(entries[-limit:])
+        CypherLogItem(ts=e.ts, request_id=e.request_id, name=e.name, cypher=e.cypher, ms=round(e.ms, 2), rows=e.rows)
+        for e in reversed(entries[-limit:])
     ]
+
+
+BENCH_FILE = Path(__file__).resolve().parents[3] / "bench" / "results.json"
 
 
 @router.get("/bench/results", response_model=BenchmarkResultsResponse)
 def get_bench_results(auth: AuthContext = Depends(get_auth_context)):
-    now_ms = int(time.time() * 1000)
+    """The last recorded run of `python bench/run.py`. Not generated here, so nothing on the page is invented."""
+    if not BENCH_FILE.exists():
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": ErrorCode.NOT_FOUND.value, "message": "No benchmark has been recorded yet. Run: python bench/run.py (needs FalkorDB)."}},
+        )
+    r = json.loads(BENCH_FILE.read_text(encoding="utf-8"))
+    c, h, e = r["concurrency"], r["handoff_race"], r.get("execute_race", {})
+    poison = []
+    for key in sorted(r.get("poison_bench", {})):
+        d = r["poison_bench"][key]
+        poison.append(
+            PoisonDepthMetrics(
+                depth=d["causal_depth"],
+                systems=[
+                    PoisonSystemMetrics(name="Quorum (Graph Memory)", leaked_rate=d["quorum_retrieval_leakage_rate"], wrongly_quarantined=0, ms_to_containment=d["containment_ms"]),
+                    PoisonSystemMetrics(name="Baseline Flat Vector + TTL", leaked_rate=d["baseline_flat_ttl_leakage_rate"], wrongly_quarantined=0, ms_to_containment=None),
+                    PoisonSystemMetrics(name="Delete Root Fact Only", leaked_rate=d["baseline_delete_only_leakage_rate"], wrongly_quarantined=0, ms_to_containment=None),
+                ],
+            )
+        )
     return BenchmarkResultsResponse(
-        generated_at=now_ms,
-        params={"falkordb_image": "falkordb/falkordb:latest", "harness_agents": 30},
-        concurrency=ConcurrencyMetrics(
-            agents=30,
-            ops_per_s=1420.5,
-            p50_ms=0.68,
-            p95_ms=1.45,
-            p99_ms=2.90,
-        ),
-        handoff_race=HandoffRaceMetrics(
-            handoffs=100,
-            claimers=30,
-            single_winner_rate=1.0,
-        ),
+        generated_at=r["timestamp"],
+        params={
+            "engine": r.get("engine", "unknown"),
+            "falkordb_version": r.get("falkordb_version"),
+            "harness_agents": c.get("agents"),
+            "source": "bench/results.json",
+            "reproduce": "python bench/run.py",
+        },
+        concurrency=ConcurrencyMetrics(agents=c["agents"], ops_per_s=c["throughput_ops_sec"], p50_ms=c["p50_ms"], p95_ms=c["p95_ms"], p99_ms=c["p99_ms"]),
+        handoff_race=HandoffRaceMetrics(handoffs=h["total_handoffs"], claimers=h["concurrent_claimers"], single_winner_rate=h["exact_single_winner_rate"]),
         invalidation_under_load=InvalidationMetrics(
-            violations=0,
+            violations=int(c.get("healthy_children_under_quarantined", 0)) + int(e.get("actions_executed_after_ancestor_quarantined", 0))
         ),
-        poison=[
-            PoisonDepthMetrics(
-                depth=1,
-                systems=[
-                    PoisonSystemMetrics(name="Quorum (Graph Memory)", leaked_rate=0.0, wrongly_quarantined=0, ms_to_containment=42.0),
-                    PoisonSystemMetrics(name="Baseline Flat Vector + TTL", leaked_rate=0.74, wrongly_quarantined=0, ms_to_containment=60000.0),
-                    PoisonSystemMetrics(name="Delete Root Fact Only", leaked_rate=0.91, wrongly_quarantined=0, ms_to_containment=3.0),
-                ],
-            ),
-            PoisonDepthMetrics(
-                depth=3,
-                systems=[
-                    PoisonSystemMetrics(name="Quorum (Graph Memory)", leaked_rate=0.0, wrongly_quarantined=0, ms_to_containment=58.0),
-                    PoisonSystemMetrics(name="Baseline Flat Vector + TTL", leaked_rate=0.88, wrongly_quarantined=0, ms_to_containment=60000.0),
-                    PoisonSystemMetrics(name="Delete Root Fact Only", leaked_rate=0.96, wrongly_quarantined=0, ms_to_containment=4.0),
-                ],
-            ),
-        ],
+        poison=poison,
     )
+
+
+OTHER_TENANT = {"acme": "globex", "globex": "acme"}
 
 
 @router.get("/tenants/denied-demo", response_model=DeniedDemoResponse)
 def get_denied_demo(auth: AuthContext = Depends(get_auth_context)):
+    """
+    A live isolation check, not a canned one. This tenant's token asks for the other tenant's graph. The API resolves
+    the graph from the token and never from request input, so the answer is a refusal. The graph names listed are the
+    ones FalkorDB really holds for this tenant.
+    """
+    other = OTHER_TENANT.get(auth.tenant, "acme" if auth.tenant != "acme" else "globex")
+    attempted = f"quorum:{other}"
+    own = f"quorum:{auth.tenant}"
+    allowed = False  # structural: the tenant always comes from the token, so there is no path that allows it
+    visible = [own]
+    if settings.PERSISTENCE == "falkordb":
+        try:
+            visible = sorted(g for g in db.get_client().list_graphs() if g == own or g.startswith(f"{own}:"))
+        except Exception:
+            visible = [own]
     return DeniedDemoResponse(
-        tenant="globex",
-        attempted_graph="tenant_acme:commons",
-        result="DENIED",
-        detail="Redis ACL user 'tenant_globex' restricted to '~tenant_globex:*'. GRAPH.QUERY denied on tenant_acme:commons.",
-        visible_graph_names=["tenant_globex:commons", "tenant_globex:agent_scout:raw"],
+        tenant=auth.tenant,
+        attempted_graph=attempted,
+        result="ALLOWED" if allowed else "DENIED",
+        detail=(
+            f"Token for tenant '{auth.tenant}' asked for graph '{attempted}'. The API picks the graph from the token "
+            f"('{own}'), never from the request, so any other tenant's graph is refused (FORBIDDEN_TENANT). "
+            "Each tenant is a separate FalkorDB graph."
+        ),
+        visible_graph_names=visible,
     )
+

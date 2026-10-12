@@ -1,16 +1,21 @@
-.PHONY: all up down help proof test demo seed clean
+.PHONY: all up down help proof test demo seed clean doctor
 
 all: up
 
 up:
 	docker compose up -d
+	@python scripts/doctor.py || true
+
+doctor:
+	python scripts/doctor.py
 
 down:
 	docker compose down -v
 
 help:
 	@echo "Quorum Makefile Commands:"
-	@echo "  make up     - Starts all docker services"
+	@echo "  make up     - Starts all docker services and checks them"
+	@echo "  make doctor - Checks FalkorDB, backend and MCP and prints the fix for anything missing"
 	@echo "  make down   - Tears down docker services"
 	@echo "  make proof  - Runs all tests, benchmarks, and generates docs/PROOF.md"
 	@echo "  make test   - Runs pytest backend test suite"

@@ -33,7 +33,7 @@ def test_full_scenario_orchestration_flow(client):
     5. supersede
     6. restore
     """
-    headers = {"Authorization": "Bearer token_auditor_prime"}
+    headers = {"Authorization": "Bearer token_auditor"}
 
     # 1. RESET
     res_reset = client.post("/api/scenario/reset", headers=headers)
@@ -154,7 +154,7 @@ def test_brain_endpoints(client):
     headers = {"Authorization": "Bearer token_agent_scout"}
 
     # Seed clean state
-    client.post("/api/scenario/reset", headers={"Authorization": "Bearer token_auditor_prime"})
+    client.post("/api/scenario/reset", headers={"Authorization": "Bearer token_auditor"})
 
     # 1. Grounded query
     res_ask = client.post(
@@ -202,7 +202,7 @@ def test_prompt_diff_and_procedures(client):
     """
     Tests prompt-diff context filtering and adaptive procedural memory.
     """
-    headers = {"Authorization": "Bearer token_auditor_prime"}
+    headers = {"Authorization": "Bearer token_auditor"}
 
     # Run up to audit so quarantined nodes exist
     client.post("/api/scenario/reset", headers=headers)
@@ -231,7 +231,7 @@ def test_cypher_log_and_denied_demo(client):
     """
     Tests cypher query observability and cross-tenant ACL denial demo.
     """
-    headers = {"Authorization": "Bearer token_auditor_prime"}
+    headers = {"Authorization": "Bearer token_auditor"}
 
     # Cypher log
     res_log = client.get("/api/cypher-log", headers=headers)
@@ -247,5 +247,8 @@ def test_cypher_log_and_denied_demo(client):
     assert res_denied.status_code == 200
     denied_data = res_denied.json()
     assert denied_data["result"] == "DENIED"
-    assert denied_data["tenant"] == "globex"
-    assert denied_data["attempted_graph"] == "tenant_acme:commons"
+    # A live check: the acme token asks for globex's graph and is refused. Nothing here is canned.
+    assert denied_data["tenant"] == "acme"
+    assert denied_data["attempted_graph"] == "quorum:globex"
+    assert "FORBIDDEN_TENANT" in denied_data["detail"]
+    assert "quorum:globex" not in denied_data["visible_graph_names"]

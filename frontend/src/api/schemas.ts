@@ -318,7 +318,7 @@ export const BenchResults = z
                 name: z.string(),
                 leaked_rate: z.number(),
                 wrongly_quarantined: z.number(),
-                ms_to_containment: z.number(),
+                ms_to_containment: z.number().nullish().transform((v) => v ?? undefined),
               })
               .passthrough(),
           ),

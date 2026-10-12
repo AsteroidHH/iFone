@@ -63,7 +63,7 @@ function Status() {
         </p>
         {mcp.state === 'unreachable' && (
           <p className="cn-help">
-            Start it with <code>docker compose up</code>, or run <code>python mcp/server.py --port 8001</code>, then press Test connection.
+            Start the backend with <code>docker compose up -d</code> (MCP is served from it at /mcp), then press Test connection.
           </p>
         )}
         {API_MODE === 'mock' && <p className="cn-help">This console is running on sample data, so nothing here talks to a real server. Switch to live mode to run the real handshake.</p>}

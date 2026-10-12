@@ -233,3 +233,22 @@
   .header .status { gap: 4px; }
   .header { gap: 8px; }
 }
+
+/* FalkorDB / backend gate */
+.block-screen { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: var(--bg); }
+.block-card { width: min(720px, 100%); background: #fff; border: 2px solid var(--text); border-radius: 22px; padding: 32px; box-shadow: 8px 8px 0 var(--redfill); display: grid; gap: 14px; }
+.block-ico { width: 52px; height: 52px; border: 2px solid var(--text); border-radius: 50%; display: grid; place-items: center; background: #ffd9d2; }
+.block-card h1 { margin: 0; font-family: var(--f-display); font-size: clamp(26px, 4vw, 38px); line-height: 1.05; letter-spacing: -0.02em; }
+.block-card .lp-k { margin: 0; color: var(--bad); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
+.block-why { margin: 0; color: var(--text-2); font-size: 16px; }
+.block-reason { margin: 0; background: var(--bg-3); border: 1px solid var(--line-2); border-radius: 10px; padding: 10px 12px; font-size: 12.5px; word-break: break-word; }
+.block-steps { list-style: none; margin: 4px 0; padding: 0; display: grid; gap: 12px; }
+.block-steps li { display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: start; }
+.block-steps p { margin: 3px 0 6px; }
+.block-n { width: 26px; height: 26px; border: 1.5px solid var(--text); border-radius: 50%; display: grid; place-items: center; font-size: 12px; background: #fff; }
+.block-cmd { display: flex; gap: 8px; align-items: center; background: #0a1017; border-radius: 10px; padding: 8px 10px; flex-wrap: wrap; }
+.block-cmd code { color: #3ddbb0; font-size: 12.5px; flex: 1 1 260px; word-break: break-all; }
+.block-cmd .btn { color: #fff; }
+.block-actions { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.block-doc { margin: 0; }
+.persist-warn { background: #fff3d6; color: #5c3a00; border-bottom: 2px solid var(--warn); padding: 8px 16px; font-size: 13px; font-weight: 600; text-align: center; }

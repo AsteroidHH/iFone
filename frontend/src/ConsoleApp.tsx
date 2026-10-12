@@ -1,6 +1,10 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
+import { API_MODE } from './api/client';
+import { onBlocked, type Blocked } from './api/blocked';
+import { fetchHealth, type HealthResult } from './api/health';
+import { BlockScreen } from './components/BlockScreen';
 import { Header } from './components/Header';
 import { Banners, DevConsole, LoadError, Shortcuts, Toasts, VersionBlock } from './components/Overlays';
 import { ContextMenu } from './components/ContextMenu';
@@ -134,7 +138,7 @@ function useShortcuts() {
   }, []);
 }
 
-export default function ConsoleApp() {
+function Shell() {
   const view = useStore((s) => s.view);
   const vs = useStore((s) => s.versionState);
   const presentation = useStore((s) => s.presentation);
@@ -218,5 +222,69 @@ export default function ConsoleApp() {
         {!presentation && <DevConsole />}
       </div>
     </QueryClientProvider>
+  );
+}
+
+/**
+ * Live mode only starts the product once the backend says FalkorDB is ready, and takes it away again the moment it
+ * is not. Sample-data builds skip the check because there is no backend.
+ */
+function useBackendGate() {
+  const [result, setResult] = useState<HealthResult | null>(null);
+  const [blocked, setBlocked] = useState<Blocked | null>(null);
+  const [checking, setChecking] = useState(false);
+  const alive = useRef(true);
+
+  const poll = useCallback(async () => {
+    const r = await fetchHealth();
+    if (!alive.current) return;
+    setResult(r);
+    if (r.kind === 'ok') setBlocked(null);
+  }, []);
+
+  const recheck = useCallback(async () => {
+    setChecking(true);
+    await poll();
+    if (alive.current) setChecking(false);
+  }, [poll]);
+
+  useEffect(() => {
+    alive.current = true;
+    // The first poll is a network request; state is set when it answers, not during the effect.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void poll();
+    const off = onBlocked((b) => {
+      setBlocked(b);
+      setResult((r) => (r?.kind === 'ok' ? { kind: 'blocked', health: { ...r.health, status: 'blocked', falkordb: { ...r.health.falkordb, up: false, error: b.reason }, steps: b.steps } } : r));
+    });
+    const t = setInterval(() => void poll(), 3000);
+    return () => {
+      alive.current = false;
+      clearInterval(t);
+      off();
+    };
+  }, [poll]);
+
+  return { result, blocked, checking, recheck };
+}
+
+export default function ConsoleApp() {
+  const gate = useBackendGate();
+  if (API_MODE === 'mock') return <Shell />;
+  const r = gate.result;
+  if (!r) return <ViewFallback />;
+  if (r.kind !== 'ok' || gate.blocked) {
+    return <BlockScreen result={r} blocked={gate.blocked} checking={gate.checking} onRetry={() => void gate.recheck()} />;
+  }
+  const warnings = r.health.warnings;
+  return (
+    <>
+      {warnings.length > 0 && (
+        <div className="persist-warn" role="alert">
+          {warnings.join(' ')}
+        </div>
+      )}
+      <Shell />
+    </>
   );
 }

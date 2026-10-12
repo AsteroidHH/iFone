@@ -1,23 +1,24 @@
+import bench from '../../../../bench/results.json';
 import { useInView } from '../hooks';
 
-/** Recorded numbers only: the three measured latency percentiles from the benchmark run. */
+/** Recorded numbers only: the measured latency percentiles, read from bench/results.json at build time. */
 const BARS: [string, number][] = [
-  ['p50', 12.6],
-  ['p95', 23.08],
-  ['p99', 28.88],
+  ['p50', bench.concurrency.p50_ms],
+  ['p95', bench.concurrency.p95_ms],
+  ['p99', bench.concurrency.p99_ms],
 ];
 
 export function LatencyChart() {
   const [ref, seen] = useInView<HTMLDivElement>(0.35);
-  const max = 32;
+  const max = Math.max(10, Math.ceil(Math.max(...BARS.map((b) => b[1])) / 10) * 10);
   const W = 520;
   const rowH = 46;
   const left = 46;
-  const ticks = [0, 10, 20, 30];
+  const ticks = Array.from({ length: Math.round(max / 10) + 1 }, (_, i) => i * 10);
   return (
     <div ref={ref} className={`lp-chart${seen ? ' in' : ''}`}>
       <p className="lp-k">Latency under load · ms</p>
-      <svg viewBox={`0 0 ${W} ${BARS.length * rowH + 34}`} role="img" aria-label="Measured latency: p50 12.60 milliseconds, p95 23.08, p99 28.88">
+      <svg viewBox={`0 0 ${W} ${BARS.length * rowH + 34}`} role="img" aria-label={`Measured latency: ${BARS.map(([n, v]) => `${n} ${v.toFixed(2)} milliseconds`).join(', ')}`}>
         {ticks.map((t) => {
           const x = left + (t / max) * (W - left - 16);
           return (

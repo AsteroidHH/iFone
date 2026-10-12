@@ -53,6 +53,11 @@ export function openEventStream(h: Handlers): () => void {
         h.onEvent({ seq: 0, ts: Date.now(), epoch: 0, type: 'resync_required', data: {} } as SseEvent);
         return;
       }
+      if (msg.event === 'heartbeat') return; // liveness only; the backend's heartbeat has no sequence number
+      if (msg.event === 'error') {
+        h.onStatus('reconnecting'); // e.g. FALKORDB_UNAVAILABLE: the shell shows the setup screen
+        return;
+      }
       if (!msg.data) return;
       try {
         accept(JSON.parse(msg.data), h.onEvent);

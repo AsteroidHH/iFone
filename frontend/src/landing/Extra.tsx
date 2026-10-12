@@ -98,7 +98,7 @@ export function Savings() {
   );
 }
 
-const SNIPPET = 'claude mcp add --transport http quorum http://localhost:8001/mcp';
+const SNIPPET = 'claude mcp add --transport http quorum http://localhost:8000/mcp';
 
 export function ConnectSection() {
   const [copied, setCopied] = useState(false);

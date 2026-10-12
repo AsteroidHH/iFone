@@ -4,7 +4,9 @@ import time
 from typing import Optional
 from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import StreamingResponse
+from app import db
 from app.auth import get_auth_context, AuthContext
+from app.config import settings
 from app.services.event_bus import event_bus
 
 router = APIRouter()
@@ -39,6 +41,10 @@ async def sse_events(
                     ev = await asyncio.wait_for(queue.get(), timeout=15.0)
                     yield f"id: {ev.seq}\nevent: {ev.type}\ndata: {json.dumps(ev.model_dump())}\n\n"
                 except asyncio.TimeoutError:
+                    if settings.PERSISTENCE == "falkordb" and not db.check_health()["up"]:
+                        # Tell the console why, then end the stream; it reconnects and is blocked until FalkorDB is back.
+                        yield 'event: error\ndata: {"code": "FALKORDB_UNAVAILABLE"}\n\n'
+                        return
                     # Heartbeat
                     now_ms = int(time.time() * 1000)
                     yield f"event: heartbeat\ndata: {{\"ts\": {now_ms}}}\n\n"

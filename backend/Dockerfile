@@ -17,6 +17,12 @@ COPY backend/ backend/
 # Copy P1 graph package (graph/queries.py)
 COPY graph/ graph/
 
+# The scenario's agents (backend/app imports them)
+COPY agents/ agents/
+
+# The last recorded benchmark run, served at /api/bench/results
+COPY bench/results.json bench/results.json
+
 # Set working directory to repo root so both `backend/app/` and `graph/` are resolvable
 ENV PYTHONPATH=/app/backend:/app
 

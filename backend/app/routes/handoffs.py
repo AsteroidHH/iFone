@@ -5,18 +5,17 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.auth import get_auth_context, AuthContext, require_role
 from app.models.handoffs import Handoff, ReviewRequest, ReviewDecision
 from app.models.common import ErrorCode, HandoffStatus, HandoffKind
-from app.services.fixtures import get_fixture_handoffs
+from app.graph.queries import get_graph_store
 from app.services.event_bus import event_bus
 
 router = APIRouter()
-_handoff_store: List[Handoff] = get_fixture_handoffs()
-_handoff_lock = threading.Lock()
 
 
 @router.get("/handoffs", response_model=List[Handoff])
 def list_handoffs(auth: AuthContext = Depends(get_auth_context)):
-    with _handoff_lock:
-        return list(_handoff_store)
+    store = get_graph_store(auth.tenant)
+    with store.handoff_lock:
+        return list(store.handoffs)
 
 
 @router.post("/handoffs/{handoff_id}/claim", response_model=Handoff)
@@ -24,8 +23,9 @@ def claim_handoff(
     handoff_id: str,
     auth: AuthContext = Depends(get_auth_context),
 ):
-    with _handoff_lock:
-        target = next((h for h in _handoff_store if h.id == handoff_id), None)
+    store = get_graph_store(auth.tenant)
+    with store.handoff_lock:
+        target = next((h for h in store.handoffs if h.id == handoff_id), None)
         if not target:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -90,8 +90,9 @@ def review_handoff(
     body: ReviewRequest,
     auth: AuthContext = Depends(require_role(["human"])),
 ):
-    with _handoff_lock:
-        target = next((h for h in _handoff_store if h.id == handoff_id), None)
+    store = get_graph_store(auth.tenant)
+    with store.handoff_lock:
+        target = next((h for h in store.handoffs if h.id == handoff_id), None)
         if not target:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -101,9 +102,7 @@ def review_handoff(
         target.status = HandoffStatus.COMPLETED
 
         if body.decision in [ReviewDecision.APPROVE, "approve", "APPROVE"] and target.context_root_id:
-            from app.graph.queries import get_graph_store
             from app.models.common import GateStatus
-            store = get_graph_store(auth.tenant)
             with store._lock:
                 action_node = store.nodes.get(target.context_root_id)
                 if action_node and action_node.action:

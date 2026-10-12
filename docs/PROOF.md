@@ -1,6 +1,7 @@
 # Quorum Formal Verification & Proof Pack (`docs/PROOF.md`)
 
-**Generated:** 2026-10-12 09:02:29 UTC  
+**Generated:** 2026-10-12 17:53:07 UTC  
+**Engine:** falkordb 8.10.2  
 **Commit/Branch:** `p2-backend-agents` (Milestone 5 Full-Stack Integration)  
 **Authors:** Team Quorum (Person 1: Janani, Person 2: Aaditya, Person 3: Hamza)
 
@@ -34,10 +35,10 @@ Quorum provides cryptographic and causal **Git revert for agent beliefs**:
 ### 3.1 30-Agent High Concurrency (70% Reads, 30% Writes)
 - **Concurrent Workers:** 30 threads
 - **Total Operations:** 1200
-- **Throughput:** **33111.8 ops/sec**
-- **p50 Latency:** 0.02 ms
-- **p95 Latency:** 0.06 ms
-- **p99 Latency:** 0.08 ms
+- **Throughput:** **757.6 ops/sec**
+- **p50 Latency:** 31.5 ms
+- **p95 Latency:** 78.01 ms
+- **p99 Latency:** 100.0 ms
 - **Zero Orphans Invariant:** `PASSED` (0 healthy nodes under quarantined parents)
 
 ### 3.2 Handoff Claim Race (100 Handoffs x 30 Concurrent Claimers)
@@ -49,8 +50,8 @@ Quorum provides cryptographic and causal **Git revert for agent beliefs**:
 
 ### 3.3 Atomic Execute Guard Hammer (50 Actions Racing with Quarantine)
 - **Total Actions Staged:** 50
-- **Actions Executed Before Quarantine:** 0
-- **Actions Refused After Quarantine:** 50
+- **Actions Executed Before Quarantine:** 1
+- **Actions Refused After Quarantine:** 49
 - **Actions Executed with Quarantined Ancestor:** **0 (Invariant Violations: 0)**
 - **Race Invariant Passed:** `PASSED`
 
@@ -58,8 +59,8 @@ Quorum provides cryptographic and causal **Git revert for agent beliefs**:
 | Causal Depth | Total Descendants | Containment Time | Quorum Leakage | Baseline Delete-Only Leakage | Baseline Flat TTL Leakage |
 |:---|:---:|:---:|:---:|:---:|:---:|
 | **Depth 1** (Fact -> Conc) | 1 | 0.4 ms | **0.0%** | 100.0% | 100.0% |
-| **Depth 2** (Fact -> Conc -> Action) | 2 | 0.4 ms | **0.0%** | 100.0% | 100.0% |
-| **Depth 3** (Fact -> C1 -> C2 -> Action) | 3 | 0.4 ms | **0.0%** | 100.0% | 100.0% |
+| **Depth 2** (Fact -> Conc -> Action) | 2 | 4.53 ms | **0.0%** | 100.0% | 100.0% |
+| **Depth 3** (Fact -> C1 -> C2 -> Action) | 3 | 8.94 ms | **0.0%** | 100.0% | 100.0% |
 
 ---
 

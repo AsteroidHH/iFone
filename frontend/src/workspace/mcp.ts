@@ -59,7 +59,7 @@ export interface SetupInput {
   repoPath: string;
 }
 
-export const DEFAULT_MCP_URL = 'http://localhost:8001/mcp';
+export const DEFAULT_MCP_URL = 'http://localhost:8000/mcp';
 export const DEFAULT_REPO = 'path/to/iFone';
 
 const stdioCmd = (repo: string) => ({ command: 'python', args: [`${repo}/mcp/server.py`, '--stdio'] });

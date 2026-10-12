@@ -1,3 +1,5 @@
+import bench from '../../../bench/results.json';
+
 export const landing = {
   loader: { label: 'Replaying memory', done: 'Ready' },
   skip: 'Skip to content',
@@ -111,12 +113,16 @@ export const landing = {
     kicker: 'Proof',
     title: 'Numbers from the harness, not from us.',
     items: [
-      { v: 2030, u: ' ops/s', l: 'Mixed reads and writes, 30 agents' },
-      { v: 28.88, u: ' ms', l: 'p99 latency under that load', d: 2 },
-      { v: 100, u: '%', l: 'Single winner across 100 handoffs, 30 claimers each' },
-      { v: 0, u: '', l: 'Orphan violations: healthy node under a quarantined parent' },
+      { v: Math.round(bench.concurrency.throughput_ops_sec), u: ' ops/s', l: `Mixed reads and writes, ${bench.concurrency.agents} agents` },
+      { v: bench.concurrency.p99_ms, u: ' ms', l: 'p99 latency under that load', d: 2 },
+      { v: Math.round(bench.handoff_race.exact_single_winner_rate * 100), u: '%', l: `Single winner across ${bench.handoff_race.total_handoffs} handoffs, ${bench.handoff_race.concurrent_claimers} claimers each` },
+      {
+        v: bench.concurrency.healthy_children_under_quarantined + bench.execute_race.actions_executed_after_ancestor_quarantined,
+        u: '',
+        l: 'Orphan violations: healthy node under a quarantined parent, or an action run after its source was quarantined',
+      },
     ],
-    note: 'Recorded by the graph owner from python bench/run.py and kept in docs/FOCUS_CHECKLIST.md. Re-run the proof yourself with make proof.',
+    note: `Measured on ${bench.engine === 'falkordb' ? `FalkorDB ${bench.falkordb_version ?? ''}`.trim() : 'the in-memory model (not FalkorDB)'} by python bench/run.py and read straight from bench/results.json at build time. Numbers depend on the machine. Re-run it yourself with make proof.`,
   },
   tracks: {
     tag: '09',

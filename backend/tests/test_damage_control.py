@@ -13,7 +13,7 @@ from app.models.common import (
 from app.models.graph import GraphNode, ActionInfo
 from app.services.auditor import auditor_service
 from app.services.saga import generate_correction_notice
-from app.routes.handoffs import _handoff_store, _handoff_lock
+from handoff_compat import _handoff_store, _handoff_lock
 
 
 @pytest.fixture

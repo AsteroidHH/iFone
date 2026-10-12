@@ -15,7 +15,7 @@ const csp = [
   "form-action 'self'",
 ].join('; ');
 
-const mcp = process.env.QUORUM_MCP ?? 'http://127.0.0.1:8001';
+const mcp = process.env.QUORUM_MCP ?? backend;
 const proxy = { '/api': { target: backend, changeOrigin: false }, '/mcp': { target: mcp, changeOrigin: false } };
 
 export default defineConfig({
