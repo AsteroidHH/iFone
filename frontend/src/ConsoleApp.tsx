@@ -11,6 +11,7 @@ import { startAutopilot } from './state/autopilot';
 import { startSession, stopSession } from './state/pipeline';
 import { queryClient } from './state/queries';
 import { closePopovers, navMove, POPOVERS, useStore } from './state/store';
+import { useLive } from './workspace/live';
 
 // Everything heavy loads on demand: the graph engine only when the console is opened, each view only when visited.
 const Console = lazy(() => import('./views/Console').then((m) => ({ default: m.Console })));
@@ -18,6 +19,9 @@ const Memory = lazy(() => import('./views/Memory').then((m) => ({ default: m.Mem
 const Brain = lazy(() => import('./views/Brain').then((m) => ({ default: m.Brain })));
 const Tenants = lazy(() => import('./views/Tenants').then((m) => ({ default: m.Tenants })));
 const Benchmark = lazy(() => import('./views/Benchmark').then((m) => ({ default: m.Benchmark })));
+const Context = lazy(() => import('./views/Context').then((m) => ({ default: m.Context })));
+const Connect = lazy(() => import('./views/Connect').then((m) => ({ default: m.Connect })));
+const Team = lazy(() => import('./views/Team').then((m) => ({ default: m.Team })));
 const CommandPalette = lazy(() => import('./components/CommandPalette').then((m) => ({ default: m.CommandPalette })));
 
 function ViewFallback() {
@@ -105,6 +109,15 @@ function useShortcuts() {
         case '5':
           st.set({ view: 'benchmark' });
           break;
+        case '6':
+          st.set({ view: 'context' });
+          break;
+        case '7':
+          st.set({ view: 'connect' });
+          break;
+        case '8':
+          st.set({ view: 'team' });
+          break;
       }
     };
     const onPointer = (e: PointerEvent) => {
@@ -133,6 +146,14 @@ export default function ConsoleApp() {
   useEffect(() => {
     void startSession();
     return () => stopSession();
+  }, []);
+
+  useEffect(() => {
+    useLive.getState().start(() => {
+      const st = useStore.getState();
+      return { graph: { nodes: Object.values(st.nodes), edges: Object.values(st.edges) }, tenant: st.tenant, epoch: st.epoch };
+    });
+    return () => useLive.getState().stop();
   }, []);
 
   // The palette must open instantly on first Ctrl+K, so fetch its chunk as soon as the console is up.
@@ -164,7 +185,7 @@ export default function ConsoleApp() {
   return (
     <QueryClientProvider client={queryClient}>
       <div className={`app${presentation ? ' presenting' : ''}${demo ? ' demo' : ''}`}>
-        <h1 className="sr-only">Quorum console</h1>
+        {view === 'console' && <h1 className="sr-only">Quorum console</h1>}
         <Header />
         <Banners />
         {vs === 'major' ? (
@@ -179,6 +200,9 @@ export default function ConsoleApp() {
               {view === 'brain' && <Brain />}
               {view === 'tenants' && <Tenants />}
               {view === 'benchmark' && <Benchmark />}
+              {view === 'context' && <Context />}
+              {view === 'connect' && <Connect />}
+              {view === 'team' && <Team />}
             </Suspense>
           </div>
         )}

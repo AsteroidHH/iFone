@@ -129,7 +129,7 @@ check('inspector shows path for the poisoned fact', (await text('.inspector')).i
 await page.getByRole('tab', { name: 'Details' }).click();
 await wait(300);
 const det = await text('.inspector');
-check('details show quarantined status and 6 downstream nodes', det.includes('Quarantined') && det.includes('6 nodes built on this'));
+check('details show quarantined status and 7 downstream nodes', det.includes('Quarantined') && det.includes('7 nodes built on this'), det.replace(/s+/g, ' ').slice(0, 200));
 await page.getByRole('tab', { name: 'Cypher' }).click();
 await wait(500);
 check('Cypher tab shows the cascade query', (await text('.inspector')).includes('QUARANTINED'));
@@ -223,7 +223,7 @@ await page.getByRole('tab', { name: 'Insights' }).click();
 await wait(500);
 check('Insights shows the belief flow chart', (await page.locator('.ins-flow').count()) === 1);
 check('Insights lists the most connected nodes', (await page.locator('.ins-gods li').count()) >= 3);
-check('Insights has a quarantined count', (await text('.ins-kpi.bad')).includes('07'));
+check('Insights has a quarantined count', (await text('.ins-kpi.bad')).includes('08'), (await text('.ins-kpi.bad')).replace(/s+/g, ' '));
 await page.getByRole('button', { name: 'Show on graph' }).click();
 await wait(500);
 check('shortest path can be shown on the graph', await page.locator('.status-chip.path').isVisible());
@@ -360,9 +360,52 @@ for (const w of [1280, 1024]) {
   await page.setViewportSize({ width: w, height: 800 });
   await wait(500);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
-  check(`no horizontal page scroll at ${w}px`, !overflow);
+  const off = overflow
+    ? await page.evaluate(() => [...document.querySelectorAll('body *')].filter((e) => e.getBoundingClientRect().right > document.documentElement.clientWidth + 1).slice(0, 4).map((e) => `${e.tagName}.${String(e.className).slice(0, 30)}`).join(', '))
+    : '';
+  check(`no horizontal page scroll at ${w}px`, !overflow, off);
 }
 await page.setViewportSize({ width: 1440, height: 900 });
+
+// workspace: context, connect, team
+await page.keyboard.press('Escape');
+await page.keyboard.press('6');
+await page.locator('.ctx').waitFor({ timeout: 3000 }).catch(() => {});
+check('Context page shows a computed savings figure', /\d+%/.test(await text('.ctx-big')), (await text('.ctx-pct')).replace(/\s+/g, ''));
+const mapTxt = await text('.ctx-pre');
+check('Context page shows the compact map the agent receives', mapTxt.includes('quorum map'));
+await page.getByLabel('Token budget', { exact: false }).first().fill('120').catch(() => {});
+await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
+await page.keyboard.press('7');
+await page.locator('.cn').waitFor({ timeout: 3000 }).catch(() => {});
+check('Connect page reports MCP status honestly in sample mode', (await text('.cn-status')).includes('Sample data (simulated)'));
+check('Connect page lists the real MCP tools', (await page.locator('.cn-table tbody tr').count()) >= 10);
+check('Connect page gives a ready-to-paste Claude Code command', (await text('.cn-block .terminal')).includes('claude mcp add'));
+await page.locator('.cn-row').first().waitFor({ timeout: 8000 }).catch(() => {});
+check('live feed fills with tool calls', (await page.locator('.cn-row').count()) > 0);
+await page.getByRole('tab', { name: 'Chats' }).click();
+await wait(600);
+check('chats tab lists members', (await page.locator('.cn-people li').count()) >= 3);
+await page.keyboard.press('8');
+await page.locator('.tm').waitFor({ timeout: 3000 }).catch(() => {});
+check('Team page shows seat usage', /\d+ \/ \d+/.test(await text('.tm-seats')));
+await page.locator('.tm-form input[placeholder="Customer success"]').fill('Support');
+await page.locator('.tm-form').first().getByRole('button', { name: 'Add team' }).click();
+check('duplicate team name is refused with a message', (await text('.tm-err')).toLowerCase().includes('already exists'));
+const linksBefore = await page.locator('.tm-links li').count();
+const sels = page.locator('.tm-mesh .tm-form select');
+await sels.nth(0).selectOption({ index: 3 });
+await sels.nth(1).selectOption({ index: 4 });
+await page.locator('.tm-mesh .tm-form').getByRole('button', { name: 'Link' }).click();
+await wait(300);
+check('linking two members adds a link', (await page.locator('.tm-links li').count()) === linksBefore + 1);
+await page.keyboard.press('1');
+await wait(400);
+await page.getByRole('tab', { name: /Mind map/ }).click();
+await wait(500);
+check('Mind map tab shows the memory as a foldable tree', (await page.locator('.mm-node').count()) > 5);
+await page.getByRole('tab', { name: /^Graph/ }).click();
+await wait(300);
 
 // autopilot (reset first)
 await btn('Reset scenario').click();

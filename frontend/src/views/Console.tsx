@@ -6,6 +6,7 @@ import { Crumbs } from '../components/Crumbs';
 import { Containment } from '../components/Containment';
 import { HistoryFeed } from '../components/History';
 import { Inspector } from '../components/Inspector';
+import { MindMap } from '../components/MindMap';
 import { ScenarioControls } from '../components/Scenario';
 import { Timeline } from '../components/Timeline';
 import { GraphCanvas } from '../graph/GraphCanvas';
@@ -15,8 +16,22 @@ const PromptDiff = lazy(() => import('../components/PromptDiff').then((m) => ({ 
 const Ledger = lazy(() => import('../components/Ledger').then((m) => ({ default: m.Ledger })));
 const Insights = lazy(() => import('../components/Insights').then((m) => ({ default: m.Insights })));
 
-const TABS: Tab[] = ['graph', 'diff', 'ledger', 'insights'];
-const TAB_ICON: Record<Tab, string> = { graph: 'graph', diff: 'doc', ledger: 'bolt', insights: 'chart' };
+function MindTab() {
+  const nodes = useStore((s) => s.nodes);
+  const edges = useStore((s) => s.edges);
+  const tenant = useStore((s) => s.tenant);
+  const selected = useStore((s) => s.selectedId);
+  const set = useStore((s) => s.set);
+  const n = Object.values(nodes);
+  return (
+    <div className="mind-tab">
+      <MindMap nodes={n} edges={Object.values(edges)} tenant={tenant} selected={selected} compact onPick={(id) => set({ selectedId: id, tab: 'graph' })} />
+    </div>
+  );
+}
+
+const TABS: Tab[] = ['graph', 'mindmap', 'diff', 'ledger', 'insights'];
+const TAB_ICON: Record<Tab, string> = { graph: 'graph', mindmap: 'map', diff: 'doc', ledger: 'bolt', insights: 'chart' };
 
 export function Console({ visible }: { visible: boolean }) {
   const tab = useStore((s) => s.tab);
@@ -46,6 +61,7 @@ export function Console({ visible }: { visible: boolean }) {
         </div>
         <GraphCanvas active={visible && tab === 'graph'} />
         <Suspense fallback={<div className="tab-fallback"><Skeleton lines={5} /></div>}>
+          {tab === 'mindmap' && <MindTab />}
           {tab === 'diff' && <PromptDiff />}
           {tab === 'ledger' && <Ledger />}
           {tab === 'insights' && <Insights />}

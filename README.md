@@ -233,3 +233,11 @@ Once booted:
 <div align="center">
 Built with ❤️ for the <b>Graph Hacks: Context for AI Agents</b> Hackathon (Oct 2026).
 </div>
+
+## Context, Connect and Team (console)
+
+- **Context** shows the memory as a mind map for people and as a compact map plus packed answer for agents, with live token numbers against a top-8 retriever, pasted notes and raw JSON. Method and tests: `frontend/src/context/`.
+- **Connect** shows whether the MCP server is reachable, gives paste-ready setup for Claude Code, Claude Desktop, Cursor, VS Code, Windsurf, Antigravity and any MCP client, and lists the tools.
+- **Team** manages plan, teams, seats, members (each with their own token and AI) and links that let different laptops share context.
+
+Parts that need new backend endpoints are specified in [`docs/CONTRACT_PROPOSALS.md`](docs/CONTRACT_PROPOSALS.md) and are labelled as simulated or preview in the UI.
