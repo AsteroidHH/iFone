@@ -3,63 +3,63 @@ version: '3.8'
 services:
   falkordb:
     image: falkordb/falkordb:latest
+    container_name: quorum-falkordb
     ports:
       - "6379:6379"
     volumes:
-      - falkordb_data:/var/lib/falkordb/data
-    restart: unless-stopped
-    command: ["--loadmodule", "/usr/lib/redis/modules/falkordb.so"] 
+      - falkordb_data:/data
+      - ./scripts/users.acl:/etc/redis/users.acl:ro
+    command: ["falkordb", "--aclfile", "/etc/redis/users.acl", "--save", "60", "1"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
-  falkordb-browser:
-    image: falkordb/falkordb-browser:latest
-    ports:
-      - "8080:8080"
-    environment:
-      - FALKORDB_HOST=falkordb
-      - FALKORDB_PORT=6379
-    depends_on:
-      - falkordb
-
-  # The following are placeholders for the Oct 15 build
-  backend:
-    build: ./backend
-    ports:
-      - "8000:8000"
-    environment:
-      - REDIS_URL=redis://falkordb:6379
-    depends_on:
-      - falkordb
-    profiles:
-      - do-not-start-yet
-
-  mcp_server:
-    build: ./mcp
+  mock_helpdesk:
+    build:
+      context: ./mock_helpdesk
+      dockerfile: Dockerfile
+    container_name: quorum-mock-helpdesk
     ports:
       - "8001:8001"
     environment:
-      - API_URL=http://backend:8000
-    depends_on:
-      - backend
-    profiles:
-      - do-not-start-yet
+      - PORT=8001
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
-  agents:
-    build: ./agents
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: quorum-backend
+    ports:
+      - "8000:8000"
     environment:
-      - MCP_SERVER_URL=http://mcp_server:8001
+      - FALKORDB_HOST=falkordb
+      - FALKORDB_PORT=6379
+      - MOCK_HELPDESK_URL=http://mock_helpdesk:8001
+      - PORT=8000
     depends_on:
-      - mcp_server
-    profiles:
-      - do-not-start-yet
+      falkordb:
+        condition: service_healthy
+      mock_helpdesk:
+        condition: service_healthy
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: quorum-frontend
     ports:
-      - "3000:3000"
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
     depends_on:
       - backend
-    profiles:
-      - do-not-start-yet
 
 volumes:
   falkordb_data:

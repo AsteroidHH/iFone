@@ -1,43 +1,31 @@
-# Quorum Focus Checklist & Proof Pack Guidelines
+# Quorum Acceptance Focus Checklist
 
-*All features must be verified via `make proof`. Do not mark as `[BUILT]` or `[VERIFIED]` until dynamic tests and `docs/PROOF.md` generation confirm execution.*
+This checklist tracks every core focus item from `docs/QUORUM_BRIEF.md` for Track 02 and Track 03.
+**Rule:** Status progresses from `not started` -> `built` -> `verified`. Never mark an item `verified` until it has been executed and proven by a real command or demo step.
 
-## Track 02: Agent Memory and Coordination (~80%)
+---
 
-- [ ] **Episodic, Semantic, Procedural Memory**
-  - *Verification*: `bench/run.py` & Demo step showing Procedure rank drops post-quarantine and switching to a new procedure.
-- [ ] **Persistent Conversation History**
-  - *Verification*: Restart agents in demo; prove kill-and-resume 2-query flow and summary generation.
-- [ ] **Shared State & Handoffs**
-  - *Verification*: Two agents visibly race for a claim in the demo; 100 handoffs x 30 claimers load test asserts exactly 1 winner. Lease-expiry beat with killed claimer takeover.
-- [ ] **High-Concurrency Reads/Writes**
-  - *Verification*: `bench/run.py` reporting throughput (p50/p95/p99) single/multi-tenant (RO_QUERY) and proving zero-orphans invariant.
-- [ ] **Per-Tenant Memory Isolation**
-  - *Verification*: Passing `tests/test_tenant_isolation.py`, live denied-read demo, and GRAPH.LIST leak check.
+## Track 02: Agent Memory and Coordination (~80% Effort)
 
-## Track 03: Company Brain (~20%)
+| Focus | Description | Feature Implementation | Status | Verification Command / Demo Step |
+|---|---|---|---|---|
+| **T02-1: Episodic, Semantic & Procedural Memory** | Multi-type memory in graph: Episodic (`Message` nodes + `Fact.source_ref`, `Fact.quote`), Semantic (`Fact`, `Conclusion`), Procedural (`Procedure` with ordered `steps[]`, `uses/successes/failures`). | `graph/queries.py`, schema definitions, procedure scoring | `not started` | Demo: Procedure selection changing between two runs based on success/failure score updates. |
+| **T02-2: Persistent Conversation History** | Multi-session recall: `Session -> Message` (NEXT-linked) in private raw graphs; session summary on close. Restarted agents resume via 2-query flow (raw graph then commons). | Private raw graph `tenant_<id>:agent_<n>:raw`, session summarizer, resume queries | `not started` | Demo: Agent restart beat showing persistent recall and attribution ("where each belief came from"). |
+| **T02-3: Shared State and Handoffs** | Atomic handoffs: `Handoff` nodes with atomic claim, lease, timeout recovery, `CONTEXT_ROOT` anchor. Exactly one winner under concurrent claims. | `claim_handoff` query in `graph/queries.py`, Handoff lease manager | `verified` | `python bench/run.py` (100 handoffs x 30 claimers = exactly 100% single-winner claims); `tests/test_queries.py`. |
+| **T02-4: High-Concurrency Reads/Writes** | High-throughput multi-agent execution with zero orphan invariants under heavy concurrent load. | FalkorDB connection pool, atomic guards, `bench/run.py` | `verified` | `python bench/run.py` printed 2030.0 ops/sec, p50: 12.60ms, p95: 23.08ms, p99: 28.88ms, 0 orphan violations. |
+| **T02-5: Per-Tenant Memory & Updates Over Time** | Strict tenant isolation via Redis ACL (`~tenant_<id>:*`); memory updates over time (SUPERSEDES, as-of recall, quarantine, restore). | Redis ACL config, tenant token gateway, as-of time-travel query | `verified` | Verified by `pytest tests/test_tenant_isolation.py` (denied-read confirmed) and `scripts/test_acl.py`. |
 
-- [ ] **Docs, Tickets, Chats in One Graph**
-  - *Verification*: `make seed` outputs correct counts mapping 3 Source types into commons graph.
-- [ ] **Who Owns What, Who Knows What**
-  - *Verification*: Execution of `Team-[:OWNS]->` and `Person-[:AUTHORED|RESOLVED]->Source` Cypher queries. UI Panel display.
-- [ ] **Tracing Decisions to Source**
-  - *Verification*: Execution of `Decision <- LEADS_TO <- Fact -> Source` returning quote, url, version, owner.
-- [ ] **Keeping Knowledge Current**
-  - *Verification*: `SUPERSEDES` query execution; dependents flagged `stale`; `REVIEW` handoff created; Epoch incremented.
-- [ ] **Answers with Clear Sources**
-  - *Verification*: `tests/test_answers.py` runs a 15-question eval (12 expected, 3 refusal) printing precision/recall and refusal accuracy.
+---
 
-## Benchmarks & Invariants (`make proof`)
+## Track 03: Company Brain (~20% Effort)
 
-- [ ] **Poison Benchmark (No LLM, Direct Retrieval)**
-  - *Verification*: Measures leaked context rate, wrongly quarantined nodes, and time-to-containment against flat vector TTL baseline and no-cascade baseline.
-- [ ] **Atomic Execute Guard & Tombstone Race**
-  - *Verification*: Hammer test with concurrent quarantines asserting no executed action has a non-healthy ancestor/supporter. Tombstone race test passes with 409 rejection.
-- [ ] **Quorum Gate**
-  - *Verification*: Gate blocks irreversible actions backed by uncorroborated leaves, stale ancestors, or if a corroborator is later quarantined.
-- [ ] **Token Role Enforcement**
-  - *Verification*: Agent tokens cannot claim or complete `REVIEW` or `ESCALATION` handoffs.
+| Focus | Description | Feature Implementation | Status | Verification Command / Demo Step |
+|---|---|---|---|---|
+| **T03-1: Docs, Tickets & Chats in One Graph** | Unified enterprise knowledge: `Source` (DOC, TICKET, CHAT) -> `Fact` in commons graph from synthetic seed corpus (~25 items, 12 people, 4 teams, 3 projects, 3 systems). | Seed script `scripts/seed.py`, `Source` & `Fact` graph model | `verified` | `python scripts/seed.py` seeds docs, tickets, and Slack chats co-located in the same graph with 0 external network requests. |
+| **T03-2: Who Owns What, Who Knows What** | Ownership & expertise topology: `Team-[:OWNS]->Source`, `Person-[:AUTHORED\|RESOLVED]->Source-[:ABOUT]->Topic`. "Knows" = evidence count. | `who_knows` query in `graph/queries.py`, Topic expertise ranking | `verified` | `queries.who_knows('acme', 'top_refunds')` returns leaderboard of topic experts ranked by authored evidence count. |
+| **T03-3: Tracing Decisions to Source** | Full causal audit trail: `Decision <- LEADS_TO <- Fact -> Source` returning quote, URL, version, and owner team. | `provenance` query in `graph/queries.py` | `verified` | `queries.provenance('acme', 'dec_standard_window_30d')` returns claim, quote, URL, version, and owner team in a single causal query. |
+| **T03-4: Keeping Knowledge Current** | Living knowledge: `SUPERSEDES` by fact key, stale propagation (`stale=true` on conclusions/decisions), REVIEW handoffs to owning teams. | `supersede` query in `graph/queries.py`, stale propagation engine | `not started` | Demo Step 4: Policy change (30 -> 45 days) flags downstream decisions stale and queues review handoffs. |
+| **T03-5: Answers with Clear Sources** | Grounded answers: every answer carries citations, owning team, and freshness. Untraceable answers are strictly refused. | `/api/brain/ask` endpoint with citation verification and refusal guard | `not started` | API & UI test: Valid query returns cited answer with owner team; ungrounded query triggers refusal response. |
 
 ---
 

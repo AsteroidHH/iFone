@@ -1,19 +1,19 @@
-.PHONY: help proof demo seed
+.PHONY: all up down test proof clean
 
-help:
-	@echo "Quorum Makefile Commands:"
-	@echo "  make proof  - Runs all tests, benchmarks, and generates docs/PROOF.md"
-	@echo "  make demo   - Starts the deterministic replay mode demo"
-	@echo "  make seed   - Generates the synthetic corpus and precomputed embeddings (Available Oct 15+)"
+all: up
+
+up:
+	docker compose up -d
+
+down:
+	docker compose down -v
+
+test:
+	pytest tests/ -v
 
 proof:
-	@echo "Running tests and benchmarks..."
-	@echo "(Placeholder for Oct 15: python bench/run.py > docs/PROOF.md)"
+	python bench/run.py
 
-demo:
-	@echo "Starting demo environment..."
-	@echo "(Placeholder for Oct 15)"
-
-seed:
-	@echo "Seeding database..."
-	@echo "(Placeholder for Oct 15)"
+clean:
+	find . -type d -name __pycache__ -exec rm -rf {} +
+	find . -type f -name "*.pyc" -delete
