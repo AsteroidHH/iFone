@@ -82,7 +82,7 @@ function VisualPrevent() {
       </g>
       <path className="v-line flow" d="M244 130 H312" />
       <g className="v-act">
-        <rect x="312" y="106" width="92" height="48" rx="6" />
+        <rect x="300" y="106" width="116" height="48" rx="6" />
         <text x="358" y="128">refund</text>
         <text x="358" y="144" className="s">needs 2 sources</text>
       </g>

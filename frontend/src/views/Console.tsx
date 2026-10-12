@@ -36,9 +36,9 @@ export function Console({ visible }: { visible: boolean }) {
         <div className="center-head">
           <div className="seg" role="tablist">
             {TABS.map((t) => (
-              <button key={t} role="tab" aria-selected={tab === t} className={`seg-btn${tab === t ? ' on' : ''}`} onClick={() => set({ tab: t })}>
+              <button key={t} role="tab" aria-selected={tab === t} className={`seg-btn${tab === t ? ' on' : ''}`} title={copy.tabs[t]} aria-label={copy.tabs[t]} onClick={() => set({ tab: t })}>
                 <Icon name={TAB_ICON[t]} size={14} />
-                {copy.tabs[t]}
+                <span className="tab-label">{copy.tabs[t]}</span>
               </button>
             ))}
           </div>

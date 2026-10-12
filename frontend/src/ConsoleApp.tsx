@@ -164,6 +164,7 @@ export default function ConsoleApp() {
   return (
     <QueryClientProvider client={queryClient}>
       <div className={`app${presentation ? ' presenting' : ''}${demo ? ' demo' : ''}`}>
+        <h1 className="sr-only">Quorum console</h1>
         <Header />
         <Banners />
         {vs === 'major' ? (

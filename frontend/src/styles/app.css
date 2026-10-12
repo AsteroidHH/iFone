@@ -601,7 +601,18 @@ button.pill:hover {
   min-height: 0;
 }
 .col.left {
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 6px 6px 0;
+  scrollbar-width: thin;
+}
+.col.left > * {
+  flex-shrink: 0;
+}
+button,
+.btn {
+  -webkit-user-select: none;
+  user-select: none;
 }
 .col.right {
   overflow-y: auto;
