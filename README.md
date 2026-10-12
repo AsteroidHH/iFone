@@ -45,3 +45,16 @@ make proof
 
 ---
 *Development begins Oct 15, 2026. Prior to this date, only scaffolding exists.*
+
+## Frontend console
+
+The console lives in `frontend/` (React, Vite, TypeScript, Cytoscape). It runs on its own scripted data by default and switches to this backend with `VITE_API_MODE=live`.
+
+```bash
+cd frontend
+npm install
+npm run dev        # http://127.0.0.1:5173
+```
+
+Design notes: [docs/FRONTEND_DESIGN.md](docs/FRONTEND_DESIGN.md). Scripts, modes and layout: [frontend/README.md](frontend/README.md). One screenshot per demo beat: [docs/screens/](docs/screens/). The frontend was built with Claude Code and reviewed and committed by Hamza.
+
