@@ -1,7 +1,7 @@
 export const copy = {
   appName: 'Quorum',
   tagline: 'Git revert for agent beliefs',
-  nav: { console: 'Console', memory: 'Memory', brain: 'Brain', tenants: 'Tenants', benchmark: 'Benchmark' },
+  nav: { console: 'Console', memory: 'Memory', brain: 'Brain', tenants: 'Tenants', benchmark: 'Benchmark', context: 'Context', connect: 'Connect', team: 'Team' },
   sampleData: 'Sample data',
   sampleHint: 'A scripted scenario running in this browser. Connect a Quorum backend to see real memory.',
   mockBanner: 'Mock data, not from Quorum',
@@ -153,7 +153,7 @@ export const copy = {
     title: 'Acme Support shares one memory',
     body: 'Press Inject poisoned webhook to see what one wrong belief does.',
   },
-  tabs: { graph: 'Graph', diff: 'Prompt diff', ledger: 'Actions and handoffs', insights: 'Insights' },
+  tabs: { graph: 'Graph', mindmap: 'Mind map', diff: 'Prompt diff', ledger: 'Actions and handoffs', insights: 'Insights' },
   containment: {
     title: 'Containment report',
     loading: 'Measuring blast radius',
@@ -331,7 +331,7 @@ export const copy = {
       ['P', 'Presentation mode'],
       ['Esc', 'Dismiss, clear selection'],
       ['Ctrl K', 'Search nodes and run commands'],
-      ['1 to 5', 'Switch views'],
+      ['1 to 8', 'Switch views'],
       ['Alt Left', 'Previous selection'],
       ['Alt Right', 'Next selection'],
       ['?', 'Show this list'],

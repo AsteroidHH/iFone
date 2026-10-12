@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { CorrectionNotice } from '../api/schemas';
 import { copy } from '../copy';
@@ -62,13 +62,18 @@ export function Containment() {
   const selected = useStore((s) => s.selectedId);
   const [compact, setCompact] = useState(false);
   const [modalNotice, setModalNotice] = useState<CorrectionNotice | null>(null);
-  useEffect(() => setCompact(!!selected), [selected]);
+  const [prevSel, setPrevSel] = useState(selected);
+  if (prevSel !== selected) {
+    setPrevSel(selected);
+    setCompact(!!selected);
+  }
   const q = useQuery({
     queryKey: ['report', root],
     queryFn: () => getReport(root as string),
     enabled: !!root,
   });
-  const handoffs = useQuery({ queryKey: ['handoffs'], queryFn: getHandoffs });
+  const loaded = useStore((st) => st.loaded);
+  const handoffs = useQuery({ queryKey: ['handoffs'], queryFn: getHandoffs, enabled: loaded });
   const ms = useCountUp(q.data?.ms_to_containment ?? 0);
 
   const nodeNotice = Object.values(nodes).find((n) => n.action?.correction_notice)?.action?.correction_notice;

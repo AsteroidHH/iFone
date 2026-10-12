@@ -8,6 +8,9 @@ export const landing = {
       ['defense', 'Defense'],
       ['console', 'Console'],
       ['proof', 'Proof'],
+      ['savings', 'Savings'],
+      ['connect', 'Connect'],
+      ['teams', 'Teams'],
     ] as [string, string][],
     cta: 'Open console',
     menu: 'Menu',
@@ -116,7 +119,7 @@ export const landing = {
     note: 'Recorded by the graph owner from python bench/run.py and kept in docs/FOCUS_CHECKLIST.md. Re-run the proof yourself with make proof.',
   },
   tracks: {
-    tag: '06',
+    tag: '09',
     kicker: 'What it covers',
     title: 'Two tracks, one graph.',
     t2: {

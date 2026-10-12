@@ -10,6 +10,8 @@ import { tools } from '../copy/tools';
 import { rememberFocus } from './focus';
 import { Icon } from './Icon';
 import { Skeleton } from './ui';
+import { fmt } from '../context/tokens';
+import { useLive } from '../workspace/live';
 
 const VIEWS: { id: View; icon: string }[] = [
   { id: 'console', icon: 'console' },
@@ -17,7 +19,23 @@ const VIEWS: { id: View; icon: string }[] = [
   { id: 'brain', icon: 'brain' },
   { id: 'tenants', icon: 'tenants' },
   { id: 'benchmark', icon: 'bench' },
+  { id: 'context', icon: 'sparkle' },
+  { id: 'connect', icon: 'link' },
+  { id: 'team', icon: 'user' },
 ];
+
+function SavedPill() {
+  const naive = useLive((s) => s.totals.naive);
+  const used = useLive((s) => s.totals.used);
+  const set = useStore((s) => s.set);
+  const saved = Math.max(0, naive - used);
+  return (
+    <button className="pill saved" onClick={() => set({ view: 'context' })} title="Estimated tokens not sent to agents in this session. Open Context for the breakdown.">
+      <Icon name="sparkle" size={13} />
+      <span className="num">{fmt(saved)}</span> <span className="saved-w">saved</span>
+    </button>
+  );
+}
 
 function EpochBadge() {
   const epoch = useStore((s) => s.epoch);
@@ -96,7 +114,7 @@ export function Header() {
       </button>
       <nav aria-label={copy.header.menu} className="nav">
         {VIEWS.map((v) => (
-          <button key={v.id} className={`navbtn${view === v.id ? ' on' : ''}`} aria-current={view === v.id ? 'page' : undefined} onClick={() => set({ view: v.id })}>
+          <button key={v.id} className={`navbtn${view === v.id ? ' on' : ''}`} aria-current={view === v.id ? 'page' : undefined} aria-label={copy.nav[v.id]} title={copy.nav[v.id]} onClick={() => set({ view: v.id })}>
             <Icon name={v.icon} size={16} />
             <span className="nav-label">{copy.nav[v.id]}</span>
           </button>
@@ -123,6 +141,7 @@ export function Header() {
         <span className={`pill mode ${mode}`} title={copy.modeHint[mode] ?? ''}>
           {copy.mode[mode] ?? mode}
         </span>
+        <SavedPill />
         <EpochBadge />
         <InvariantLight />
         <span className={`pill conn ${conn}`} role="status">

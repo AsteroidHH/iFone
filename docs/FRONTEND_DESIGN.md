@@ -89,3 +89,14 @@ A "Sample data" chip sits in the header whenever the scripted in-browser backend
 ## Verification
 
 `npm run verify` runs typecheck, unit tests, contrast, contract check and the production build. `npm run screens`, `npm run qa`, `npm run landing` and `node scripts/feature-shots.mjs` drive the app headlessly; screenshots land in `docs/screens/` and are reviewed before a beat counts as done.
+
+## Workspace views (Context, Connect, Team) and the mind map
+
+Direction: the same print proof room, read as a switchboard. Links are cables, meters are pixel numerals, every MCP tool is a labelled jack.
+
+- **Context** (`views/Context.tsx`, `context/packer.ts`): the two views of one memory. The mind map (`components/MindMap.tsx`) is the organized view for people; the compact map and packed answer are what the agent receives. Savings are computed live against three baselines (raw JSON, notes, a typical top-8 retriever) and attributed per technique. The retriever baseline is the conservative one and is what the header counter uses.
+- **Connect** (`views/Connect.tsx`, `workspace/mcp.ts`): MCP status, a three-step setup with copy-paste snippets for eight clients, the tool list (real tools plus clearly marked proposed ones), a live feed and chats. In live mode the status is a real handshake; in sample mode it says "simulated".
+- **Team** (`views/Team.tsx`, `workspace/store.ts`): plan and seats, teams, members with their own tokens and AI clients, and links that make members share context. State persists in `localStorage`; limits and validation are real, the service behind it is a proposal (`docs/CONTRACT_PROPOSALS.md`).
+- **Mind map tab** in the Console: the same tree, fed by the live graph.
+
+Honesty rules for these pages: simulated activity is labelled "Simulated activity"; synthetic memories are labelled synthetic; token numbers are estimates and say so; nothing claims a saving it did not compute.
