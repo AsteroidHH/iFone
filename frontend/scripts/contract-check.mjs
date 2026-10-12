@@ -7,7 +7,8 @@ const fixtures = spawnSync('npx', ['vitest', 'run', 'src/test/contract.test.ts']
 if (fixtures.status !== 0) process.exit(fixtures.status ?? 1);
 
 const backend = process.env.QUORUM_BACKEND;
-const snapshotPath = new URL('../../contracts/openapi.snapshot.json', import.meta.url);
+const backendSnapshot = new URL('../../contracts/openapi.json', import.meta.url);
+const snapshotPath = existsSync(backendSnapshot) ? backendSnapshot : new URL('../../contracts/openapi.snapshot.json', import.meta.url);
 if (!backend) {
   console.log('\nLive drift check skipped: set QUORUM_BACKEND (for example http://localhost:8000) to diff /openapi.json.');
   process.exit(0);
