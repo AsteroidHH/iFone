@@ -1,0 +1,8 @@
+{
+  "tokens": {
+    "acme": { "human": "mock-acme-human", "auditor": "mock-acme-auditor", "agent": "mock-acme-agent" },
+    "globex": { "human": "mock-globex-human", "auditor": "mock-globex-auditor", "agent": "mock-globex-agent" }
+  },
+  "tenants": ["acme", "globex"],
+  "note": "Demo tokens only. Replace at deploy time; never commit real tokens."
+}

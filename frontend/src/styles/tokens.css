@@ -1,0 +1,39 @@
+/* Design direction: a forensic ledger drawn on drafting paper. Quiet, light, precise. */
+:root {
+  --vellum: #e6ebef;
+  --paper: #f7f9fa;
+  --ink: #101c2b;
+  --graphite: #566577;
+
+  --verdigris: #17806d;
+  --verdigris-text: #0f6354;
+  --verdigris-wash: #e3f2ee;
+  --stamp: #c62f1b;
+  --stamp-text: #a82513;
+  --stamp-wash: #fbe6e2;
+  --ochre: #b5760f;
+  --ochre-text: #8a5a0b;
+  --ochre-wash: #f8eed9;
+  --pencil: #8d9aa8;
+  --ultramarine: #3b3fd1;
+  --ultramarine-wash: #e8e9fa;
+
+  --hairline: rgb(16 28 43 / 14%);
+  --hairline-strong: rgb(16 28 43 / 28%);
+  --grid-fine: rgb(16 28 43 / 5%);
+  --grid-coarse: rgb(16 28 43 / 9%);
+
+  --font-ui: 'Schibsted Grotesk', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --t12: 12px;
+  --t13: 13px;
+  --t14: 14px;
+  --t16: 16px;
+  --t20: 20px;
+  --t28: 28px;
+  --t44: 44px;
+
+  --r-panel: 2px;
+  --r-pill: 999px;
+}
