@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Dict, Any
 from enum import Enum
 from pydantic import BaseModel
 from app.models.common import HandoffKind, HandoffStatus
@@ -14,6 +14,7 @@ class Handoff(BaseModel):
     claimed_at: Optional[int] = None
     lease_until: Optional[int] = None
     context_root_id: Optional[str] = None
+    correction_notice: Optional[Dict[str, Any]] = None
 
 
 class ReviewDecision(str, Enum):

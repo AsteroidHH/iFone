@@ -2,7 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 from app.main import app
 from app.graph.queries import get_graph_store
-from app.models.common import Status, GateStatus, CompensationStatus
+from app.models.common import Status, GateStatus, CompensationStatus, Reversibility
 
 
 @pytest.fixture
@@ -73,10 +73,11 @@ def test_full_scenario_orchestration_flow(client):
     assert act2.action.executed is True and act2.action.confirmed is True
     assert act3.action.executed is False
 
-    # Comms was blocked by Quorum Gate
+    # Comms action was executed and irreversible before audit
     email = store.nodes.get("act_email_cust")
     assert email is not None
-    assert email.action.gate == GateStatus.BLOCKED
+    assert email.action.executed is True
+    assert email.action.reversibility == Reversibility.IRREVERSIBLE
 
     # 4. AUDIT
     res_audit = client.post("/api/scenario/audit", headers=headers)
@@ -89,6 +90,23 @@ def test_full_scenario_orchestration_flow(client):
     assert act2.status == Status.QUARANTINED
     assert act3.status == Status.QUARANTINED
     assert email.status == Status.QUARANTINED
+
+    # Executed irreversible email action generated automated damage control retraction notice
+    assert email.action.correction_notice is not None
+    assert email.action.correction_notice["status"] == "READY_FOR_HUMAN_APPROVAL"
+    assert email.action.correction_notice["recipient"] == "customer@acme.com"
+    assert "CORRECTION" in email.action.correction_notice["correction_subject"]
+    assert email.action.correction_notice["verified_policy_citation"] == "Finance Ops Policy Doc v3.0 (30-day window)"
+
+    # Verify ESCALATION handoff was created with correction notice payload
+    handoffs_res = client.get("/api/handoffs", headers=headers)
+    assert handoffs_res.status_code == 200
+    handoffs = handoffs_res.json()
+    email_handoff = next((h for h in handoffs if h.get("context_root_id") == "act_email_cust" or (h.get("correction_notice") and h["correction_notice"].get("target_action_id") == "act_email_cust")), None)
+    assert email_handoff is not None
+    assert email_handoff["kind"] == "ESCALATION"
+    assert email_handoff["correction_notice"] is not None
+    assert email_handoff["correction_notice"]["target_action_id"] == "act_email_cust"
 
     # Hop depths correctly computed
     assert store.nodes["fact_90d"].depth == 0

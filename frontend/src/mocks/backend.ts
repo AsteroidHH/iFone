@@ -411,6 +411,13 @@ class Tenant {
     this.later(1650, () => act('act_refund_1043', 'Refund order 1043', 'refund', 'COMPENSABLE', ['dec_refund', 'fact_t1043'], 'proc_refund_feed'));
     this.later(1950, () => act('act_refund_1044', 'Refund order 1044', 'refund', 'COMPENSABLE', ['dec_refund', 'fact_t1044'], 'proc_refund_feed'));
     this.later(2250, () => {
+      act('act_email_cust', 'Email customer: refund approved', 'SEND_CUSTOMER_EMAIL', 'IRREVERSIBLE', ['dec_refund']);
+      const emailCust = this.nodes.get('act_email_cust');
+      if (emailCust?.action) {
+        emailCust.action.executed = true;
+        emailCust.action.confirmed = true;
+        emailCust.action.gate = 'PASSED';
+      }
       act('act_email', 'Email customers: 90-day window', 'email', 'IRREVERSIBLE', ['dec_refund']);
     });
     this.later(2600, () => {
@@ -520,10 +527,38 @@ class Tenant {
       ),
     );
     this.later(2200, () => {
-      const h = this.handoffs.get('hand_review_email');
-      if (h) {
-        h.status = 'COMPLETED';
-        this.emit('handoff_updated', { handoff: clone(h) }, rid);
+      const email = this.nodes.get('act_email_cust') ?? this.nodes.get('act_email');
+      const actionId = email?.id ?? 'act_email_cust';
+      const notice = {
+        target_action_id: actionId,
+        recipient: 'customer@acme.com',
+        original_subject: 'Update: Your Refund Request is Approved',
+        original_statement: 'Your refund of $150 has been approved under our new 90-day policy.',
+        correction_subject: 'CORRECTION: Important update regarding your refund request',
+        drafted_body:
+          'Dear Customer,\n\nWe recently sent an email stating that your refund request was approved under a 90-day refund policy. That communication was sent in error due to an unverified policy update.\n\nOur official refund policy remains 30 days (per Finance Ops Policy Doc v3.0 (30-day window)). We sincerely apologize for any confusion. Please find our verified policy details attached.\n\nSincerely,\nAcme Support Operations',
+        verified_policy_citation: 'Finance Ops Policy Doc v3.0 (30-day window)',
+        status: 'READY_FOR_HUMAN_APPROVAL',
+      };
+      if (email?.action) {
+        email.action.correction_notice = notice;
+      }
+      const h: Handoff = {
+        id: 'hand_escl_email',
+        kind: 'ESCALATION',
+        task: `Irreversible action '${actionId}' quarantined! Automated damage control retraction notice drafted.`,
+        status: 'PENDING',
+        assigned_to: 'Support Ops',
+        context_root_id: actionId,
+        correction_notice: notice,
+      };
+      this.handoffs.set(h.id, h);
+      this.emit('handoff_updated', { handoff: clone(h) }, rid);
+
+      const hReview = this.handoffs.get('hand_review_email');
+      if (hReview) {
+        hReview.status = 'COMPLETED';
+        this.emit('handoff_updated', { handoff: clone(hReview) }, rid);
       }
     });
     this.later(2600, () => ['act_refund_1042', 'act_refund_1043'].forEach((id) => this.compensate(id, 'DISPATCHING', 1, rid)));
@@ -683,6 +718,7 @@ export class MockBackend {
     const path = req.path.replace(/^\/+/, '');
     const m = (re: RegExp) => re.exec(path);
     const get = req.method === 'GET';
+    const post = req.method === 'POST';
     let x: RegExpExecArray | null;
 
     if (get && path === 'meta') {
@@ -802,6 +838,37 @@ export class MockBackend {
     if (get && path === 'actions') {
       const acts = [...t.nodes.values()].filter((n) => n.kind === 'action').reverse();
       return ok(clone(acts), rid);
+    }
+    if (post && (x = m(/^actions\/([^/]+)\/approve-correction$/))) {
+      const id = decodeURIComponent(x[1] as string);
+      const node = t.nodes.get(id);
+      if (!node) return err(404, 'NOT_FOUND', `Action ${id} not found`, rid);
+      if (node.action) {
+        if (!node.action.correction_notice) {
+          node.action.correction_notice = {
+            target_action_id: id,
+            recipient: 'customer@acme.com',
+            original_subject: 'Update: Your Refund Request is Approved',
+            original_statement: 'Your refund of $150 has been approved under our new 90-day policy.',
+            correction_subject: 'CORRECTION: Important update regarding your refund request',
+            drafted_body:
+              'Dear Customer,\n\nWe recently sent an email stating that your refund request was approved under a 90-day refund policy. That communication was sent in error due to an unverified policy update.\n\nOur official refund policy remains 30 days (per Finance Ops Policy Doc v3.0 (30-day window)). We sincerely apologize for any confusion. Please find our verified policy details attached.\n\nSincerely,\nAcme Support Operations',
+            verified_policy_citation: 'Finance Ops Policy Doc v3.0 (30-day window)',
+            status: 'DISPATCHED',
+          };
+        } else {
+          node.action.correction_notice.status = 'DISPATCHED';
+        }
+      }
+      for (const h of t.handoffs.values()) {
+        if (h.context_root_id === id || (h.correction_notice && h.correction_notice.target_action_id === id)) {
+          h.status = 'COMPLETED';
+          if (h.correction_notice) h.correction_notice.status = 'DISPATCHED';
+          t.emit('handoff_updated', { handoff: clone(h) }, rid);
+        }
+      }
+      t.emit('correction_dispatched', { action_id: id, status: 'DISPATCHED', notice: node.action?.correction_notice }, rid);
+      return ok({ status: 'DISPATCHED', action_id: id, notice: node.action?.correction_notice }, rid);
     }
     if (get && path === 'agents') {
       return ok(t.nodes.has('fact_30d') ? AGENTS.map((a) => ({ ...a, last_active: Date.now() - 60_000 })) : [], rid);

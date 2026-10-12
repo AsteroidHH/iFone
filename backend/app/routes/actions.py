@@ -104,3 +104,50 @@ def execute_action_endpoint(
 ):
     store = get_graph_store(tenant=auth.tenant)
     return action_executor.execute(store, action_id, tenant=auth.tenant)
+
+
+@router.post("/actions/{action_id}/approve-correction")
+def approve_correction(
+    action_id: str,
+    auth: AuthContext = Depends(get_auth_context),
+):
+    store = get_graph_store(tenant=auth.tenant)
+    action_node = store.nodes.get(action_id)
+    if not action_node or not action_node.action:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": {"code": ErrorCode.NOT_FOUND.value, "message": f"Action '{action_id}' not found."}},
+        )
+
+    notice = getattr(action_node.action, "correction_notice", None)
+    if not notice:
+        from app.services.saga import generate_correction_notice
+        notice = generate_correction_notice(action_node, store, tenant=auth.tenant)
+
+    notice["status"] = "DISPATCHED"
+    action_node.action.correction_notice = notice
+    action_node.correction_notice = notice
+
+    from app.routes.handoffs import _handoff_store, _handoff_lock
+    from app.models.common import HandoffStatus
+    from app.services.event_bus import event_bus
+
+    with _handoff_lock:
+        for h in _handoff_store:
+            if h.context_root_id == action_id or (h.correction_notice and h.correction_notice.get("target_action_id") == action_id):
+                h.status = HandoffStatus.COMPLETED
+                if h.correction_notice:
+                    h.correction_notice["status"] = "DISPATCHED"
+                event_bus.publish(auth.tenant, "handoff_updated", {"handoff": h.model_dump()})
+
+    event_bus.publish(
+        auth.tenant,
+        "correction_dispatched",
+        {"action_id": action_id, "status": "DISPATCHED", "notice": notice},
+    )
+
+    return {
+        "status": "DISPATCHED",
+        "action_id": action_id,
+        "notice": notice,
+    }

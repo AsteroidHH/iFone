@@ -31,6 +31,20 @@ export const CompStatus = lenientEnum('compensation status', [
   'FAILED',
 ] as const);
 
+export const CorrectionNotice = z
+  .object({
+    target_action_id: z.string(),
+    recipient: z.string(),
+    original_subject: z.string(),
+    original_statement: z.string(),
+    correction_subject: z.string(),
+    drafted_body: z.string(),
+    verified_policy_citation: z.string(),
+    status: z.string(),
+  })
+  .passthrough();
+export type CorrectionNotice = z.infer<typeof CorrectionNotice>;
+
 export const ActionInfo = z
   .object({
     type: z.string(),
@@ -43,6 +57,7 @@ export const ActionInfo = z
       .object({ status: CompStatus, attempts: z.number() })
       .passthrough()
       .nullish(),
+    correction_notice: CorrectionNotice.nullish(),
   })
   .passthrough();
 
@@ -113,6 +128,7 @@ export const Handoff = z
     claimed_at: Ms.optional(),
     lease_until: Ms.optional(),
     context_root_id: z.string().optional(),
+    correction_notice: CorrectionNotice.nullish(),
   })
   .passthrough();
 export type Handoff = z.infer<typeof Handoff>;

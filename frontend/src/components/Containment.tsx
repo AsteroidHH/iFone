@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import type { CorrectionNotice } from '../api/schemas';
 import { copy } from '../copy';
 import { graphBus } from '../graph/bus';
-import { getReport } from '../state/endpoints';
+import { getHandoffs, getReport } from '../state/endpoints';
 import { useStore } from '../state/store';
+import { DamageControlModal } from './DamageControlModal';
 import { Icon } from './Icon';
 import { ErrorState, Skeleton, useCountUp } from './ui';
 
@@ -59,13 +61,21 @@ export function Containment() {
   const nodes = useStore((s) => s.nodes);
   const selected = useStore((s) => s.selectedId);
   const [compact, setCompact] = useState(false);
+  const [modalNotice, setModalNotice] = useState<CorrectionNotice | null>(null);
   useEffect(() => setCompact(!!selected), [selected]);
   const q = useQuery({
     queryKey: ['report', root],
     queryFn: () => getReport(root as string),
     enabled: !!root,
   });
+  const handoffs = useQuery({ queryKey: ['handoffs'], queryFn: getHandoffs });
   const ms = useCountUp(q.data?.ms_to_containment ?? 0);
+
+  const nodeNotice = Object.values(nodes).find((n) => n.action?.correction_notice)?.action?.correction_notice;
+  const activeNotice =
+    nodeNotice ??
+    handoffs.data?.find((h) => h.correction_notice)?.correction_notice ??
+    null;
 
   if (!root) return null;
   const d = q.data;
@@ -111,6 +121,44 @@ export function Containment() {
             <span className="hero-u">ms</span>
             <span className="hero-l">{copy.containment.time}</span>
           </div>
+          {activeNotice && (
+            <div
+              className="damage-control-card"
+              style={{
+                marginTop: '12px',
+                marginBottom: '12px',
+                padding: '12px 14px',
+                background: 'var(--warn-dim, rgba(184, 117, 0, 0.14))',
+                border: '1px solid var(--warn-line, #b87500)',
+                borderRadius: 'var(--r-m, 12px)',
+                boxShadow: 'var(--shadow-2, 3px 3px 0 #000)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <span style={{ fontSize: '1.2rem' }}>⚠️</span>
+                <strong style={{ fontSize: '0.88rem', color: 'var(--text)' }}>
+                  DAMAGE CONTROL ACTIVE: Retraction Email Drafted
+                </strong>
+              </div>
+              <p className="muted small" style={{ margin: '0 0 10px 0', fontSize: '0.78rem', lineHeight: 1.4 }}>
+                Quarantined irreversible action (<span className="mono">{activeNotice.target_action_id}</span>) triggered automated harm mitigation. Retraction email prepared for <span className="mono">{activeNotice.recipient}</span>.
+              </p>
+              <button
+                className="btn review"
+                style={{
+                  background: 'var(--warn, #8f5a00)',
+                  color: '#fff',
+                  fontWeight: 600,
+                  width: '100%',
+                  padding: '8px 12px',
+                  fontSize: '0.82rem',
+                }}
+                onClick={() => setModalNotice(activeNotice)}
+              >
+                Review & Dispatch Retraction Notice
+              </button>
+            </div>
+          )}
           {!compact && (
           <>
           <div className="donut-row">
@@ -150,6 +198,9 @@ export function Containment() {
           </>
           )}
         </>
+      )}
+      {modalNotice && (
+        <DamageControlModal notice={modalNotice} onClose={() => setModalNotice(null)} />
       )}
     </section>
   );
