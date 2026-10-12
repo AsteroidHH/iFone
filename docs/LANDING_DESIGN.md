@@ -59,3 +59,12 @@ Stat        count-up on first view; real numbers recorded by the graph owner
 ## Verification
 
 `npm run landing` captures every section at 1440, 1024 and 390 px into `docs/screens/landing/` and fails on console errors or horizontal overflow. `npm run qa` also drives the landing page: the playground cascade and restore, the root-fact rule, both carousels, routing into the console and back, and the 90-second story button.
+
+## Motion layer and lazy loading
+
+- **Liquid cursor** (`fx/LiquidCursor.tsx`): seven spring-chained ink blobs fused by an SVG goo filter; swells over buttons, shrinks on press. Fine pointers only.
+- **Belief-network canvas** (`fx/NetworkCanvas.tsx`): hero backdrop; the cursor parts the facts, a click quarantines nearby ones (red) and sends a ring out, then they heal. Pauses off screen and in hidden tabs.
+- **Parallax** (`fx/motion.ts`, `Parallax.tsx`): one scroll loop moves only on-screen layers, publishes `--sp` (progress) and `--vel` (velocity, which pushes the marquee). Scroll progress bar and section rail in `fx/Chrome.tsx`.
+- **Word reveal** (`SplitText.tsx`), **card tilt** (`Tilt.tsx`), **magnetic pills** (`useMagnetic`), and an animated latency chart (`LatencyChart.tsx`, recorded p50/p95/p99 only).
+- All of it is off under `prefers-reduced-motion`; cursor and magnetic effects are also off for coarse pointers.
+- **Lazy loading**: landing and console are separate route chunks; sections below the hero load as `Below` when the reader nears them (or on idle, or on a nav click); the console is prefetched on idle and on hover/focus of "Open console"; console tabs and the palette are lazy too. The landing chunk contains no cytoscape, zod, react-query or zustand.

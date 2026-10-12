@@ -161,6 +161,7 @@ check('Back to now is gone at the present', !(await page.locator('.status-chip.p
 
 // navigation and analysis features
 await page.keyboard.press('Control+k');
+await page.locator('.palette').waitFor({ timeout: 2000 }).catch(() => {});
 check('Ctrl K opens the command palette', await page.locator('.palette').isVisible());
 await page.keyboard.type('prompt diff');
 await wait(200);

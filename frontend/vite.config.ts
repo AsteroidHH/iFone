@@ -29,7 +29,11 @@ export default defineConfig({
     assetsInlineLimit: 0,
     rollupOptions: {
       output: {
-        manualChunks: { cytoscape: ['cytoscape'], vendor: ['react', 'react-dom', 'zustand', '@tanstack/react-query', 'zod'] },
+        manualChunks: {
+          react: ['react', 'react-dom'],
+          cytoscape: ['cytoscape'],
+          'console-state': ['zustand', '@tanstack/react-query', 'zod'],
+        },
       },
     },
   },

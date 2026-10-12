@@ -373,3 +373,30 @@
 .dev-empty {
   padding: 8px 16px;
 }
+
+.route-fallback {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+}
+.route-fallback.light {
+  background: #f3f5f2;
+}
+.route-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text);
+  animation: route-pulse 0.9s ease-in-out infinite alternate;
+}
+@keyframes route-pulse {
+  to {
+    transform: scale(1.8);
+    opacity: 0.25;
+  }
+}
+.tab-fallback {
+  padding: 16px;
+}

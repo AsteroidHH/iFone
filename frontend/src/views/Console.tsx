@@ -1,16 +1,19 @@
+import { lazy, Suspense } from 'react';
 import { copy } from '../copy';
+import { Skeleton } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { Crumbs } from '../components/Crumbs';
-import { Insights } from '../components/Insights';
 import { Containment } from '../components/Containment';
 import { HistoryFeed } from '../components/History';
 import { Inspector } from '../components/Inspector';
-import { Ledger } from '../components/Ledger';
-import { PromptDiff } from '../components/PromptDiff';
 import { ScenarioControls } from '../components/Scenario';
 import { Timeline } from '../components/Timeline';
 import { GraphCanvas } from '../graph/GraphCanvas';
 import { useStore, type Tab } from '../state/store';
+
+const PromptDiff = lazy(() => import('../components/PromptDiff').then((m) => ({ default: m.PromptDiff })));
+const Ledger = lazy(() => import('../components/Ledger').then((m) => ({ default: m.Ledger })));
+const Insights = lazy(() => import('../components/Insights').then((m) => ({ default: m.Insights })));
 
 const TABS: Tab[] = ['graph', 'diff', 'ledger', 'insights'];
 const TAB_ICON: Record<Tab, string> = { graph: 'graph', diff: 'doc', ledger: 'bolt', insights: 'chart' };
@@ -42,9 +45,11 @@ export function Console({ visible }: { visible: boolean }) {
           {tab === 'graph' && <Crumbs />}
         </div>
         <GraphCanvas active={visible && tab === 'graph'} />
-        {tab === 'diff' && <PromptDiff />}
-        {tab === 'ledger' && <Ledger />}
-        {tab === 'insights' && <Insights />}
+        <Suspense fallback={<div className="tab-fallback"><Skeleton lines={5} /></div>}>
+          {tab === 'diff' && <PromptDiff />}
+          {tab === 'ledger' && <Ledger />}
+          {tab === 'insights' && <Insights />}
+        </Suspense>
       </main>
       <aside className="col right">
         <Containment />
