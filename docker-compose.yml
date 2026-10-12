@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  falkordb:
+    image: falkordb/falkordb:latest
+    container_name: quorum-falkordb
+    ports:
+      - "6379:6379"
+    volumes:
+      - falkordb_data:/data
+      - ./scripts/users.acl:/etc/redis/users.acl:ro
+    command: ["falkordb", "--aclfile", "/etc/redis/users.acl", "--save", "60", "1"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  mock_helpdesk:
+    build:
+      context: ./mock_helpdesk
+      dockerfile: Dockerfile
+    container_name: quorum-mock-helpdesk
+    ports:
+      - "8001:8001"
+    environment:
+      - PORT=8001
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: quorum-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - FALKORDB_HOST=falkordb
+      - FALKORDB_PORT=6379
+      - MOCK_HELPDESK_URL=http://mock_helpdesk:8001
+      - PORT=8000
+    depends_on:
+      falkordb:
+        condition: service_healthy
+      mock_helpdesk:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: quorum-frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+
+volumes:
+  falkordb_data:
