@@ -7,8 +7,9 @@ services:
       - "6379:6379"
     volumes:
       - falkordb_data:/var/lib/falkordb/data
+      - ./scripts/users.acl:/etc/redis/users.acl:ro
     restart: unless-stopped
-    command: ["--loadmodule", "/usr/lib/redis/modules/falkordb.so"] 
+    command: ["--loadmodule", "/usr/lib/redis/modules/falkordb.so"]
 
   falkordb-browser:
     image: falkordb/falkordb-browser:latest
@@ -19,47 +20,56 @@ services:
       - FALKORDB_PORT=6379
     depends_on:
       - falkordb
+    restart: unless-stopped
 
-  # The following are placeholders for the Oct 15 build
+  mock-helpdesk:
+    build:
+      context: ./mock_helpdesk
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    restart: unless-stopped
+
   backend:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
       - "8000:8000"
     environment:
-      - REDIS_URL=redis://falkordb:6379
+      - FALKORDB_HOST=falkordb
+      - FALKORDB_PORT=6379
+      - HELPDESK_URL=http://mock-helpdesk:8002
+      - MCP_SERVER_URL=http://mcp-server:8001
+      - QUORUM_MODE=replay
     depends_on:
       - falkordb
-    profiles:
-      - do-not-start-yet
+      - mock-helpdesk
+    restart: unless-stopped
 
-  mcp_server:
-    build: ./mcp
+  mcp-server:
+    build:
+      context: .
+      dockerfile: mcp/Dockerfile
     ports:
       - "8001:8001"
     environment:
       - API_URL=http://backend:8000
     depends_on:
       - backend
-    profiles:
-      - do-not-start-yet
-
-  agents:
-    build: ./agents
-    environment:
-      - MCP_SERVER_URL=http://mcp_server:8001
-    depends_on:
-      - mcp_server
-    profiles:
-      - do-not-start-yet
+    restart: unless-stopped
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "3000:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
     depends_on:
       - backend
-    profiles:
-      - do-not-start-yet
+    restart: unless-stopped
 
 volumes:
   falkordb_data:

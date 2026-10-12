@@ -1,0 +1,439 @@
+import cytoscape, { type Core, type EdgeSingular, type NodeSingular } from 'cytoscape';
+import type { GraphEdge, GraphNode } from '../api/schemas';
+import { copy } from '../copy';
+import { iconPath } from '../components/Icon';
+import { actionDisplayState } from '../state/actionState';
+import { colOf, COL_X, freeSlot, GAP_Y, layoutAll, NODE_H, NODE_W } from './layout';
+import { P } from './palette';
+
+export interface AdapterHandlers {
+  onSelect: (id: string | null) => void;
+  onHover: (id: string | null) => void;
+  onViewport: (pan: { x: number; y: number }, zoom: number) => void;
+}
+
+const reduced = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const uri = (svg: string) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}...` : s);
+
+function nodeImage(n: GraphNode): string {
+  const tone =
+    n.status === 'QUARANTINED' ? P.bad : n.status === 'SUPERSEDED' ? P.ghost : n.stale ? P.warn : n.kind === 'source' ? P.text2 : P.ok;
+  const key = n.kind === 'conclusion' && n.is_decision ? 'decision' : n.kind;
+  const path = iconPath[key] ?? iconPath.fact ?? '';
+  const icon = `<g transform="translate(11 ${NODE_H / 2 - 9}) scale(0.75)" fill="none" stroke="${tone}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${path}"/></g>`;
+  let badge = '';
+  const a = n.action;
+  if (a?.gate === 'BLOCKED' && !a.executed) {
+    badge = `<g transform="translate(${NODE_W - 20} 6)" fill="none" stroke="${P.person}" stroke-width="2" stroke-linecap="round"><rect x="1" y="6" width="10" height="7" rx="1.5" fill="${P.person}" fill-opacity="0.25"/><path d="M3 6V4a3 3 0 0 1 6 0v2"/></g>`;
+  } else if (a?.confirmed) {
+    badge = `<g transform="translate(${NODE_W - 20} 6)" fill="none" stroke="${n.status === 'QUARANTINED' ? P.bad : P.ok}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m1 7 3.5 3.5L11 3"/></g>`;
+  }
+  return uri(`<svg xmlns="http://www.w3.org/2000/svg" width="${NODE_W}" height="${NODE_H}" viewBox="0 0 ${NODE_W} ${NODE_H}">${icon}${badge}</svg>`);
+}
+
+function toData(n: GraphNode): cytoscape.NodeDataDefinition {
+  const isAction = n.kind === 'action';
+  const display = isAction ? copy.actionState[actionDisplayState(n)] : '';
+  return {
+    id: n.id,
+    label: n.label,
+    label2: isAction ? `${clip(n.label, 22)}\n${display}` : clip(n.label, 34),
+    kind: n.kind,
+    status: n.status,
+    stale: n.stale && n.status === 'HEALTHY' ? 1 : 0,
+    decision: n.is_decision ? 1 : 0,
+    img: nodeImage(n),
+  };
+}
+
+const style = [
+  {
+    selector: 'node',
+    style: {
+      shape: 'round-rectangle',
+      width: NODE_W,
+      height: NODE_H,
+      'corner-radius': 10,
+      'font-family': '"Schibsted Grotesk", system-ui, sans-serif',
+      'font-size': 13,
+      'font-weight': 500,
+      color: P.text,
+      label: 'data(label2)',
+      'text-valign': 'center',
+      'text-halign': 'center',
+      'text-margin-x': 14,
+      'text-wrap': 'wrap',
+      'text-max-width': `${NODE_W - 46}px`,
+      'line-height': 1.25,
+      'min-zoomed-font-size': 6,
+      'background-color': P.bg3,
+      'border-width': 1.5,
+      'border-color': P.nodeBorder,
+      'background-image': 'data(img)',
+      'background-fit': 'none',
+      'background-width': '100%',
+      'background-height': '100%',
+      'background-clip': 'none',
+      'overlay-opacity': 0,
+      'overlay-padding': 6,
+      'transition-property': 'opacity',
+      'transition-duration': 160,
+    },
+  },
+  { selector: 'node[kind="source"]', style: { shape: 'cut-rectangle', 'cut-rectangle-corner-radius': 9, 'background-color': P.bg2 } },
+  { selector: 'node[kind="fact"]', style: { 'corner-radius': 26 } },
+  { selector: 'node[kind="conclusion"]', style: { 'corner-radius': 8 } },
+  {
+    selector: 'node[kind="conclusion"][decision > 0]',
+    style: { shape: 'rectangle', 'border-style': 'double', 'border-width': 5 },
+  },
+  { selector: 'node[kind="action"]', style: { 'corner-radius': 4 } },
+  { selector: 'node[status="HEALTHY"]', style: { 'border-color': P.ok, 'background-color': P.okFill } },
+  { selector: 'node[kind="source"][status="HEALTHY"]', style: { 'border-color': 'rgba(255,255,255,0.34)', 'background-color': P.bg2 } },
+  {
+    selector: 'node[status="QUARANTINED"]',
+    style: { 'border-color': P.bad, 'border-style': 'dashed', 'background-color': P.badFill, color: P.badText },
+  },
+  {
+    selector: 'node[status="SUPERSEDED"]',
+    style: { 'border-color': P.ghost, 'background-color': P.ghostFill, color: P.ghost, opacity: 0.6 },
+  },
+  { selector: 'node[status="UNKNOWN"]', style: { 'border-color': P.ghost, 'border-style': 'dotted' } },
+  { selector: 'node[stale > 0]', style: { 'border-color': P.warn, 'border-style': 'dotted', 'border-width': 2.5 } },
+  { selector: 'node:selected', style: { 'overlay-color': '#ffffff', 'overlay-opacity': 0.1, 'overlay-padding': 8 } },
+  { selector: 'node.dry', style: { 'overlay-color': P.bad, 'overlay-opacity': 0.22, 'overlay-padding': 9 } },
+  { selector: 'node.pulse', style: { 'overlay-color': P.bad, 'overlay-opacity': 0.26, 'overlay-padding': 10 } },
+  { selector: '.faded', style: { opacity: 0.14 } },
+  { selector: '.hidden', style: { display: 'none' } },
+  {
+    selector: 'edge',
+    style: {
+      width: 1.3,
+      'line-color': P.edge,
+      'target-arrow-color': P.edge,
+      'target-arrow-shape': 'triangle',
+      'arrow-scale': 0.85,
+      'curve-style': 'taxi',
+      'taxi-direction': 'rightward',
+      'taxi-turn': '50%',
+      'taxi-radius': 14,
+    },
+  },
+  { selector: 'edge[type="SUPPORTS"]', style: { 'line-style': 'dashed', 'line-dash-pattern': [6, 4] } },
+  { selector: 'edge[type="FROM_SOURCE"]', style: { width: 1, 'target-arrow-shape': 'none', 'line-color': 'rgba(163,176,191,0.3)' } },
+  {
+    selector: 'edge[type="CONTRADICTS"]',
+    style: {
+      'line-color': P.bad,
+      'target-arrow-color': P.bad,
+      'target-arrow-shape': 'tee',
+      width: 2.2,
+      'curve-style': 'unbundled-bezier',
+      'control-point-distances': [-60],
+      'control-point-weights': [0.5],
+    },
+  },
+  {
+    selector: 'edge[type="SUPERSEDES"]',
+    style: {
+      'line-color': P.ghost,
+      'target-arrow-color': P.ghost,
+      'line-style': 'dashed',
+      'line-dash-pattern': [14, 7],
+      'curve-style': 'unbundled-bezier',
+      'control-point-distances': [60],
+      'control-point-weights': [0.5],
+    },
+  },
+  {
+    selector: 'edge[tq > 0][type!="CONTRADICTS"]',
+    style: { 'line-color': P.bad, 'target-arrow-color': P.bad, 'line-style': 'dashed', 'line-dash-pattern': [5, 4] },
+  },
+  { selector: 'edge.dry', style: { 'line-color': P.bad, 'target-arrow-color': P.bad, width: 2.4 } },
+] as unknown as cytoscape.StylesheetJson;
+
+export class GraphAdapter {
+  readonly cy: Core;
+  private timers = new Set<ReturnType<typeof setTimeout>>();
+  private collapsedRoots = new Set<string>();
+  private fresh = new Set<string>();
+  private search = '';
+  private autoFit = true;
+  private fitTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(
+    container: HTMLElement,
+    private h: AdapterHandlers,
+  ) {
+    this.cy = cytoscape({
+      container,
+      style,
+      elements: [],
+      minZoom: 0.25,
+      maxZoom: 2.5,
+      boxSelectionEnabled: false,
+    });
+    this.cy.on('tap', 'node', (e) => h.onSelect((e.target as NodeSingular).id()));
+    this.cy.on('tap', (e) => {
+      if (e.target === this.cy) h.onSelect(null);
+    });
+    this.cy.on('mouseover', 'node', (e) => {
+      container.style.cursor = 'pointer';
+      h.onHover((e.target as NodeSingular).id());
+    });
+    this.cy.on('mouseout', 'node', () => {
+      container.style.cursor = '';
+      h.onHover(null);
+    });
+    this.cy.on('viewport', () => h.onViewport(this.cy.pan(), this.cy.zoom()));
+    const manual = () => {
+      this.autoFit = false;
+    };
+    container.addEventListener('wheel', manual, { passive: true });
+    container.addEventListener('pointerdown', manual);
+    h.onViewport(this.cy.pan(), this.cy.zoom());
+  }
+
+  destroy() {
+    if (this.fitTimer) clearTimeout(this.fitTimer);
+    this.timers.forEach(clearTimeout);
+    this.timers.clear();
+    this.cy.destroy();
+  }
+
+  private later(ms: number, fn: () => void) {
+    const t = setTimeout(() => {
+      this.timers.delete(t);
+      fn();
+    }, ms);
+    this.timers.add(t);
+  }
+
+  syncAll(nodes: GraphNode[], edges: GraphEdge[], fit = true) {
+    this.timers.forEach(clearTimeout);
+    this.timers.clear();
+    this.fresh.clear();
+    const pos = layoutAll(nodes, edges);
+    const sel = this.cy.$(':selected').map((n) => n.id());
+    this.cy.batch(() => {
+      this.cy.elements().remove();
+      this.cy.add(nodes.map((n) => ({ group: 'nodes' as const, data: toData(n), position: pos[n.id] ?? { x: 0, y: 0 } })));
+      const ids = new Set(nodes.map((n) => n.id));
+      this.cy.add(
+        edges
+          .filter((e) => ids.has(e.source) && ids.has(e.target))
+          .map((e) => ({ group: 'edges' as const, data: this.edgeData(e, nodes) })),
+      );
+    });
+    sel.forEach((id) => this.cy.getElementById(id).select());
+    this.applyCollapse();
+    this.applySearch();
+    if (fit) this.fit(false);
+  }
+
+  private edgeData(e: GraphEdge, nodes?: GraphNode[]) {
+    const tgt = nodes ? nodes.find((n) => n.id === e.target) : undefined;
+    const status = tgt ? tgt.status : (this.cy.getElementById(e.target).data('status') as string | undefined);
+    return { id: e.id, source: e.source, target: e.target, type: e.type, tq: status === 'QUARANTINED' ? 1 : 0 };
+  }
+
+  private columnYs(col: number, except?: string): number[] {
+    return this.cy
+      .nodes()
+      .filter((n: NodeSingular) => n.id() !== except && COL_X.indexOf(Math.round(n.position('x'))) === col)
+      .map((n: NodeSingular) => n.position('y'));
+  }
+
+  /** Adds new elements and updates changed ones. Existing positions never move. */
+  applyDelta(
+    nodes: Record<string, GraphNode>,
+    edges: Record<string, GraphEdge>,
+    d: { ids: string[]; edgeIds: string[]; delays: Record<string, number> },
+  ) {
+    for (const id of d.ids) {
+      const n = nodes[id];
+      if (!n) continue;
+      const existing = this.cy.getElementById(id);
+      if (existing.empty()) {
+        const col = colOf(n);
+        const ys = this.columnYs(col);
+        const want = ys.length ? Math.max(...ys) + GAP_Y : 0;
+        this.cy.add({ group: 'nodes', data: toData(n), position: { x: COL_X[col] ?? 0, y: want } });
+        this.fresh.add(id);
+        this.applySearch();
+        this.scheduleFit();
+      } else {
+        const delay = d.delays[id] ?? 0;
+        if (delay > 0) this.later(delay, () => this.updateNode(n, true));
+        else this.updateNode(n, id in d.delays);
+      }
+    }
+    for (const eid of d.edgeIds) {
+      const e = edges[eid];
+      if (!e || this.cy.getElementById(eid).nonempty()) continue;
+      if (this.cy.getElementById(e.source).empty() || this.cy.getElementById(e.target).empty()) continue;
+      this.cy.add({ group: 'edges', data: this.edgeData(e) });
+      this.adopt(e);
+    }
+  }
+
+  /** A freshly added node moves once, next to its first parent, then stays put. */
+  private adopt(e: GraphEdge) {
+    if (e.type === 'CONTRADICTS' || e.type === 'SUPERSEDES') return;
+    const child = this.cy.getElementById(e.target);
+    if (!this.fresh.has(e.target) || child.empty()) return;
+    const parent = this.cy.getElementById(e.source);
+    if (parent.empty()) return;
+    const col = COL_X.indexOf(Math.round(child.position('x')));
+    const y = freeSlot(this.columnYs(col, e.target), parent.position('y'));
+    child.position({ x: child.position('x'), y });
+    this.fresh.delete(e.target);
+  }
+
+  private updateNode(n: GraphNode, pulse: boolean) {
+    const el = this.cy.getElementById(n.id);
+    if (el.empty()) return;
+    el.data(toData(n));
+    el.connectedEdges().forEach((edge: EdgeSingular) => {
+      const t = this.cy.getElementById(edge.data('target') as string);
+      edge.data('tq', t.data('status') === 'QUARANTINED' ? 1 : 0);
+    });
+    if (pulse) this.pulse(el);
+  }
+
+  private pulse(el: NodeSingular) {
+    el.addClass('pulse');
+    this.later(reduced() ? 260 : 560, () => el.removeClass('pulse'));
+  }
+
+  resized() {
+    this.cy.resize();
+    if (this.autoFit) this.fitView(false);
+    else this.h.onViewport(this.cy.pan(), this.cy.zoom());
+  }
+
+  private scheduleFit() {
+    if (!this.autoFit) return;
+    if (this.fitTimer) clearTimeout(this.fitTimer);
+    this.fitTimer = setTimeout(() => {
+      if (this.autoFit) this.fitView(true);
+    }, 220);
+  }
+
+  fit(animate = true) {
+    this.autoFit = true;
+    this.fitView(animate);
+  }
+
+  zoomBy(factor: number) {
+    this.autoFit = false;
+    const z = Math.min(2.5, Math.max(0.25, this.cy.zoom() * factor));
+    this.cy.zoom({ level: z, renderedPosition: { x: this.cy.width() / 2, y: this.cy.height() / 2 } });
+  }
+
+  private fitView(animate: boolean) {
+    const els = this.cy.elements(':visible');
+    if (els.empty()) return;
+    if (animate && !reduced()) this.cy.animate({ fit: { eles: els, padding: 30 } }, { duration: 300 });
+    else this.cy.fit(els, 30);
+    this.h.onViewport(this.cy.pan(), this.cy.zoom());
+  }
+
+  focus(id: string) {
+    const el = this.cy.getElementById(id);
+    if (el.empty()) return;
+    this.cy.$(':selected').unselect();
+    el.select();
+    if (reduced()) this.cy.center(el);
+    else this.cy.animate({ center: { eles: el } }, { duration: 260 });
+  }
+
+  setSelected(id: string | null) {
+    this.cy.$(':selected').unselect();
+    if (id) this.cy.getElementById(id).select();
+  }
+
+  setDry(ids: string[]) {
+    this.cy.elements('.dry').removeClass('dry');
+    if (!ids.length) return;
+    const set = new Set(ids);
+    this.cy.nodes().forEach((n) => {
+      if (set.has(n.id())) n.addClass('dry');
+    });
+    this.cy.edges().forEach((e) => {
+      if (set.has(e.data('source') as string) && set.has(e.data('target') as string)) e.addClass('dry');
+    });
+  }
+
+  setSearch(q: string) {
+    this.search = q.trim().toLowerCase();
+    this.applySearch();
+  }
+
+  private applySearch() {
+    this.cy.batch(() => {
+      this.cy.elements().removeClass('faded');
+      if (!this.search) return;
+      this.cy.nodes().forEach((n) => {
+        if (!String(n.data('label')).toLowerCase().includes(this.search)) n.addClass('faded');
+      });
+      this.cy.edges().addClass('faded');
+    });
+  }
+
+  setLocked(locked: boolean) {
+    this.cy.nodes().ungrabify();
+    if (!locked) this.cy.nodes().grabify();
+  }
+
+  relayout(nodes: GraphNode[], edges: GraphEdge[]) {
+    const pos = layoutAll(nodes, edges);
+    this.cy.batch(() => {
+      this.cy.nodes().forEach((n) => {
+        const p = pos[n.id()];
+        if (p) n.position(p);
+      });
+    });
+    this.fit(true);
+  }
+
+  toggleCollapse(id: string | null) {
+    if (!id) return;
+    if (this.collapsedRoots.has(id)) this.collapsedRoots.delete(id);
+    else this.collapsedRoots.add(id);
+    this.applyCollapse();
+  }
+
+  isCollapsed(id: string | null) {
+    return !!id && this.collapsedRoots.has(id);
+  }
+
+  private applyCollapse() {
+    this.cy.batch(() => {
+      this.cy.elements().removeClass('hidden');
+      for (const root of this.collapsedRoots) {
+        if (this.cy.getElementById(root).empty()) continue;
+        const seen = new Set<string>();
+        const queue = [root];
+        while (queue.length) {
+          const cur = queue.shift() as string;
+          this.cy.edges().forEach((e) => {
+            const type = e.data('type') as string;
+            if (e.data('source') !== cur || (type !== 'LEADS_TO' && type !== 'SUPPORTS')) return;
+            const t = e.data('target') as string;
+            if (!seen.has(t)) {
+              seen.add(t);
+              queue.push(t);
+            }
+          });
+        }
+        seen.forEach((id) => {
+          const el = this.cy.getElementById(id);
+          el.addClass('hidden');
+          el.connectedEdges().addClass('hidden');
+        });
+      }
+    });
+  }
+}
