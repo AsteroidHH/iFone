@@ -10,6 +10,7 @@ export interface AdapterHandlers {
   onSelect: (id: string | null) => void;
   onHover: (id: string | null) => void;
   onViewport: (pan: { x: number; y: number }, zoom: number) => void;
+  onContext: (id: string, x: number, y: number) => void;
 }
 
 const reduced = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -68,7 +69,7 @@ const style = [
       'line-height': 1.25,
       'min-zoomed-font-size': 6,
       'background-color': P.bg3,
-      'border-width': 1.5,
+      'border-width': 2,
       'border-color': P.nodeBorder,
       'background-image': 'data(img)',
       'background-fit': 'none',
@@ -89,23 +90,28 @@ const style = [
     style: { shape: 'rectangle', 'border-style': 'double', 'border-width': 5 },
   },
   { selector: 'node[kind="action"]', style: { 'corner-radius': 4 } },
-  { selector: 'node[status="HEALTHY"]', style: { 'border-color': P.ok, 'background-color': P.okFill } },
-  { selector: 'node[kind="source"][status="HEALTHY"]', style: { 'border-color': 'rgba(255,255,255,0.34)', 'background-color': P.bg2 } },
+  { selector: 'node[status="HEALTHY"]', style: { 'border-color': P.ink, 'background-color': P.okFill } },
+  { selector: 'node[kind="source"][status="HEALTHY"]', style: { 'border-color': P.ink, 'background-color': P.bg2 } },
   {
     selector: 'node[status="QUARANTINED"]',
     style: { 'border-color': P.bad, 'border-style': 'dashed', 'background-color': P.badFill, color: P.badText },
   },
   {
     selector: 'node[status="SUPERSEDED"]',
-    style: { 'border-color': P.ghost, 'background-color': P.ghostFill, color: P.ghost, opacity: 0.6 },
+    style: { 'border-color': P.ghost, 'background-color': P.ghostFill, color: P.text2, opacity: 0.62 },
   },
   { selector: 'node[status="UNKNOWN"]', style: { 'border-color': P.ghost, 'border-style': 'dotted' } },
   { selector: 'node[stale > 0]', style: { 'border-color': P.warn, 'border-style': 'dotted', 'border-width': 2.5 } },
-  { selector: 'node:selected', style: { 'overlay-color': '#ffffff', 'overlay-opacity': 0.1, 'overlay-padding': 8 } },
+  { selector: 'node:selected', style: { 'overlay-color': '#0b1218', 'overlay-opacity': 0.09, 'overlay-padding': 8 } },
   { selector: 'node.dry', style: { 'overlay-color': P.bad, 'overlay-opacity': 0.22, 'overlay-padding': 9 } },
   { selector: 'node.pulse', style: { 'overlay-color': P.bad, 'overlay-opacity': 0.26, 'overlay-padding': 10 } },
   { selector: '.faded', style: { opacity: 0.14 } },
   { selector: '.hidden', style: { display: 'none' } },
+  { selector: '.filtered', style: { display: 'none' } },
+  { selector: 'node.god', style: { 'overlay-color': '#f2b705', 'overlay-opacity': 0.4, 'overlay-padding': 7 } },
+  { selector: 'node.onpath', style: { 'overlay-color': P.person, 'overlay-opacity': 0.28, 'overlay-padding': 9 } },
+  { selector: 'edge.onpath', style: { 'line-color': P.person, 'target-arrow-color': P.person, width: 3.4, 'line-style': 'solid' } },
+  { selector: '.pathfade', style: { opacity: 0.16 } },
   {
     selector: 'edge',
     style: {
@@ -121,7 +127,7 @@ const style = [
     },
   },
   { selector: 'edge[type="SUPPORTS"]', style: { 'line-style': 'dashed', 'line-dash-pattern': [6, 4] } },
-  { selector: 'edge[type="FROM_SOURCE"]', style: { width: 1, 'target-arrow-shape': 'none', 'line-color': 'rgba(163,176,191,0.3)' } },
+  { selector: 'edge[type="FROM_SOURCE"]', style: { width: 1, 'target-arrow-shape': 'none', 'line-color': 'rgba(11,18,24,0.28)' } },
   {
     selector: 'edge[type="CONTRADICTS"]',
     style: {
@@ -185,6 +191,11 @@ export class GraphAdapter {
     this.cy.on('mouseout', 'node', () => {
       container.style.cursor = '';
       h.onHover(null);
+    });
+    this.cy.on('cxttap', 'node', (e) => {
+      const r = container.getBoundingClientRect();
+      const p = (e.target as NodeSingular).renderedPosition();
+      h.onContext((e.target as NodeSingular).id(), r.left + p.x, r.top + p.y);
     });
     this.cy.on('viewport', () => h.onViewport(this.cy.pan(), this.cy.zoom()));
     const manual = () => {
@@ -396,6 +407,61 @@ export class GraphAdapter {
       });
     });
     this.fit(true);
+  }
+
+  /** Hides everything outside `visible` (null shows all). Used by filters and the local graph. */
+  setVisible(visible: Set<string> | null) {
+    this.cy.batch(() => {
+      this.cy.elements().removeClass('filtered');
+      if (!visible) return;
+      this.cy.nodes().forEach((n) => {
+        if (!visible.has(n.id())) n.addClass('filtered');
+      });
+      this.cy.edges().forEach((e) => {
+        if (!visible.has(e.data('source') as string) || !visible.has(e.data('target') as string)) e.addClass('filtered');
+      });
+    });
+  }
+
+  setGods(ids: string[]) {
+    this.cy.nodes('.god').removeClass('god');
+    ids.forEach((id) => this.cy.getElementById(id).addClass('god'));
+  }
+
+  setPath(ids: string[]) {
+    this.cy.elements('.onpath').removeClass('onpath');
+    this.cy.elements('.pathfade').removeClass('pathfade');
+    if (!ids.length) return;
+    const on = new Set(ids);
+    this.cy.nodes().forEach((n) => {
+      if (on.has(n.id())) n.addClass('onpath');
+      else n.addClass('pathfade');
+    });
+    this.cy.edges().forEach((e) => {
+      const a = e.data('source') as string;
+      const b = e.data('target') as string;
+      const i = ids.indexOf(a);
+      const j = ids.indexOf(b);
+      if (i >= 0 && j >= 0 && Math.abs(i - j) === 1) e.addClass('onpath');
+      else e.addClass('pathfade');
+    });
+  }
+
+  /** Node positions and the visible rectangle, for the minimap. */
+  mini() {
+    const z = this.cy.zoom();
+    const pan = this.cy.pan();
+    const nodes: { id: string; x: number; y: number; status: string; kind: string }[] = [];
+    this.cy.nodes(':visible').forEach((n: NodeSingular) => {
+      nodes.push({ id: n.id(), x: n.position('x'), y: n.position('y'), status: String(n.data('status')), kind: String(n.data('kind')) });
+    });
+    return { nodes, view: { x: -pan.x / z, y: -pan.y / z, w: this.cy.width() / z, h: this.cy.height() / z } };
+  }
+
+  panToModel(x: number, y: number) {
+    this.autoFit = false;
+    const z = this.cy.zoom();
+    this.cy.pan({ x: this.cy.width() / 2 - x * z, y: this.cy.height() / 2 - y * z });
   }
 
   toggleCollapse(id: string | null) {

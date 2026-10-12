@@ -159,6 +159,80 @@ const diffText = await text('.belief-diff');
 check('belief diff counts quarantined nodes between the two moments', /[1-9]\d* quarantined/.test(diffText), diffText.split('\n').slice(-1)[0]);
 check('Back to now is gone at the present', !(await page.locator('.past-bar').count()));
 
+// navigation and analysis features
+await page.keyboard.press('Control+k');
+check('Ctrl K opens the command palette', await page.locator('.palette').isVisible());
+await page.keyboard.type('prompt diff');
+await wait(200);
+await page.keyboard.press('Enter');
+await wait(500);
+check('palette runs a command: Prompt diff tab opens', (await page.locator('.diff').count()) === 1);
+await page.keyboard.press('Control+k');
+await page.keyboard.type('Approve refunds up to 90');
+await wait(200);
+await page.keyboard.press('Enter');
+await wait(700);
+check('palette jumps to a node and selects it', (await text('.crumb-trail')).includes('Approve refunds up to 90 days'));
+await page.keyboard.press('Control+k');
+await page.keyboard.type('Refund order 1042');
+await page.keyboard.press('Enter');
+await wait(600);
+await page.keyboard.press('Alt+ArrowLeft');
+await wait(400);
+check('Alt Left returns to the previous selection', (await text('.crumb-trail')).includes('Approve refunds up to 90 days'));
+await page.keyboard.press('Alt+ArrowRight');
+await wait(400);
+check('Alt Right moves forward again', (await text('.crumb-trail')).includes('Refund order 1042'));
+await page.getByRole('tab', { name: 'Links' }).click();
+await wait(300);
+check('Links tab lists what the node is built from', (await text('.links')).includes('Approve refunds up to 90 days'));
+
+await page.getByRole('button', { name: 'Filters' }).click();
+const mmBefore = await page.locator(".mm-node").count();
+await page.getByLabel('Show only what needs attention').check();
+await wait(700);
+await page.keyboard.press('Escape');
+const after = await page.locator('.mm-node').count();
+check('Show only what needs attention hides healthy nodes', after > 0 && after < mmBefore, `${mmBefore} to ${after}`);
+await page.getByRole('button', { name: /Filters/ }).click();
+await page.getByRole('button', { name: 'Reset filters' }).click();
+await page.keyboard.press('Escape');
+await wait(400);
+const restored = await page.locator('.mm-node').count();
+check('Reset filters brings every node back', restored === mmBefore, `${restored}`);
+
+const pos = await page.locator('.cy').evaluate((el) => {
+  const cy = el.__cy;
+  const n = cy.getElementById('fact_90d');
+  const p = n.renderedPosition();
+  const r = el.getBoundingClientRect();
+  return { x: r.left + p.x, y: r.top + p.y };
+});
+await page.mouse.click(pos.x, pos.y, { button: 'right' });
+await wait(300);
+check('right-clicking a node opens its context menu', await page.locator('.ctxmenu').isVisible());
+await page.getByRole('menuitem', { name: 'Trace back to its sources' }).click();
+await wait(500);
+check('Trace back highlights the path on the graph', await page.locator('.path-chip').isVisible());
+await page.locator('.path-chip .iconbtn').click();
+
+await page.getByRole('tab', { name: 'Insights' }).click();
+await wait(500);
+check('Insights shows the belief flow chart', (await page.locator('.ins-flow').count()) === 1);
+check('Insights lists the most connected nodes', (await page.locator('.ins-gods li').count()) >= 3);
+check('Insights has a quarantined count', (await text('.ins-kpi.bad')).includes('07'));
+await page.getByRole('button', { name: 'Show on graph' }).click();
+await wait(500);
+check('shortest path can be shown on the graph', await page.locator('.path-chip').isVisible());
+await page.locator('.path-chip .iconbtn').click();
+await page.getByRole('tab', { name: 'Graph', exact: true }).click();
+
+for (const [key, name] of [['2', 'Memory'], ['3', 'Brain'], ['1', 'Console']]) {
+  await page.keyboard.press(key);
+  await wait(250);
+  check(`key ${key} switches to ${name}`, (await text('.navbtn.on')).includes(name));
+}
+
 // tenant switch
 await page.selectOption('.tenant select', 'globex');
 await wait(1200);

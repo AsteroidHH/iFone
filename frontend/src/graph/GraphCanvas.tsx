@@ -10,6 +10,10 @@ import { GraphAdapter } from './adapter';
 import { graphBus } from './bus';
 import { COL_X, NODE_W } from './layout';
 import { ListView } from './ListView';
+import { FiltersPanel, activeFilterCount } from './FiltersPanel';
+import { Minimap, type MiniData } from './Minimap';
+import { tools } from '../copy/tools';
+import { adjacency, godNodes, neighborhood } from '../state/insights';
 
 const KINDS = ['source', 'fact', 'conclusion', 'action'];
 
@@ -20,6 +24,9 @@ export function GraphCanvas({ active }: { active: boolean }) {
   const [hover, setHover] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [welcomeGone, setWelcomeGone] = useState(false);
+  const [mini, setMini] = useState<MiniData>({ nodes: [], view: { x: 0, y: 0, w: 1, h: 1 } });
+  const miniRaf = useRef(0);
+  const lastFilterKey = useRef('');
   const loaded = useStore((s) => s.loaded);
   const counts = useStore((s) => {
     const nodes = visibleGraph(s).nodes;
@@ -34,13 +41,27 @@ export function GraphCanvas({ active }: { active: boolean }) {
   const legendOpen = useStore((s) => s.legendOpen);
   const started = useStore((s) => s.eventLog.length > 0);
   const nodeCount = counts.reduce((a, b) => a + b, 0);
+  const filters = useStore((s) => s.filters);
+  const filtersOpen = useStore((s) => s.filtersOpen);
+  const pathIds = useStore((s) => s.pathIds);
+  const nodesRec = useStore((s) => s.nodes);
+  const edgesRec = useStore((s) => s.edges);
+  const past = useStore((s) => s.past);
+  const filterCount = activeFilterCount(filters);
 
   useEffect(() => {
     if (!host.current) return;
     const a = new GraphAdapter(host.current, {
       onSelect: (id) => useStore.getState().set({ selectedId: id }),
       onHover: setHover,
+      onContext: (id, x, y) => useStore.getState().set({ ctxMenu: { id, x, y }, selectedId: id }),
       onViewport: (pan, zoom) => {
+        if (!miniRaf.current) {
+          miniRaf.current = requestAnimationFrame(() => {
+            miniRaf.current = 0;
+            if (adapter.current) setMini(adapter.current.mini());
+          });
+        }
         const w = (NODE_W + 56) * zoom;
         rails.current.forEach((el, i) => {
           if (!el) return;
@@ -50,6 +71,7 @@ export function GraphCanvas({ active }: { active: boolean }) {
       },
     });
     adapter.current = a;
+    (host.current as HTMLElement & { __cy?: unknown }).__cy = a.cy;
     const ro = new ResizeObserver(() => {
       if (host.current && host.current.clientWidth > 0) a.resized();
     });
@@ -64,6 +86,7 @@ export function GraphCanvas({ active }: { active: boolean }) {
       graphBus.delta.on((d) => {
         const st = useStore.getState();
         a.applyDelta(st.nodes, st.edges, d);
+        setTimeout(() => setMini(a.mini()), 60);
       }),
       graphBus.fit.on(() => a.fit(true)),
       graphBus.focus.on((id) => a.focus(id)),
@@ -102,6 +125,56 @@ export function GraphCanvas({ active }: { active: boolean }) {
     adapter.current.cy.resize();
     adapter.current.fit(false);
   }, [active, listView]);
+
+  useEffect(() => {
+    const a = adapter.current;
+    if (!a) return;
+    const nodes = past ? past.nodes : Object.values(nodesRec);
+    const edges = past ? past.edges : Object.values(edgesRec);
+    const adj = adjacency(nodes, edges);
+    const f = filters;
+    const kindOff = Object.keys(f.kinds).filter((k) => !f.kinds[k]);
+    const statusOff = Object.keys(f.statuses).filter((k) => !f.statuses[k]);
+    const noFilter = !kindOff.length && !statusOff.length && !f.hideHealthy && !(f.local && selectedId);
+    if (noFilter) {
+      a.setVisible(null);
+    } else {
+      let ok = new Set(
+        nodes
+          .filter((n) => f.kinds[n.kind] !== false && f.statuses[n.status] !== false)
+          .filter((n) => !f.hideHealthy || n.status !== 'HEALTHY' || n.stale || n.kind === 'action')
+          .map((n) => n.id),
+      );
+      if (f.hideHealthy) {
+        const keep = new Set<string>();
+        for (const n of nodes) {
+          const bad = n.status !== 'HEALTHY' || n.stale;
+          if (bad) {
+            keep.add(n.id);
+            for (const nb of adj.und.get(n.id) ?? []) keep.add(nb);
+          }
+        }
+        ok = new Set([...ok].filter((id) => keep.has(id)));
+      }
+      if (f.local && selectedId) {
+        const near = neighborhood(adj, selectedId, f.depth);
+        ok = new Set([...ok].filter((id) => near.has(id)));
+        ok.add(selectedId);
+      }
+      a.setVisible(ok);
+    }
+    a.setGods(f.gods ? godNodes(nodes, adj, 3).map((g) => g.id) : []);
+    const key = JSON.stringify([f.kinds, f.statuses, f.hideHealthy, f.local && selectedId ? [selectedId, f.depth] : null]);
+    if (key !== lastFilterKey.current) {
+      lastFilterKey.current = key;
+      setTimeout(() => a.fit(true), 40);
+    }
+    setTimeout(() => setMini(a.mini()), 60);
+  }, [filters, selectedId, nodesRec, edgesRec, past]);
+
+  useEffect(() => {
+    adapter.current?.setPath(pathIds);
+  }, [pathIds]);
 
   const preview = useQuery({
     queryKey: ['preview', hover],
@@ -155,9 +228,22 @@ export function GraphCanvas({ active }: { active: boolean }) {
               {copy.canvas.list}
             </button>
           </div>
-          <button className="btn quiet" disabled={!selectedId} onClick={() => graphBus.collapse.emit()}>
-            <Icon name="collapse" size={14} />
-            {collapsed ? copy.canvas.expand : copy.canvas.collapse}
+          <div className="filters-wrap">
+            <button className={`btn${filterCount ? ' primary' : ''}`} aria-expanded={filtersOpen} onClick={() => set({ filtersOpen: !filtersOpen })}>
+              <Icon name="sliders" size={14} />
+              {tools.filters.button}
+              {filterCount > 0 && <b className="f-count num">{filterCount}</b>}
+            </button>
+            {filtersOpen && <FiltersPanel />}
+          </div>
+          <button
+            className="iconbtn boxed"
+            disabled={!selectedId}
+            onClick={() => graphBus.collapse.emit()}
+            aria-label={collapsed ? copy.canvas.expand : copy.canvas.collapse}
+            title={collapsed ? copy.canvas.expand : copy.canvas.collapse}
+          >
+            <Icon name="collapse" size={15} />
           </button>
         </div>
 
@@ -192,6 +278,16 @@ export function GraphCanvas({ active }: { active: boolean }) {
           )}
         </div>
 
+        <Minimap data={mini} selected={selectedId} onPan={(x, y) => adapter.current?.panToModel(x, y)} />
+        {pathIds.length > 0 && (
+          <div className="path-chip" role="status">
+            <Icon name="path" size={14} />
+            {tools.insights.hops(pathIds.length - 1)}
+            <button className="iconbtn" aria-label={tools.insights.clearPath} onClick={() => set({ pathIds: [] })}>
+              <Icon name="x" size={13} />
+            </button>
+          </div>
+        )}
         {loaded && nodeCount === 0 && <p className="canvas-empty">{copy.canvas.empty}</p>}
         {!started && !welcomeGone && !asOf && nodeCount > 0 && (
           <div className="welcome" role="note">

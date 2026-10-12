@@ -116,6 +116,27 @@ const P: Record<string, ReactNode> = {
   dev: <path d="m8 7-5 5 5 5m8-10 5 5-5 5M14 4l-4 16" />,
   sparkle: <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18" />,
   rollback: <path d="M9 7 4 12l5 5M4 12h11a5 5 0 0 1 0 10" />,
+  sliders: <path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6" />,
+  command: <path d="M9 9V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z" />,
+  map: <path d="M3 6.5 9 4l6 2.5L21 4v13.5L15 20l-6-2.5L3 20zM9 4v13.5M15 6.5V20" />,
+  star: <path d="m12 3.5 2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9l-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z" />,
+  path: <path d="M5 18a2.5 2.5 0 1 0 0-.01M19 6a2.5 2.5 0 1 0 0-.01M7.5 18H14a3 3 0 0 0 0-6h-4a3 3 0 0 1 0-6h6.5" />,
+  copy: (
+    <>
+      <rect x="8.5" y="8.5" width="11" height="11" rx="2" />
+      <path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5" />
+    </>
+  ),
+  target: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <circle cx="12" cy="12" r="4.5" />
+      <circle cx="12" cy="12" r="1" />
+    </>
+  ),
+  forward: <path d="m15 14 5-5-5-5M20 9H10a6 6 0 0 0 0 12h3" />,
+  layers: <path d="m12 3.5 9 4.7-9 4.7-9-4.7zM3 12.5l9 4.7 9-4.7M3 16.8l9 4.7 9-4.7" />,
+  chart: <path d="M4 19V5M4 19h16M8 15v-4M12 15V8M16 15v-6" />,
   mail: (
     <>
       <rect x="3" y="5.5" width="18" height="13" rx="2" />

@@ -1,39 +1,43 @@
 /*
- * Design direction: an incident command room.
+ * Design direction: a print proof room (shared with the landing page).
  * Graphite surfaces, one signal colour per state, card-style evidence nodes on a dot grid,
  * big numerals for the numbers that matter.
  */
 :root {
-  --bg: #080d13;
-  --bg-2: #0d141c;
-  --bg-3: #121b25;
-  --bg-4: #19242f;
-  --line: rgb(255 255 255 / 7%);
-  --line-2: rgb(255 255 255 / 13%);
-  --line-3: rgb(255 255 255 / 24%);
+  --bg: #f3f5f2;
+  --bg-2: #ffffff;
+  --bg-3: #eef1ed;
+  --bg-4: #e3e8e2;
+  --line: rgb(11 18 24 / 12%);
+  --line-2: rgb(11 18 24 / 26%);
+  --line-3: rgb(11 18 24 / 58%);
 
-  --text: #e9eef4;
-  --text-2: #a3b0bf;
-  --text-3: #8392a3;
+  --text: #0b1218;
+  --text-2: #46525e;
+  --text-3: #5d6975;
 
-  --ok: #3ddbb0;
-  --ok-dim: rgb(61 219 176 / 14%);
-  --ok-line: rgb(61 219 176 / 45%);
-  --bad: #ff6a55;
-  --bad-dim: rgb(255 106 85 / 14%);
-  --bad-line: rgb(255 106 85 / 50%);
-  --warn: #f4b94f;
-  --warn-dim: rgb(244 185 79 / 14%);
-  --warn-line: rgb(244 185 79 / 50%);
-  --person: #8f9bff;
-  --person-dim: rgb(143 155 255 / 15%);
-  --person-line: rgb(143 155 255 / 50%);
-  --ghost: #8190a3;
+  --ok: #07745e;
+  --ok-dim: rgb(7 116 94 / 12%);
+  --ok-line: rgb(7 116 94 / 55%);
+  --bad: #c93420;
+  --bad-dim: rgb(201 52 32 / 10%);
+  --bad-line: rgb(201 52 32 / 55%);
+  --warn: #8f5a00;
+  --warn-dim: rgb(184 117 0 / 14%);
+  --warn-line: rgb(184 117 0 / 55%);
+  --person: #3b3fd1;
+  --person-dim: rgb(59 63 209 / 9%);
+  --person-line: rgb(59 63 209 / 50%);
+  --ghost: #6b7783;
 
-  --on-light: #0a1018;
+  --mint: #3ddbb0;
+  --redfill: #ff6a55;
+  --on-light: #ffffff;
 
   --font-ui: 'Schibsted Grotesk', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --f-display: 'Bricolage Grotesque Variable', 'Schibsted Grotesk', system-ui, sans-serif;
+  --f-pixel: 'Silkscreen', 'JetBrains Mono', monospace;
 
   --t12: 12px;
   --t13: 13px;
@@ -44,11 +48,12 @@
   --t44: 44px;
 
   --r-s: 6px;
-  --r-m: 10px;
-  --r-l: 14px;
+  --r-m: 12px;
+  --r-l: 18px;
   --r-pill: 999px;
 
-  --shadow-1: 0 1px 0 rgb(255 255 255 / 4%) inset, 0 8px 24px rgb(0 0 0 / 28%);
-  --shadow-2: 0 18px 50px rgb(0 0 0 / 55%);
+  --shadow-1: none;
+  --shadow-2: 6px 6px 0 var(--text);
+  --hard: 8px 8px 0 var(--text);
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }

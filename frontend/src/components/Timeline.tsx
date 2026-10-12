@@ -52,6 +52,13 @@ export function Timeline() {
   }, [eventLog]);
 
   const empty = eventLog.length === 0;
+  const hist = useMemo(() => {
+    const bins = 60;
+    const counts = new Array<number>(bins).fill(0);
+    for (const e of eventLog) if (e.type !== 'heartbeat') counts[Math.min(bins - 1, Math.max(0, Math.floor(((e.ts - start) / span) * bins)))]! += 1;
+    const max = Math.max(1, ...counts);
+    return counts.map((c) => c / max);
+  }, [eventLog, start, span]);
   const value = asOf ?? end;
 
   function seek(v: number) {
@@ -93,6 +100,11 @@ export function Timeline() {
         <label className="tl-slider">
           <span className="sr">{copy.timeline.asOf}</span>
           <div className="tl-track">
+            <svg className="tl-hist" viewBox="0 0 60 10" preserveAspectRatio="none" aria-hidden="true">
+              {hist.map((h, i) => (
+                <rect key={i} x={i + 0.12} y={10 - h * 10} width={0.76} height={h * 10} />
+              ))}
+            </svg>
             {markers.map((m, i) => (
               <span
                 key={i}

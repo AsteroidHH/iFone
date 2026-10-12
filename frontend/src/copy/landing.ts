@@ -98,6 +98,8 @@ export const landing = {
       ['08-past', 'Time travel', 'Replay what the team believed at any moment.'],
       ['10-memory', 'Agent memory', 'Procedures that rank themselves by what worked.'],
       ['11-brain', 'Company brain', 'Answers with receipts, or a refusal.'],
+      ['insights', 'Graph insights', 'Belief flow, most connected nodes, shortest paths.'],
+      ['palette', 'Command palette', 'Jump to any belief or run any step from the keyboard.'],
     ] as [string, string, string][],
     cta: 'Open the console',
   },

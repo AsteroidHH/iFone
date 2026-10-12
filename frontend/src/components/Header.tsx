@@ -6,6 +6,7 @@ import { getInvariants } from '../state/endpoints';
 import { switchTenant } from '../state/pipeline';
 import { useStore, type View } from '../state/store';
 import { go } from '../landing/hooks';
+import { tools } from '../copy/tools';
 import { Icon } from './Icon';
 import { Skeleton } from './ui';
 
@@ -124,8 +125,13 @@ export function Header() {
         <InvariantLight />
         <span className={`pill conn ${conn}`} role="status">
           <span className="dot" aria-hidden="true" />
-          {copy.connection[conn]}
+          <span className="conn-label">{copy.connection[conn]}</span>
         </span>
+        <button className="palette-btn" onClick={() => set({ paletteOpen: true })} aria-label={tools.palette.open} title={tools.palette.open}>
+          <Icon name="search" size={15} />
+          <span className="pb-label">Search</span>
+          <kbd>Ctrl K</kbd>
+        </button>
         <button className="iconbtn" aria-pressed={presentation} aria-label={copy.presentationMode} title={`${copy.presentationMode} (P)`} onClick={() => set({ presentation: !presentation })}>
           <Icon name="present" size={17} />
         </button>

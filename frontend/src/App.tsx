@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { flushSync } from 'react-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Header } from './components/Header';
 import { Banners, DevConsole, LoadError, Shortcuts, Toasts, VersionBlock } from './components/Overlays';
@@ -8,7 +9,9 @@ import { startSession, stopSession } from './state/pipeline';
 import { startAutopilot } from './state/autopilot';
 import { Landing } from './landing/Landing';
 import { useRoute } from './landing/hooks';
-import { useStore } from './state/store';
+import { navMove, useStore } from './state/store';
+import { CommandPalette } from './components/CommandPalette';
+import { ContextMenu } from './components/ContextMenu';
 import { Benchmark } from './views/Benchmark';
 import { Brain } from './views/Brain';
 import { Console } from './views/Console';
@@ -21,14 +24,27 @@ function useShortcuts() {
       const t = e.target as HTMLElement | null;
       const typing = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
       const st = useStore.getState();
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K' || e.key === 'p' || e.key === 'P')) {
+        e.preventDefault();
+        flushSync(() => st.set({ paletteOpen: !st.paletteOpen }));
+        return;
+      }
+      if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+        const id = navMove(e.key === 'ArrowLeft' ? -1 : 1);
+        if (id) graphBus.focus.emit(id);
+        return;
+      }
       if (e.key === 'Escape') {
+        if (st.ctxMenu) st.set({ ctxMenu: null });
+        else if (st.filtersOpen) st.set({ filtersOpen: false });
         if (typing) (t as HTMLElement).blur();
         if (st.shortcutsOpen) st.set({ shortcutsOpen: false });
         else if (st.presentation) st.set({ presentation: false });
         else st.set({ selectedId: null, search: '' });
         return;
       }
-      if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (typing || st.paletteOpen || e.metaKey || e.ctrlKey || e.altKey) return;
       switch (e.key) {
         case 'f':
         case 'F':
@@ -48,6 +64,21 @@ function useShortcuts() {
           break;
         case '?':
           st.set({ shortcutsOpen: true });
+          break;
+        case '1':
+          st.set({ view: 'console' });
+          break;
+        case '2':
+          st.set({ view: 'memory' });
+          break;
+        case '3':
+          st.set({ view: 'brain' });
+          break;
+        case '4':
+          st.set({ view: 'tenants' });
+          break;
+        case '5':
+          st.set({ view: 'benchmark' });
           break;
       }
     };
@@ -99,6 +130,12 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <div className={`app${presentation ? ' presenting' : ''}${demo ? ' demo' : ''}`}>
+        <div className="lp-frame" aria-hidden="true">
+          <i className="crop tl" />
+          <i className="crop tr" />
+          <i className="crop bl" />
+          <i className="crop br" />
+        </div>
         <Header />
         <Banners />
         {vs === 'major' ? (
@@ -117,6 +154,8 @@ export function App() {
         <LoadError />
         <Toasts />
         <Shortcuts />
+        <CommandPalette />
+        <ContextMenu />
         {!presentation && <DevConsole />}
       </div>
     </QueryClientProvider>
