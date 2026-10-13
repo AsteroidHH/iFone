@@ -108,3 +108,16 @@ if settings.TOKENS_JSON.strip():
 elif settings.ENV == "production":
     settings.DEMO_TOKENS = {}
     logger.warning("QUORUM_ENV=production and no QUORUM_TOKENS_JSON: every API call will be refused until tokens are configured.")
+
+# Values that appear in example files. Copied over unchanged they would be real, publicly known credentials, so refuse them.
+_PLACEHOLDERS = ("token_secret_here", "qtk_replace_me", "change-me", "replace_me", "your-token-here", "<token>")
+
+
+def _refuse_placeholders() -> None:
+    blob = " ".join([*settings.DEMO_TOKENS.keys(), settings.FALKORDB_URL]) if settings.ENV == "production" else ""
+    for ph in _PLACEHOLDERS:
+        if ph in blob:
+            raise RuntimeError(f"Refusing to start: a configured token or the FalkorDB URL contains the example placeholder {ph!r}. Generate real values (python scripts/make_token.py) and set them before running in production.")
+
+
+_refuse_placeholders()
