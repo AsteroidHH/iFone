@@ -5,7 +5,7 @@ import type { Role } from '../api/client';
 import { emptyCore, type CoreState } from './reducer';
 import { addToast, type Toast, type ToastTone } from './toasts';
 
-export type View = 'console' | 'memory' | 'brain' | 'tenants' | 'benchmark' | 'context' | 'connect' | 'team' | 'activity';
+export type View = 'overview' | 'console' | 'memory' | 'brain' | 'tenants' | 'benchmark' | 'context' | 'connect' | 'team' | 'activity';
 export type Tab = 'graph' | 'mindmap' | 'diff' | 'ledger' | 'insights';
 export type InspectorTab = 'path' | 'details' | 'links' | 'cypher';
 export type FeedFilter = 'all' | 'graph' | 'actions' | 'handoffs' | 'system';
@@ -40,6 +40,8 @@ export interface PastGraph {
 
 export interface UiState {
   view: View;
+  /** The guided story and its teaching screens. Off on a fresh install; always on in the sample build. */
+  story: boolean;
   tab: Tab;
   inspectorTab: InspectorTab;
   feedFilter: FeedFilter;
@@ -104,6 +106,7 @@ function readMini(): boolean {
 export const useStore = create<Store>((set, get) => ({
   ...emptyCore(),
   view: 'console',
+  story: import.meta.env.VITE_API_MODE === 'mock',
   tab: 'graph',
   inspectorTab: 'path',
   feedFilter: 'all',

@@ -22,6 +22,8 @@
 
 Quorum is shared memory for AI agents where a wrong fact can be reverted, with everything built on it, in under a millisecond, and no later lookup can return it. Run `docker compose up -d`, open http://localhost:5173, and follow the **Get started** card on the Connect page. Who it is for, the story, and what the numbers do and do not say: [`docs/IMPACT.md`](docs/IMPACT.md). Security model: [`SECURITY.md`](SECURITY.md). A real deployment (password-protected FalkorDB, TLS, tokens, sign-in): [`docs/SETUP.md`](docs/SETUP.md#production-in-one-command).
 
+A fresh install is **empty on purpose** (no sample data). The guided poisoned-webhook story is opt-in: `QUORUM_DEMO=1 docker compose up -d`.
+
 ## 🎯 Executive Summary
 
 When an autonomous agent ingests an erroneous or malicious fact, standard RAG architectures (flat vector stores and naïve graph search) permanently contaminate downstream memory. As agents derive conclusions, execute external actions, and coordinate across handoffs, the poisoned context cascades silently.

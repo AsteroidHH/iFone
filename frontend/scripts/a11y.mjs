@@ -11,6 +11,7 @@ const browser = await chromium.launch({ channel: process.env.QUORUM_BROWSER ?? '
 
 const SCREENS = [
   { name: 'landing', url: '', key: null },
+  { name: 'overview', url: '#/app', key: '0' },
   { name: 'console', url: '#/app', key: '1' },
   { name: 'memory', url: '#/app', key: '2' },
   { name: 'brain', url: '#/app', key: '3' },

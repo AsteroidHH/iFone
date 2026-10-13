@@ -5,6 +5,7 @@ import { Icon } from '../components/Icon';
 import { copy } from '../copy';
 import { getPreview } from '../state/endpoints';
 import { useStore, visibleGraph } from '../state/store';
+import { EmptyGraphArt } from '../components/charts';
 import { goToTime } from '../state/timetravel';
 import { GraphAdapter } from './adapter';
 import { graphBus } from './bus';
@@ -28,6 +29,7 @@ export function GraphCanvas({ active }: { active: boolean }) {
   const miniRaf = useRef(0);
   const lastFilterKey = useRef('');
   const loaded = useStore((s) => s.loaded);
+  const story = useStore((s) => s.story);
   const counts = useStore((s) => {
     const nodes = visibleGraph(s).nodes;
     return KINDS.map((k) => nodes.filter((n) => n.kind === k).length);
@@ -204,7 +206,7 @@ export function GraphCanvas({ active }: { active: boolean }) {
 
   // The welcome strip goes away on first interaction, not on a timer.
   const hasSelected = useStore((s) => s.navStack.length > 0);
-  const showWelcome = !started && !welcomeGone && !hasSelected && !asOf && nodeCount > 0;
+  const showWelcome = story && !started && !welcomeGone && !hasSelected && !asOf && nodeCount > 0;
   const showMini = useStore((s) => s.showMini);
 
   // One status line at a time, in priority order, so overlays never stack on the graph.
@@ -358,7 +360,14 @@ export function GraphCanvas({ active }: { active: boolean }) {
           </div>
         </div>
 
-        {loaded && nodeCount === 0 && <p className="canvas-empty">{copy.canvas.empty}</p>}
+        {loaded && nodeCount === 0 && (story ? <p className="canvas-empty">{copy.canvas.empty}</p> : (
+          <div className="canvas-empty-art">
+            <EmptyGraphArt size={190} />
+            <b>Nothing in memory yet</b>
+            <p>When a connected AI saves a fact, it shows up here as a box, and arrows show what was built from what.</p>
+            <button className="btn primary" onClick={() => set({ view: 'connect' })}>Connect an AI</button>
+          </div>
+        ))}
         {listView && <ListView />}
       </div>
     </div>

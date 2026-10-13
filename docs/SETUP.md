@@ -72,7 +72,12 @@ Open **Team** in the console (you need a `human` token). Add a team, then add a 
 | `QUORUM_RANKING` | `hybrid` | `keyword` turns the vector part of ranking off, for comparison. |
 | `QUORUM_EMBED_PROVIDER`, `QUORUM_EMBED_URL`, `QUORUM_EMBED_MODEL`, `QUORUM_EMBED_API_KEY` | `local` | Use any OpenAI-compatible embeddings endpoint (OpenAI, Ollama, LM Studio, vLLM) instead of the built-in vectors. |
 | `QUORUM_OBSERVER_MAX_FACTS` | `12` | Most facts one `observe` call may store. |
+| `QUORUM_DEMO` | off | The guided poisoned-webhook story, its sample agents and the four teaching screens (Memory, Brain, Tenants, Benchmark). Off on a fresh install: the workspace is empty and the console shows six screens (Overview, Console, Context, Connect, Team, Activity). Set `QUORUM_DEMO=1` to present the story. |
 | `QUORUM_PERSISTENCE` | `falkordb` | `memory` exists for unit tests only and shows a warning banner. Never use it for real work. |
+
+## A clean first install
+
+A new install is an empty workspace: no teams, no members, no facts, no sample agents, no guided scenario. The console opens on the **Overview**, which shows three steps (add a person, connect their AI, watch it work) until something exists, then turns into live charts: memory health, who is online, tokens saved, what needs attention, and calls per hour. To start again from nothing, `docker compose down -v` (also removes the database volume) or `python scripts/reset_data.py --yes`.
 
 ## Production in one command
 

@@ -5,6 +5,7 @@ import { copy } from '../copy';
 import { getInvariants } from '../state/endpoints';
 import { switchTenant } from '../state/pipeline';
 import { useStore, type View } from '../state/store';
+import { visibleViews } from '../state/views';
 import { go } from '../landing/hooks';
 import { tools } from '../copy/tools';
 import { rememberFocus } from './focus';
@@ -15,6 +16,7 @@ import { getTokenStats } from '../workspace/server';
 import { useLive } from '../workspace/live';
 
 const VIEWS: { id: View; icon: string }[] = [
+  { id: 'overview', icon: 'chart' },
   { id: 'console', icon: 'console' },
   { id: 'memory', icon: 'memory' },
   { id: 'brain', icon: 'brain' },
@@ -107,6 +109,8 @@ function InvariantLight() {
 }
 
 export function Header() {
+  const story = useStore((s) => s.story);
+  const shown = visibleViews(story);
   const view = useStore((s) => s.view);
   const set = useStore((s) => s.set);
   const meta = useStore((s) => s.meta);
@@ -123,8 +127,8 @@ export function Header() {
         </span>
         <span className="brand-name">{copy.appName}</span>
       </button>
-      <nav aria-label={copy.header.menu} className="nav">
-        {VIEWS.map((v) => (
+      <nav aria-label={copy.header.menu} className="nav" style={{ ["--tabs" as string]: shown.length }}>
+        {VIEWS.filter((v) => shown.includes(v.id)).map((v) => (
           <button key={v.id} className={`navbtn${view === v.id ? ' on' : ''}`} aria-current={view === v.id ? 'page' : undefined} aria-label={copy.nav[v.id]} title={copy.nav[v.id]} onClick={() => set({ view: v.id })}>
             <Icon name={v.icon} size={16} />
             <span className="nav-label">
@@ -152,11 +156,13 @@ export function Header() {
             {copy.sampleData}
           </span>
         )}
-        <span className={`pill mode ${mode}`} title={copy.modeHint[mode] ?? ''}>
-          {copy.mode[mode] ?? mode}
-        </span>
+        {story && (
+          <span className={`pill mode ${mode}`} title={copy.modeHint[mode] ?? ''}>
+            {copy.mode[mode] ?? mode}
+          </span>
+        )}
         <SavedPill />
-        <EpochBadge />
+        {story && <EpochBadge />}
         <InvariantLight />
         <span className={`pill conn ${conn}`} role="status">
           <span className="dot" aria-hidden="true" />

@@ -9,7 +9,9 @@ router = APIRouter()
 
 @router.get("/agents", response_model=List[AgentItem])
 def list_agents(auth: AuthContext = Depends(get_auth_context)):
-    return get_fixture_agents()
+    from app.config import settings
+
+    return get_fixture_agents() if settings.DEMO else []
 
 
 @router.get("/agents/{agent_id}/resume", response_model=AgentResumeResponse)

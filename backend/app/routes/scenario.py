@@ -18,6 +18,10 @@ async def run_scenario_step(
     step: ScenarioStep,
     auth: AuthContext = Depends(require_role(["auditor", "human"])),
 ):
+    from app.config import settings
+
+    if not settings.DEMO:
+        raise HTTPException(status_code=404, detail={"error": {"code": ErrorCode.NOT_FOUND.value, "message": "The guided scenario is off. Set QUORUM_DEMO=1 to run it."}})
     run_id = f"run_{uuid.uuid4().hex[:8]}"
 
     # Broadcast step start

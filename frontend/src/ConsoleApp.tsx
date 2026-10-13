@@ -17,6 +17,7 @@ import { startSession, stopSession } from './state/pipeline';
 import { queryClient } from './state/queries';
 import { closePopovers, navMove, POPOVERS, useStore } from './state/store';
 import { useLive } from './workspace/live';
+import { viewForKey } from './state/views';
 
 // Everything heavy loads on demand: the graph engine only when the console is opened, each view only when visited.
 const Console = lazy(() => import('./views/Console').then((m) => ({ default: m.Console })));
@@ -27,6 +28,7 @@ const Benchmark = lazy(() => import('./views/Benchmark').then((m) => ({ default:
 const Context = lazy(() => import('./views/Context').then((m) => ({ default: m.Context })));
 const Connect = lazy(() => import('./views/Connect').then((m) => ({ default: m.Connect })));
 const Team = lazy(() => import('./views/Team').then((m) => ({ default: m.Team })));
+const Overview = lazy(() => import('./views/Overview').then((m) => ({ default: m.Overview })));
 const Activity = lazy(() => import('./views/Activity').then((m) => ({ default: m.Activity })));
 const CommandPalette = lazy(() => import('./components/CommandPalette').then((m) => ({ default: m.CommandPalette })));
 
@@ -100,33 +102,10 @@ function useShortcuts() {
           rememberFocus();
           st.set({ shortcutsOpen: true });
           break;
-        case '1':
-          st.set({ view: 'console' });
-          break;
-        case '2':
-          st.set({ view: 'memory' });
-          break;
-        case '3':
-          st.set({ view: 'brain' });
-          break;
-        case '4':
-          st.set({ view: 'tenants' });
-          break;
-        case '5':
-          st.set({ view: 'benchmark' });
-          break;
-        case '6':
-          st.set({ view: 'context' });
-          break;
-        case '7':
-          st.set({ view: 'connect' });
-          break;
-        case '8':
-          st.set({ view: 'team' });
-          break;
-        case '9':
-          st.set({ view: 'activity' });
-          break;
+        default: {
+          const target = viewForKey(e.key, st.story);
+          if (target) st.set({ view: target });
+        }
       }
     };
     const onPointer = (e: PointerEvent) => {
@@ -151,6 +130,7 @@ function Shell() {
   const loaded = useStore((s) => s.loaded);
   const paletteOpen = useStore((s) => s.paletteOpen);
   useShortcuts();
+  const story = useStore((s) => s.story);
   // The console view has its own <main>; every other view is the page's one main landmark.
   const Stage = (view === 'console' ? 'div' : 'main') as 'div';
 
@@ -206,6 +186,7 @@ function Shell() {
               <div className="view" hidden={view !== 'console'}>
                 <Console visible={view === 'console'} />
               </div>
+              {view === 'overview' && <Overview />}
               {view === 'memory' && <Memory />}
               {view === 'brain' && <Brain />}
               {view === 'tenants' && <Tenants />}
@@ -226,7 +207,7 @@ function Shell() {
           </Suspense>
         )}
         <ContextMenu />
-        {!presentation && <DevConsole />}
+        {!presentation && story && <DevConsole />}
       </div>
     </QueryClientProvider>
   );
@@ -300,11 +281,22 @@ function useAuthGate(ready: boolean) {
   return { state, expired, done: () => { setExpired(false); setState('ok'); } };
 }
 
+let landed = false;
+
 export default function ConsoleApp() {
   const gate = useBackendGate();
   const r = gate.result;
   const healthy = !!r && r.kind === 'ok' && !gate.blocked;
   const auth = useAuthGate(healthy);
+  const demoFlag = r && r.kind === 'ok' ? !!r.health.demo : undefined;
+  useEffect(() => {
+    if (API_MODE === 'mock' || demoFlag === undefined) return;
+    const st = useStore.getState();
+    st.set({ story: demoFlag });
+    // A fresh install lands on the Overview, once; after that the person's own navigation wins.
+    if (!demoFlag && !landed && st.view === 'console') st.set({ view: 'overview' });
+    landed = true;
+  }, [demoFlag]);
   if (API_MODE === 'mock') return <Shell />;
   if (!r) return <ViewFallback />;
   if (r.kind !== 'ok' || gate.blocked) {
