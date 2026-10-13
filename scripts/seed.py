@@ -16,6 +16,14 @@ Generates:
 3. Precomputed 384-dim normalized embeddings so 'docker compose up' requires zero external downloads!
 """
 
+import os
+import sys
+
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+_root_dir = os.path.abspath(os.path.join(_current_dir, ".."))
+if _root_dir not in sys.path:
+    sys.path.insert(0, _root_dir)
+
 import json
 import time
 import hashlib
