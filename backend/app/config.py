@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     ALLOW_DYNAMIC_TOKENS: bool | None = None
     # Comma separated browser origins allowed to call the API. Empty means localhost only.
     CORS_ORIGINS: str = ""
+    # Comma-separated list of IP addresses or CIDR networks trusted as reverse proxies.
+    TRUSTED_PROXIES: str = "127.0.0.1,::1"
     # Where agents reach this hub from other machines, e.g. https://quorum.example.com (shown on the Connect page).
     PUBLIC_URL: str = ""
     # Require MCP clients to send the token as an Authorization header (so the model never sees it). Default: on in production.

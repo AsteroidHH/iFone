@@ -9,6 +9,7 @@ if _repo_root not in sys.path:
 if _backend_dir not in sys.path:
     sys.path.insert(0, _backend_dir)
 
+import ipaddress
 import os
 import threading
 import time
@@ -158,14 +159,38 @@ async def security_headers(request: Request, call_next):
     return response
 
 
+def _is_trusted_proxy(host: str) -> bool:
+    if not host or host == "unknown":
+        return False
+    trusted = [p.strip() for p in (settings.TRUSTED_PROXIES or "").split(",") if p.strip()]
+    if not trusted:
+        return False
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    for t in trusted:
+        try:
+            if "/" in t:
+                if ip in ipaddress.ip_network(t, strict=False):
+                    return True
+            elif ip == ipaddress.ip_address(t):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
 def _client_ip(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    real_ip = request.headers.get("x-real-ip")
-    if real_ip:
-        return real_ip.strip()
-    return request.client.host if request.client else "unknown"
+    direct = request.client.host if request.client else "unknown"
+    if _is_trusted_proxy(direct):
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+        real_ip = request.headers.get("x-real-ip")
+        if real_ip:
+            return real_ip.strip()
+    return direct
 
 
 @app.middleware("http")

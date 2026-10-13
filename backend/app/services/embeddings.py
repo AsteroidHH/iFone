@@ -203,7 +203,7 @@ class _OpenAIProvider:
 
 _openai = _OpenAIProvider()
 _cache: OrderedDict[str, Tuple[str, np.ndarray]] = OrderedDict()  # node id -> (text hash, vector)
-MAX_CACHE = 10000
+MAX_CACHE = 50000
 _lock = threading.Lock()
 _provider_failed_at = 0.0
 

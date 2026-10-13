@@ -98,8 +98,15 @@ def observe_text(auth: Dict[str, Any], text: str, source: str = "chat", dry_run:
         if dry_run:
             stored.append({**item, "id": None})
             continue
+        base_id = f"obs_{c['fingerprint'][:8]}"
+        with store._lock:
+            existing = store.nodes.get(base_id)
+            if existing and existing.status == Status.QUARANTINED:
+                fact_id = f"{base_id}_{uuid.uuid4().hex[:4]}"
+            else:
+                fact_id = base_id
         fact = GraphNode(
-            id=f"obs_{c['fingerprint'][:8]}",
+            id=fact_id,
             kind=NodeKind.FACT,
             label=c["text"][:60],
             status=Status.HEALTHY,

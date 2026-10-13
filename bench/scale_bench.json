@@ -2,21 +2,21 @@
   "latency": [
     {
       "facts": 1000,
-      "cold_first_answer_ms": 342,
-      "warm_median_ms": 15,
-      "warm_p95_ms": 21
+      "cold_first_answer_ms": 309,
+      "warm_median_ms": 14,
+      "warm_p95_ms": 15
     },
     {
       "facts": 5000,
-      "cold_first_answer_ms": 1157,
-      "warm_median_ms": 76,
-      "warm_p95_ms": 94
+      "cold_first_answer_ms": 957,
+      "warm_median_ms": 70,
+      "warm_p95_ms": 80
     },
     {
       "facts": 20000,
-      "cold_first_answer_ms": 4491,
-      "warm_median_ms": 381,
-      "warm_p95_ms": 425
+      "cold_first_answer_ms": 5667,
+      "warm_median_ms": 457,
+      "warm_p95_ms": 697
     }
   ],
   "session_model": {

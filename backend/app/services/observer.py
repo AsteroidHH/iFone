@@ -75,15 +75,10 @@ def candidates(text: str, max_facts: int = 12) -> List[Dict[str, Any]]:
         value: Optional[str] = nu.group(0).strip() if nu else None
         key: Optional[str] = None
         if value:
-            words = []
-            seen_words = set()
-            for w in _content_words(_NUM_UNIT.sub(" ", s)):
-                if w not in seen_words:
-                    seen_words.add(w)
-                    words.append(w)
-                    if len(words) >= 6:
-                        break
-            key = "_".join(words)[:60] or None
+            named = [w.lower() for w in re.findall(r"\b[A-Z][a-z]{3,}\b", s) if w not in _STARTERS] + [w.lower() for w in re.findall(r"\b[A-Z]{2,}\b", s)]
+            entity_tokens = list(dict.fromkeys(named))
+            concepts = sorted(set(w for w in _content_words(_NUM_UNIT.sub(" ", s)) if w not in set(entity_tokens)))[:4]
+            key = "_".join(entity_tokens + concepts)[:60] or None
         out.append({"text": s, "key": key, "value": value, "confidence": round(min(1.0, 0.25 * score), 2), "signals": signals, "fingerprint": fp})
     out.sort(key=lambda c: -c["confidence"])
     return out[: max(1, max_facts)]

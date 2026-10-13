@@ -15,10 +15,11 @@ def _agent_key(auth: Dict[str, Any]) -> str:
 
 def _remember_delivery(store, auth: Dict[str, Any], ids: List[str], query: Optional[str] = None) -> None:
     with store._lock:
-        st = store.agent_state.setdefault(_agent_key(auth), {"ids": set(), "query": "", "epoch": store.epoch})
-        st["ids"].update(ids)
-        if len(st["ids"]) > 500:
-            st["ids"] = set(list(st["ids"])[-500:])
+        st = store.agent_state.setdefault(_agent_key(auth), {"ids": [], "query": "", "epoch": store.epoch})
+        existing = list(st.get("ids", []))
+        incoming_set = set(ids)
+        merged = [i for i in existing if i not in incoming_set] + list(ids)
+        st["ids"] = merged[-500:]
         st["epoch"] = store.epoch
         if query is not None:
             st["query"] = query
@@ -139,10 +140,12 @@ def delta(token: str = "") -> Dict[str, Any]:
     text = "\n".join(body)
     _remember_delivery(store, auth, p["ids"])
     with store._lock:
-        cur_ids = still | set(p["ids"])
-        if len(cur_ids) > 500:
-            cur_ids = set(list(cur_ids)[-500:])
-        store.agent_state[_agent_key(auth)]["ids"] = cur_ids
+        st_entry = store.agent_state.get(_agent_key(auth))
+        existing = list(st_entry.get("ids", [])) if st_entry else []
+        still_set = set(still)
+        incoming_set = set(p["ids"])
+        merged = [i for i in existing if i in still_set and i not in incoming_set] + list(p["ids"])
+        store.agent_state[_agent_key(auth)]["ids"] = merged[-500:]
     return {
         "epoch": store.epoch,
         "text": text,

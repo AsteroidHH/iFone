@@ -33,18 +33,26 @@ def _make_request(headers: dict, client_host: str = "10.0.0.1") -> Request:
     return Request(scope)
 
 
-def test_item_2_client_ip_proxy_headers():
-    # Behind reverse proxy with X-Forwarded-For
+def test_item_2_client_ip_proxy_headers(monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "TRUSTED_PROXIES", "127.0.0.1,10.0.0.2")
+
+    # Behind trusted proxy with X-Forwarded-For
     req = _make_request({"X-Forwarded-For": "203.0.113.195, 10.0.0.2"}, client_host="10.0.0.2")
     assert _client_ip(req) == "203.0.113.195"
 
-    # Behind reverse proxy with X-Real-IP
+    # Behind trusted proxy with X-Real-IP
     req2 = _make_request({"X-Real-IP": "198.51.100.42"}, client_host="10.0.0.2")
     assert _client_ip(req2) == "198.51.100.42"
 
-    # Direct connection without proxy headers
-    req3 = _make_request({}, client_host="192.168.1.50")
-    assert _client_ip(req3) == "192.168.1.50"
+    # Untrusted sender attempting to spoof X-Forwarded-For
+    untrusted_req = _make_request({"X-Forwarded-For": "1.1.1.1"}, client_host="198.51.100.25")
+    assert _client_ip(untrusted_req) == "198.51.100.25"  # Spoofed header ignored!
+
+    # Untrusted sender attempting to spoof X-Real-IP
+    untrusted_req2 = _make_request({"X-Real-IP": "1.1.1.1"}, client_host="192.168.1.50")
+    assert _client_ip(untrusted_req2) == "192.168.1.50"  # Spoofed header ignored!
 
 
 def test_item_9_open_paths_exact_matching():
@@ -112,7 +120,7 @@ def test_item_5_remove_member_cleans_agent_state():
     mid = m["id"]
 
     # Record agent read state
-    store.agent_state[mid] = {"ids": {"fact_1", "fact_2"}, "query": "hello", "epoch": 1}
+    store.agent_state[mid] = {"ids": ["fact_1", "fact_2"], "query": "hello", "epoch": 1}
     assert mid in store.agent_state
 
     # Remove member
@@ -120,14 +128,17 @@ def test_item_5_remove_member_cleans_agent_state():
     assert mid not in store.agent_state
 
 
-def test_item_5_agent_state_ids_capped_at_500():
+def test_item_5_agent_state_ids_capped_at_500_by_recency():
     store = get_graph_store("audit_test_cap")
     auth = {"tenant": "audit_test_cap", "member_id": "mem_1"}
     big_list = [f"f_{i}" for i in range(700)]
     mcp_read._remember_delivery(store, auth, big_list, "test")
     st = store.agent_state.get("mem_1")
     assert st is not None
-    assert len(st["ids"]) <= 500
+    assert len(st["ids"]) == 500
+    # Must strictly preserve FIFO recency order: oldest 200 evicted, latest 500 kept
+    assert st["ids"][0] == "f_200"
+    assert st["ids"][-1] == "f_699"
 
 
 def test_item_6_tenant_exists_negative_cache():
@@ -138,24 +149,31 @@ def test_item_6_tenant_exists_negative_cache():
     assert res2 is False
 
 
-def test_item_7_observer_keys_preserve_word_order():
+def test_item_7_observer_keys_direction_and_restatements():
+    # 1. Distinct directions have different keys
     s1 = "Export from Chile to Norway takes 10 days."
     s2 = "Export from Norway to Chile takes 10 days."
     c1 = observer.candidates(s1)
     c2 = observer.candidates(s2)
     assert len(c1) == 1 and len(c2) == 1
-    # Different ordering must result in different keys
     assert c1[0]["key"] != c2[0]["key"]
-    assert "chile" in c1[0]["key"] and "norway" in c1[0]["key"]
+
+    # 2. Restatements with different phrasing produce the same key
+    r1 = "The refund window in Chile is 21 days from delivery."
+    r2 = "In Chile, the refund window is 45 days from delivery."
+    cr1 = observer.candidates(r1)
+    cr2 = observer.candidates(r2)
+    assert len(cr1) == 1 and len(cr2) == 1
+    assert cr1[0]["key"] == cr2[0]["key"] == "chile_delivery_refund_window"
 
 
-def test_item_8_quarantined_facts_can_be_reobserved():
+def test_item_8_quarantined_facts_survive_without_overwriting():
     tok = "token_audit_reobserve_agent"
     text = "The cancellation deadline in Peru is 14 days after signup."
     # 1. Observe first time
     out1 = mcp_write.observe(text, tok)
     assert out1["stored"] == 1
-    fact_id = out1["facts"][0]["id"]
+    original_id = out1["facts"][0]["id"]
 
     # 2. Re-observing while healthy is marked as duplicate
     out_dup = mcp_write.observe(text, tok)
@@ -164,16 +182,23 @@ def test_item_8_quarantined_facts_can_be_reobserved():
 
     # 3. Quarantine the fact
     store = get_graph_store("audit_reobserve")
-    fact = store.nodes[fact_id]
+    fact = store.nodes[original_id]
     fact.status = Status.QUARANTINED
 
-    # 4. Re-observing after quarantine is NOT blocked by duplicate check
+    # 4. Re-observing after quarantine does NOT overwrite the quarantined node!
     out_after = mcp_write.observe(text, tok)
     assert out_after["stored"] == 1
-    assert len(out_after["duplicates"]) == 0
+    new_id = out_after["facts"][0]["id"]
+
+    # The quarantined node MUST survive in quarantined state!
+    assert store.nodes[original_id].status == Status.QUARANTINED
+    # The new fact got a distinct ID and did not overwrite the quarantined node
+    assert new_id != original_id
+    assert store.nodes[new_id].status == Status.HEALTHY
 
 
-def test_item_10_vector_batching_cosine_scores():
+def test_item_10_vector_batch_and_cache_cap():
+    assert embeddings.MAX_CACHE >= 50000
     nodes = [MagicMock(id=f"bn_{i}", label=f"node {i}", text=f"text content {i}", key=None, value=None) for i in range(30)]
     scores = embeddings.cosine_scores("content text", nodes)
     assert len(scores) == 30
