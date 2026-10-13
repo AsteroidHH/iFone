@@ -20,7 +20,7 @@ That scenario is run for real in `frontend/scripts/claude_e2e.mjs`: a real Claud
 ## What the numbers say, and what they do not
 
 - **Correctness of containment**: 0.0% poison leakage at depths 1 to 3 against 100% for a flat store with a TTL and for "delete the root fact only" (`bench/results.json`, run on FalkorDB). Single winner on 200 contended handoffs; zero illegal executions against quarantine races (`backend/tests/test_stress_and_concurrency.py`).
-- **Retrieval quality**: Sonnet and Haiku, same 336-fact memory, same questions: reworded questions the vocabulary knows 12/12 with vectors against 7/12 and 5/12 with keywords alone (see [`TOKEN_SAVING.md`](TOKEN_SAVING.md#does-the-right-fact-come-back)).
+- **Retrieval quality**: Sonnet and Haiku, same 336-fact memory, same questions: reworded questions the vocabulary knows 24/24 with vectors against 19/24 and 17/24 with keywords alone (39 and 40 of 44 overall, against 33 and 31) (see [`TOKEN_SAVING.md`](TOKEN_SAVING.md#does-the-right-fact-come-back)).
 - **Tokens**: tool results shrink about half, a whole session by single digits to low teens of a percent, because the AI client's own prompt dominates. The saving grows with memory size and session length (modelled in `bench/scale_bench.json`: 13.5% over 60 turns on 5,000 facts). We say this plainly because the honest number is the useful one.
 - **Not claimed**: that Quorum makes agents correct. It makes a wrong belief *recoverable* and *traceable*, and it shows who held it.
 

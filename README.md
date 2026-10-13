@@ -5,9 +5,11 @@
 **Git revert for AI agent beliefs.**  
 *Quorum rolls back a poisoned fact and everything built on it, and no later retrieval can return it.*
 
-[![Backend Tests](https://img.shields.io/badge/pytest-45%20passed-brightgreen?style=flat-square)](backend/tests)
-[![Frontend Tests](https://img.shields.io/badge/vitest-64%20passed-brightgreen?style=flat-square)](frontend)
-[![Benchmark](https://img.shields.io/badge/throughput-33%2C111%20ops%2Fsec-blue?style=flat-square)](bench/results.json)
+[![Backend Tests](https://img.shields.io/badge/pytest-195%20passed%20%C2%B7%2092%25%20coverage-brightgreen?style=flat-square)](backend/tests)
+[![Frontend Tests](https://img.shields.io/badge/vitest-99%20passed-brightgreen?style=flat-square)](frontend)
+[![Accessibility](https://img.shields.io/badge/axe--core-0%20violations%20(20%20screens)-brightgreen?style=flat-square)](frontend/scripts/a11y.mjs)
+[![Types](https://img.shields.io/badge/mypy%20%2B%20ruff-clean-brightgreen?style=flat-square)](mypy.ini)
+[![Benchmark](https://img.shields.io/badge/throughput%20on%20FalkorDB-757.6%20ops%2Fsec-blue?style=flat-square)](bench/results.json)
 [![Containment](https://img.shields.io/badge/containment-0.4ms-success?style=flat-square)](docs/PROOF.md)
 [![Leakage](https://img.shields.io/badge/poison%20leakage-0.0%25-brightgreen?style=flat-square)](bench/results.json)
 [![Hackathon](https://img.shields.io/badge/Graph%20Hacks-Oct%2015--18%2C%202026-orange?style=flat-square)](docs/QUORUM_BRIEF.md)
@@ -15,6 +17,10 @@
 </div>
 
 ---
+
+## In one minute
+
+Quorum is shared memory for AI agents where a wrong fact can be reverted, with everything built on it, in under a millisecond, and no later lookup can return it. Run `docker compose up -d`, open http://localhost:5173, and follow the **Get started** card on the Connect page. Who it is for, the story, and what the numbers do and do not say: [`docs/IMPACT.md`](docs/IMPACT.md). Security model: [`SECURITY.md`](SECURITY.md). A real deployment (password-protected FalkorDB, TLS, tokens, sign-in): [`docs/SETUP.md`](docs/SETUP.md#production-in-one-command).
 
 ## 🎯 Executive Summary
 
@@ -174,7 +180,7 @@ Measured on FalkorDB 8.10.2, on one developer laptop, by the harness above. The 
 | **T02-1: Episodic, Semantic & Procedural Memory** | Multi-type memory: Messages, Facts, Conclusions, and Laplace-smoothed procedure ranking (`(successes+1)/(uses+2)`). | `backend/app/services/procedural.py`, `graph/queries.py` | `pytest backend/tests/test_safety_engine.py` & `docs/screens/10-memory.png` |
 | **T02-2: Persistent Conversation History** | Private raw graphs per agent (`tenant_<id>:agent_<n>:raw`), kill-and-resume 2-query flow, deterministic session summaries. | `backend/app/services/store.py`, `backend/app/routes/meta.py` | `pytest backend/tests/test_api_contract.py` & `docs/screens/10-memory.png` |
 | **T02-3: Shared State & Handoffs** | Atomic handoffs with lease timeouts, role-based claims (`TASK` for agents, `REVIEW` for humans). Exactly one winner. | `backend/app/routes/handoffs.py`, `graph/queries.py` | `python bench/run.py` (Suite 2: 100/100 claims) & `docs/screens/07-ledger.png` |
-| **T02-4: High Concurrency** | 30 concurrent agent threads with zero orphan invariants under heavy read/write load. | FalkorDB query pool, atomic store | `python bench/run.py` (Suite 1: 33k ops/sec) & `docs/screens/13-benchmark.png` |
+| **T02-4: High Concurrency** | 30 concurrent agent threads with zero orphan invariants under heavy read/write load. | FalkorDB query pool, atomic store | `python bench/run.py` (Suite 1: 757.6 ops/sec on FalkorDB) & `docs/screens/13-benchmark.png` |
 | **T02-5: Per-Tenant Memory Isolation** | Per-tenant Redis ACL users (`~tenant_<id>:*`); forbidden cross-tenant reads return 403. | `scripts/users.acl`, `tests/test_tenant_isolation.py` | `GET /tenants/denied-demo` & `docs/screens/12-tenants.png` |
 
 ### Track 03: Company Brain (~20% Effort)
@@ -223,6 +229,9 @@ cd frontend && npm ci && npm run build && npx vite preview --port 5173
 ```bash
 python -m pytest backend/tests tests            # needs FalkorDB; the persistence and gate tests fail loudly without it
 cd frontend && npm run verify                   # types, lint, unit tests, contrast, contract, builds
+cd frontend && npm run coverage                 # logic coverage gate (96% lines)
+cd frontend && npm run qa:a11y                  # axe-core on every screen at desktop and phone width
+ruff check backend bench scripts mcp tests agents && mypy   # lint and types
 cd frontend && npm run qa                       # console on sample data (npm run build:mock, npm run preview:mock)
 cd frontend && npm run qa:live                  # console against the live backend with an MCP client as an agent
 cd frontend && node scripts/resilience.mjs      # stops FalkorDB under a running product, checks the lock and the recovery

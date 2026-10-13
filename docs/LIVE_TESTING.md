@@ -4,9 +4,9 @@ Everything below runs against a real FalkorDB. Nothing here uses the in-browser 
 
 | Command | What it proves | Needs |
 | --- | --- | --- |
-| `python -m pytest backend/tests tests` | Backend logic, persistence in FalkorDB, the FalkorDB gate, auth hardening, the graph layer | FalkorDB. The persistence and gate tests fail loudly without it. |
-| `cd frontend && npm run verify` | Types, lint, 79 unit tests, contrast, contract, live and sample builds | nothing running |
-| `cd frontend && npm run qa` | The console on sample data (98 checks) | `npm run build:mock && npm run preview:mock` |
+| `python -m pytest --cov` | Backend logic, persistence in FalkorDB, the FalkorDB gate, auth hardening, the graph layer | FalkorDB. The persistence and gate tests fail loudly without it. |
+| `cd frontend && npm run verify` | Types, lint, 99 unit tests, contrast, contract, live and sample builds | nothing running |
+| `cd frontend && npm run qa` | The console on sample data (104 checks, including the phone layout) | `npm run build:mock && npm run preview:mock` |
 | `cd frontend && npm run qa:live` | The console against the live backend: an MCP client as an agent, the 15 tools, header auth, passive capture, semantic ranking, the audit log, teams, member tokens, team scope and links, presence, token savings, the feed and sessions (59 checks) | the stack below |
 | `cd frontend && node scripts/resilience.mjs [BASE] [API]` | FalkorDB stopped under a running product: lock screen, 503s, MCP refused, automatic recovery, data intact (15 checks) | the stack, Docker |
 | `cd frontend && node scripts/token_bench.mjs [API] [RUNS] [short or long]` | The measured token comparison: fresh Claude Code sessions with a typical top-8 retrieval vs Quorum's compact format. Writes `bench/token_bench_<scenario>.json`, which the Context and landing pages read. Costs a few dollars of Claude usage. | the stack, the `claude` CLI logged in |
@@ -16,6 +16,10 @@ Everything below runs against a real FalkorDB. Nothing here uses the in-browser 
 | `python bench/retrieval_bench.py` | 190 questions on a 336-fact memory: keyword ranking vs keywords plus vectors, no AI needed. | nothing running |
 | `python bench/ai_retrieval_bench.py --hybrid URL --keyword URL` | The same memory answered by real Claude Sonnet and Haiku on two hubs (one started with `QUORUM_RANKING=keyword`). About 90 short runs. Start both hubs with `QUORUM_RATE_LIMIT_TOOLS_PER_MIN=0`. | two hubs, the `claude` CLI |
 | `python bench/run.py` | The benchmark on FalkorDB. Refuses to run without it (`--memory` runs the model and labels the results so). | FalkorDB |
+
+| `cd frontend && npm run qa:a11y` | axe-core (WCAG 2.0/2.1 A and AA plus best practices) on all ten screens at 1440 and 390 px, with reduced motion so reveal animations do not skew contrast: 0 violations of any impact | `npm run build:mock && npm run preview:mock` |
+| `python scripts/qa_mcp_clients.py --hub URL --admin-token T` | The client protocol checks against a production hub (real tokens, TLS with `SSL_CERT_FILE`) | a production stack |
+| `python bench/scale_bench.py` | Latency at 1,000 / 5,000 / 20,000 facts and a modelled 60-turn session | nothing running |
 
 ## The stack
 

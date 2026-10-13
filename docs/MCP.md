@@ -56,7 +56,7 @@ It is rule based with no model call: conservative on purpose. It drops questions
 - **Neural embeddings (optional).** `QUORUM_EMBED_PROVIDER=openai`, `QUORUM_EMBED_URL`, `QUORUM_EMBED_MODEL` (and `QUORUM_EMBED_API_KEY`) use any OpenAI-compatible `/v1/embeddings` endpoint: OpenAI, a local Ollama or LM Studio, vLLM. If the endpoint fails, ranking degrades to the local vectors instead of failing the call. This path is covered by tests with a stub endpoint; it has not been run against a real model here.
 - **In FalkorDB.** Vectors are stored on the nodes (`embedding`, with a vector index) and reloaded after a restart instead of recomputed. `GET /api/context/semantic-check?query=…` asks FalkorDB's own index for the nearest nodes and says whether they agree with the API's ranking. `QUORUM_RANKING=keyword` turns the vectors off, for comparison.
 
-Measured: `bench/retrieval_bench.py` (offline) and `bench/ai_retrieval_bench.py` (real Claude models). Numbers are in [`TOKEN_SAVING.md`](TOKEN_SAVING.md#does-the-right-fact-come-back).
+Measured: `bench/retrieval_bench.py` (offline) and `bench/ai_retrieval_bench.py` (real Claude models, 44 questions). Numbers are in [`TOKEN_SAVING.md`](TOKEN_SAVING.md#does-the-right-fact-come-back).
 
 ## State that survives a restart
 

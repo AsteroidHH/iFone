@@ -57,18 +57,18 @@ Saving tokens is worthless if the right fact is missing. Ranking is keyword cove
 
 The miss on the off-topic row is a real shared word ("office"), not a guess. The paraphrases were written together with the vocabulary, so the middle row is optimistic, and the third row is the honest limit of the built-in vectors. A neural embedding endpoint is the way past it.
 
-**Real AIs, same memory** (`python bench/ai_retrieval_bench.py`, results in `bench/ai_retrieval_bench.json`). Two Claude models (Sonnet and Haiku, through the `claude` CLI) each answered 22 questions from the 336-fact memory using only Quorum's MCP tools, on two hubs: one ranking with keywords only, one with keywords plus vectors. A correct answer has the exact number from the fact; an off-topic question must come back `NOT FOUND`.
+**Real AIs, same memory** (`python bench/ai_retrieval_bench.py`, results in `bench/ai_retrieval_bench.json`). Two Claude models (Sonnet and Haiku, through the `claude` CLI) each answered 44 questions (24 reworded with known vocabulary, 12 with unknown, 8 off-topic) from the 336-fact memory using only Quorum's MCP tools, on two hubs: one ranking with keywords only, one with keywords plus vectors. A correct answer has the exact number from the fact; an off-topic question must come back `NOT FOUND`.
 
-| Model | Ranking | Different words, known (12) | Different words, unknown (6) | Off-topic (4) | Total (22) |
+| Model | Ranking | Different words, known (24) | Different words, unknown (12) | Off-topic (8) | Total (44) |
 | --- | --- | --- | --- | --- | --- |
-| Sonnet | keywords only | 7 | 0 | 4 | 11 |
-| Sonnet | keywords + vectors | **12** | **3** | 4 | **19** |
-| Haiku | keywords only | 5 | 0 | 4 | 9 |
-| Haiku | keywords + vectors | **12** | **3** | 4 | **19** |
+| Sonnet | keywords only | 19 | 6 | 8 | 33 |
+| Sonnet | keywords + vectors | **24** | **7** | 8 | **39** |
+| Haiku | keywords only | 17 | 6 | 8 | 31 |
+| Haiku | keywords + vectors | **24** | **8** | 8 | **40** |
 
-Read it as direction, not precision: 22 questions, one run per model per hub. It is the same two-model result as the offline one: vectors rescue paraphrases the vocabulary knows, help some of the ones it does not (the model also rephrases its own query), and never invent an answer to an off-topic question. The first attempt at this benchmark was invalid for a good reason: the hub's new rate limit throttled the bulk seeding and only half the facts were stored. The script now retries when throttled and refuses to run unless every fact is stored.
+Read it as direction, not precision: 44 questions, one run per model per hub (a first 22-question run, on a different seed, gave the same picture: 19 and 19 with vectors against 11 and 9 without). Vectors rescue the paraphrases the vocabulary knows (24/24), help a little with the ones it does not (the model also rephrases its own query), and never invent an answer to an off-topic question. The first attempt at this benchmark was invalid for a good reason: the hub's rate limit throttled the bulk seeding and only half the facts were stored. The script now retries when throttled and refuses to run unless every fact is stored.
 
-Cost and turns were the same in both arms (3 turns, about the same input tokens, $0.70 for Haiku and $3.38 for Sonnet per 22-question arm); ranking does not change the token bill, it changes whether the answer is found.
+Cost and turns were the same in both arms (3 turns, about the same input tokens, about $1.50 for Haiku and $6.90 for Sonnet per 44-question arm); ranking does not change the token bill, it changes whether the answer is found.
 
 ## At scale, and in a long session
 
