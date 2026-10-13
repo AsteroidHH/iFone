@@ -35,6 +35,12 @@ export function startPointer() {
   });
 }
 
+/** Content can move under a still pointer (scrolling, reveals, layout). Re-ask the page what is there. */
+export function refreshOver(): void {
+  if (!pointer.seen || typeof document === 'undefined') return;
+  pointer.over = document.elementFromPoint(pointer.x, pointer.y);
+}
+
 export function onPointer(f: () => void): () => void {
   subs.add(f);
   return () => {

@@ -1543,3 +1543,9 @@ body.on-landing {
 .lp-pill.mint { background: #3ddbb0; color: #0b1218; border: 2px solid #fff; font-weight: 700; }
 .lp-pill.mint:hover { box-shadow: 4px 4px 0 #fff; }
 .lp-cn > .lp-pill { justify-self: start; }
+
+/* a soft mint wash that fills the whole element under the ring, so you can see exactly what is targeted */
+.cr-fill { position: fixed; left: 0; top: 0; pointer-events: none; z-index: 94; width: 34px; height: 34px; border-radius: 17px; background: rgba(61, 219, 176, 0.2); opacity: 0; transition: opacity 0.18s; box-sizing: border-box; will-change: transform; }
+.cr-fill.on { opacity: 0; }
+html:has(.cr-ring[data-mode='snap']) .cr-fill.on { opacity: 1; }
+@media (hover: none), (pointer: coarse), (prefers-reduced-motion: reduce) { .cr-fill { display: none; } }

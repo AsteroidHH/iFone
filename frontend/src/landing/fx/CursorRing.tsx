@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { fineHover, onPointer, pointer, reducedMotion, startPointer } from './pointer';
+import { fineHover, onPointer, pointer, reducedMotion, refreshOver, startPointer } from './pointer';
 
 const TARGET = 'a,button,[role="button"],.lp-pill,[data-cursor]';
 const FIELD = 'input,select,textarea,[contenteditable="true"]';
@@ -16,13 +16,16 @@ export function CursorRing() {
   const dot = useRef<HTMLElement>(null);
   const ring = useRef<HTMLElement>(null);
   const tag = useRef<HTMLElement>(null);
+  const fill = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    if (!fineHover() || reducedMotion() || !dot.current || !ring.current || !tag.current) return;
+    if (!fineHover() || reducedMotion() || !dot.current || !ring.current || !tag.current || !fill.current) return;
     startPointer();
     const d = dot.current;
     const r = ring.current;
     const tg = tag.current;
+    const f = fill.current;
+    let lastWake = 0;
     const s = { x: -100, y: -100, w: 34, h: 34, rad: 17 };
     let raf = 0;
     let lastTarget: Element | null = null;
@@ -42,6 +45,8 @@ export function CursorRing() {
 
     const loop = () => {
       raf = 0;
+      // A still pointer can end up over something new when the page scrolls or animates: ask again every frame.
+      refreshOver();
       const over = pointer.over;
       const field = over?.closest(FIELD) ?? null;
       const t = field ? null : (over?.closest(TARGET) ?? null);
@@ -63,8 +68,10 @@ export function CursorRing() {
         if (b.width < 560 && b.height < 220) {
           gx = b.left + b.width / 2;
           gy = b.top + b.height / 2;
-          gw = b.width + 12;
-          gh = b.height + 12;
+          // SVG boxes exclude their stroke and hover glow, so give them more room than HTML boxes.
+          const pad = t instanceof SVGElement ? 30 : 12;
+          gw = b.width + pad;
+          gh = b.height + pad;
           grad = Math.min(gh / 2, 24);
         } else {
           gw = gh = 64;
@@ -85,9 +92,14 @@ export function CursorRing() {
       r.style.width = `${s.w}px`;
       r.style.height = `${s.h}px`;
       r.style.borderRadius = `${s.rad}px`;
+      f.style.transform = r.style.transform;
+      f.style.width = r.style.width;
+      f.style.height = r.style.height;
+      f.style.borderRadius = r.style.borderRadius;
       tg.style.transform = `translate3d(${s.x}px, ${s.y + s.h / 2 + 16}px, 0) translate(-50%, 0)`;
       const moving = Math.abs(gx - s.x) + Math.abs(gy - s.y) + Math.abs(gw - s.w) + Math.abs(gh - s.h) > 0.25;
-      if (moving) raf = requestAnimationFrame(loop);
+      // Stay awake while hovering something (its box can change) and for a moment after any input or scroll.
+      if (moving || t || reading || performance.now() - lastWake < 600) raf = requestAnimationFrame(loop);
     };
 
     const spot = () => {
@@ -99,27 +111,40 @@ export function CursorRing() {
       }
     };
     const wake = () => {
+      lastWake = performance.now();
       const on = pointer.seen;
-      for (const el of [d, r]) el.classList.toggle('on', on);
+      for (const el of [d, r, f]) el.classList.toggle('on', on);
       d.classList.toggle('down', pointer.down);
       r.classList.toggle('down', pointer.down);
       spot();
       if (!raf) raf = requestAnimationFrame(loop);
     };
     const off = onPointer(wake);
-    window.addEventListener('scroll', spot, { passive: true });
+    const onScroll = () => {
+      lastWake = performance.now();
+      spot();
+      if (!raf) raf = requestAnimationFrame(loop);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('wheel', onScroll, { passive: true });
+    window.addEventListener('keydown', onScroll);
+    window.addEventListener('resize', onScroll);
     document.documentElement.classList.add('cr-on');
     return () => {
       off();
       clearInterval(re);
       cancelAnimationFrame(raf);
-      window.removeEventListener('scroll', spot);
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('wheel', onScroll);
+      window.removeEventListener('keydown', onScroll);
+      window.removeEventListener('resize', onScroll);
       document.documentElement.classList.remove('cr-on', 'cr-native');
     };
   }, []);
 
   return (
     <div className="cr" aria-hidden="true">
+      <i ref={fill} className="cr-fill" />
       <i ref={ring} className="cr-ring" />
       <i ref={dot} className="cr-dot" />
       <b ref={tag} className="cr-tag" />
