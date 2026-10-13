@@ -69,3 +69,25 @@ The miss on the off-topic row is a real shared word ("office"), not a guess. The
 Read it as direction, not precision: 22 questions, one run per model per hub. It is the same two-model result as the offline one: vectors rescue paraphrases the vocabulary knows, help some of the ones it does not (the model also rephrases its own query), and never invent an answer to an off-topic question. The first attempt at this benchmark was invalid for a good reason: the hub's new rate limit throttled the bulk seeding and only half the facts were stored. The script now retries when throttled and refuses to run unless every fact is stored.
 
 Cost and turns were the same in both arms (3 turns, about the same input tokens, $0.70 for Haiku and $3.38 for Sonnet per 22-question arm); ranking does not change the token bill, it changes whether the answer is found.
+
+## At scale, and in a long session
+
+`python bench/scale_bench.py` (results in `bench/scale_bench.json`). In-process on one machine, no network.
+
+| Facts in memory | First answer (builds vectors) | Warm answer, median | Warm, p95 |
+| --- | --- | --- | --- |
+| 1,000 | 342 ms | 15 ms | 21 ms |
+| 5,000 | 1.2 s | 76 ms | 94 ms |
+| 20,000 | 4.5 s | 381 ms | 425 ms |
+
+Ranking looks at every healthy, visible fact, so the cost grows in a straight line (about 19 µs per fact per question). Tokenised word sets are cached, which took a 5,000-fact answer from about 205 ms to about 76 ms. In FalkorDB mode the vectors are computed when a fact is written and reloaded after a restart, so the "first answer" cost is paid once, at write time. Past tens of thousands of facts the next step is to let FalkorDB's vector index choose the candidates (`/api/context/semantic-check` already queries it); that is not the default path yet.
+
+A 60-turn session on a 5,000-fact memory, **modelled** from the measured size of every answer. Whole-session input is the fixed Claude Code prompt (37,000 tokens a turn, measured earlier) plus every tool result still in the context:
+
+| Strategy | Tool-result tokens | Whole-session input | Saved (results / whole session) |
+| --- | --- | --- | --- |
+| Top-8 retriever, full JSON | 29,654 | 3,123,241 | n/a |
+| Quorum compact lines | 16,783 | 2,726,966 | 43% / 12.7% |
+| Compact lines + `delta` on follow-ups | 15,960 | 2,702,164 | 46% / 13.5% |
+
+That is the honest shape of the saving: about half of the tool-result tokens, and a little over a tenth of a long session, because the agent's own fixed prompt dominates. It is a model, not a real-AI run; the real-AI numbers are the ones above.

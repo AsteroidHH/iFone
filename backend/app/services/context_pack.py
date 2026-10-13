@@ -17,9 +17,10 @@ import json
 import re
 from collections import deque
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
-from app.models.common import Status
+from app.models.common import NodeKind, Status
 from app.models.graph import GraphNode
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9À-ɏ]+|\s+|[^\sA-Za-z0-9À-ɏ]")
@@ -73,8 +74,11 @@ def _words(s: str) -> List[str]:
     return re.findall(r"[a-z0-9]{2,}", (s or "").lower())
 
 
+_KIND_VALUE = {k: k.value for k in NodeKind}  # Enum.value is slow when it runs tens of thousands of times per ranking pass
+
+
 def _kind(n: GraphNode) -> str:
-    return n.kind.value if hasattr(n.kind, "value") else str(n.kind)
+    return _KIND_VALUE.get(n.kind) or str(getattr(n.kind, "value", n.kind))
 
 
 def short_ids(nodes: Iterable[GraphNode]) -> Dict[str, str]:
@@ -134,8 +138,14 @@ def _ancestors(inn: Dict[str, List[str]], start: str, limit: int) -> List[str]:
 _STOP = set("is on do to of in at by an it be or as if so up we me my am no get got make made take like just very much many more most some such only own same too use used using one two long often can the and for are was were with that this from what which who how when where why does did can its has have not you your our their about into than then them they will would should could been being also any all per via out off over under".split())
 
 
-def _node_words(n: GraphNode) -> Set[str]:
-    return set(_words(f"{n.label} {n.text or ''} {n.key or ''} {n.value or ''}"))
+@lru_cache(maxsize=100_000)
+def _words_of(label: str, text: str, key: str, value: str) -> frozenset:
+    return frozenset(_words(f"{label} {text} {key} {value}"))
+
+
+def _node_words(n: GraphNode) -> frozenset:
+    """The node's word set. Cached by the text it is made from, so a ranking pass over thousands of nodes does not re-tokenize them."""
+    return _words_of(n.label, n.text or "", n.key or "", n.value or "")
 
 
 def idf_weights(nodes: Iterable[GraphNode]) -> Dict[str, float]:
