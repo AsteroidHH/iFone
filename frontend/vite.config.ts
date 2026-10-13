@@ -48,5 +48,10 @@ export default defineConfig({
     port: 5173,
     proxy: proxy,
   },
-  test: { environment: 'node', include: ['src/**/*.test.ts'] },
+  test: {
+    environment: 'node',
+    include: ['src/**/*.test.ts'],
+    // the logic that is unit tested: API client, token estimator and packer, workspace helpers (components are covered by the browser QA)
+    coverage: { provider: 'v8', include: ['src/api/**', 'src/context/**', 'src/workspace/**'], exclude: ['**/*.test.ts', 'src/workspace/useWs.ts', 'src/workspace/live.ts', 'src/workspace/store.ts', 'src/workspace/server.ts', 'src/api/events.ts', 'src/api/schemas.ts'], reporter: ['text-summary', 'text'], thresholds: { lines: 90, functions: 85 } },
+  },
 });

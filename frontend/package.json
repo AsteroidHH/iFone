@@ -19,7 +19,9 @@
     "verify": "npm run typecheck && npm run lint && npm test && npm run contrast && npm run contract:check && npm run build && npm run build:mock",
     "build:mock": "tsc --noEmit && vite build --mode mock --outDir dist-mock --emptyOutDir",
     "preview:mock": "vite preview --outDir dist-mock --port 5173 --strictPort",
-    "qa:cursor": "node scripts/cursor.mjs"
+    "qa:cursor": "node scripts/cursor.mjs",
+    "coverage": "vitest run --coverage",
+    "qa:a11y": "node scripts/a11y.mjs"
   },
   "dependencies": {
     "@fontsource-variable/bricolage-grotesque": "^5.3.0",
@@ -41,6 +43,7 @@
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.2",
+    "@vitest/coverage-v8": "^2.1.9",
     "ajv": "^8.20.0",
     "eslint": "^9.39.5",
     "eslint-plugin-react-hooks": "^7.1.1",
