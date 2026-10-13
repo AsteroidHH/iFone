@@ -7,6 +7,27 @@ let started = false;
 export const reducedMotion = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 export const fineHover = () => typeof matchMedia !== 'undefined' && matchMedia('(hover: hover) and (pointer: fine)').matches;
 
+const CURSOR_KEY = 'quorum:cursor';
+
+/** The visitor's choice to keep the normal cursor. Stored in this browser only; every storage call is guarded. */
+export function cursorDisabled(): boolean {
+  try {
+    return localStorage.getItem(CURSOR_KEY) === 'off';
+  } catch {
+    return false;
+  }
+}
+
+export function setCursorDisabled(off: boolean): void {
+  try {
+    if (off) localStorage.setItem(CURSOR_KEY, 'off');
+    else localStorage.removeItem(CURSOR_KEY);
+  } catch {
+    /* the choice then lasts until reload */
+  }
+  document.documentElement.classList.toggle('cr-disabled', off);
+}
+
 export function startPointer() {
   if (started || typeof window === 'undefined') return;
   started = true;

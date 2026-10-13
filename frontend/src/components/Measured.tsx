@@ -26,7 +26,7 @@ export function Measured({ dark = false }: { dark?: boolean }) {
         <b>Measured with a real AI.</b> Fresh Claude Code sessions answered the same five questions from the same 160-fact memory, {short.runs_per_arm} runs per arm, once with a typical top-8 retrieval and once with Quorum&apos;s compact
         format. Every arm answered {short.summary.plain.correct_median}/5 correctly.
       </p>
-      <div className="cn-table-wrap">
+      <div className="cn-table-wrap" tabIndex={0} role="region" aria-label="Measured token savings with a real AI (scrolls sideways on a narrow screen)">
         <table className="measured-t">
           <thead>
             <tr>

@@ -1480,6 +1480,12 @@ body.on-landing {
 .cr-tag.on { opacity: 1; }
 .cr-tag:empty { display: none; }
 .cr-on .lp, .cr-on .lp * { cursor: none !important; }
+/* keyboard use: the normal cursor and no ring until the mouse moves */
+.cr-keyboard .lp, .cr-keyboard .lp * { cursor: auto !important; }
+.cr-keyboard .cr { display: none; }
+.cr-disabled .lp, .cr-disabled .lp * { cursor: auto !important; }
+.cr-disabled .cr { display: none; }
+.lp-link-btn { background: none; border: 0; padding: 0; margin-left: 12px; font: inherit; color: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .cr-native .lp, .cr-native .lp * { cursor: auto !important; }
 .cr-native .lp input, .cr-native .lp textarea { cursor: text !important; }
 @media (hover: none), (pointer: coarse), (prefers-reduced-motion: reduce) { .cr { display: none; } }

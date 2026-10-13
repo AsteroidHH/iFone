@@ -27,7 +27,7 @@ const VIEWS: { id: View; icon: string }[] = [
 ];
 
 /** Tab-bar labels on a phone, where nine tabs share the width. */
-const SHORT: Partial<Record<View, string>> = { benchmark: 'Bench', tenants: 'Tenants' };
+const SHORT: Partial<Record<View, string>> = {};
 
 function SavedPill() {
   const naive = useLive((s) => s.totals.naive);

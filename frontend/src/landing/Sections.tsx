@@ -5,6 +5,7 @@ import { go, prefersReduced, useCounter, useInView } from './hooks';
 import { LandingGraph, useCascade } from './LandingGraph';
 import { LatencyChart } from './fx/LatencyChart';
 import { Parallax } from './fx/Parallax';
+import { cursorDisabled, fineHover, setCursorDisabled } from './fx/pointer';
 import { SplitText } from './fx/SplitText';
 
 function Head({ tag, kicker, title, sub, dark = false }: { tag: string; kicker: string; title: string; sub?: string; dark?: boolean }) {
@@ -322,6 +323,24 @@ export function Cta() {
   );
 }
 
+/** The custom cursor is a flourish: anyone can switch it off, and it is off for reduced motion and for keyboard use. */
+function CursorSwitch() {
+  const [off, setOff] = useState(cursorDisabled());
+  if (!fineHover()) return null;
+  return (
+    <button
+      className="lp-link-btn"
+      aria-pressed={off}
+      onClick={() => {
+        setCursorDisabled(!off);
+        setOff(!off);
+      }}
+    >
+      {off ? 'Use the custom cursor' : 'Use the normal cursor'}
+    </button>
+  );
+}
+
 export function Footer() {
   return (
     <footer className="lp-footer">
@@ -345,7 +364,9 @@ export function Footer() {
           <p className="lp-small">{L.footer.ai}</p>
         </div>
       </div>
-      <p className="lp-rights mono">{L.footer.rights}</p>
+      <p className="lp-rights mono">
+        {L.footer.rights} <CursorSwitch />
+      </p>
     </footer>
   );
 }

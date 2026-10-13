@@ -47,6 +47,22 @@ const tile2 = await p.locator('.lp-play .lg-node').first().boundingBox();
 const covers = ring.x <= tile2.x + 1 && ring.y <= tile2.y + 1 && ring.x + ring.w >= tile2.x + tile2.width - 1 && ring.y + ring.h >= tile2.y + tile2.height - 1;
 check('the ring covers the whole tile', covers, `tile ${Math.round(tile2.x)},${Math.round(tile2.y)} ${Math.round(tile2.width)}x${Math.round(tile2.height)} ring ${Math.round(ring.x)},${Math.round(ring.y)} ${Math.round(ring.w)}x${Math.round(ring.h)}`);
 await p.screenshot({ path: '../docs/screens/landing/cur-tile.png', clip: { x: Math.max(0, tile2.x - 80), y: Math.max(0, tile2.y - 70), width: tile2.width + 240, height: tile2.height + 150 } });
+// Tab means keyboard use: the custom cursor steps aside until the mouse moves again
+await p.keyboard.press('Tab');
+await p.waitForTimeout(200);
+check('pressing Tab hides the custom cursor and brings back the normal one', await p.evaluate(() => getComputedStyle(document.querySelector('.cr')).display === 'none' && getComputedStyle(document.querySelector('.lp')).cursor === 'auto'));
+await p.mouse.move(400, 400, { steps: 4 });
+await p.waitForTimeout(300);
+check('moving the mouse brings the custom cursor back', await p.evaluate(() => getComputedStyle(document.querySelector('.cr')).display !== 'none'));
+// the footer switch turns it off for good (this browser only)
+await p.evaluate(() => document.querySelector('.lp-footer').scrollIntoView());
+await p.waitForTimeout(400);
+await p.getByRole('button', { name: 'Use the normal cursor' }).click();
+await p.mouse.move(500, 300, { steps: 4 });
+await p.waitForTimeout(300);
+check('the footer switch turns the custom cursor off and remembers it', await p.evaluate(() => getComputedStyle(document.querySelector('.cr')).display === 'none' && localStorage.getItem('quorum:cursor') === 'off'));
+await p.getByRole('button', { name: 'Use the custom cursor' }).click();
+check('and back on', await p.evaluate(() => localStorage.getItem('quorum:cursor') === null && getComputedStyle(document.querySelector('.cr')).display !== 'none'));
 await b.close();
 console.log(`${results.filter(Boolean).length}/${results.length} cursor checks passed`);
 process.exit(results.every(Boolean) ? 0 : 1);

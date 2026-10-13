@@ -1,7 +1,7 @@
 export const copy = {
   appName: 'Quorum',
   tagline: 'Git revert for agent beliefs',
-  nav: { console: 'Console', memory: 'Memory', brain: 'Brain', tenants: 'Tenants', benchmark: 'Benchmark', context: 'Context', connect: 'Connect', team: 'Team', activity: 'Activity' },
+  nav: { console: 'Console', memory: 'Memory', brain: 'Brain', tenants: 'Tenants', benchmark: 'Bench', context: 'Context', connect: 'Connect', team: 'Team', activity: 'Activity' },
   sampleData: 'Sample data',
   sampleHint: 'A scripted scenario running in this browser. Connect a Quorum backend to see real memory.',
   mockBanner: 'Mock data, not from Quorum',

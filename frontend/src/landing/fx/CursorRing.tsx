@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { fineHover, onPointer, pointer, reducedMotion, refreshOver, startPointer } from './pointer';
+import { cursorDisabled, fineHover, onPointer, pointer, reducedMotion, refreshOver, startPointer } from './pointer';
 
 const TARGET = 'a,button,[role="button"],.lp-pill,[data-cursor]';
 const FIELD = 'input,select,textarea,[contenteditable="true"]';
@@ -21,6 +21,7 @@ export function CursorRing() {
   useEffect(() => {
     if (!fineHover() || reducedMotion() || !dot.current || !ring.current || !tag.current || !fill.current) return;
     startPointer();
+    document.documentElement.classList.toggle('cr-disabled', cursorDisabled());
     const d = dot.current;
     const r = ring.current;
     const tg = tag.current;
@@ -120,6 +121,13 @@ export function CursorRing() {
       if (!raf) raf = requestAnimationFrame(loop);
     };
     const off = onPointer(wake);
+    // Keyboard use means no mouse to follow: show the normal focus ring and cursor until the mouse moves again.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Tab') document.documentElement.classList.add('cr-keyboard');
+    };
+    const onMouse = () => document.documentElement.classList.remove('cr-keyboard');
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('pointermove', onMouse, { passive: true });
     const onScroll = () => {
       lastWake = performance.now();
       spot();
@@ -138,7 +146,9 @@ export function CursorRing() {
       window.removeEventListener('wheel', onScroll);
       window.removeEventListener('keydown', onScroll);
       window.removeEventListener('resize', onScroll);
-      document.documentElement.classList.remove('cr-on', 'cr-native');
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('pointermove', onMouse);
+      document.documentElement.classList.remove('cr-on', 'cr-native', 'cr-keyboard', 'cr-disabled');
     };
   }, []);
 

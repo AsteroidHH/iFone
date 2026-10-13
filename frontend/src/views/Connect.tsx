@@ -197,7 +197,7 @@ function Tools() {
           This hub {hub.header_required ? 'requires' : 'accepts'} an Authorization header on /mcp, limits each token to {hub.rate_limit_per_min.tools} tool calls a minute, and ranks context with {hub.embedding_provider === 'local' ? 'keywords plus built-in local vectors (no model, no network)' : `keywords plus ${hub.embedding_provider} embeddings`}.
         </p>
       )}
-      <div className="cn-table-wrap">
+      <div className="cn-table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways on a narrow screen)">
         <table className="cn-table">
           <thead>
             <tr>

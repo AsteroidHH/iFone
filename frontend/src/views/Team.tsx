@@ -203,7 +203,7 @@ function Members({ ws }: { ws: Ws }) {
       {ws.members.length === 0 ? (
         <p className="muted">No members yet. Add one below to get their token.</p>
       ) : (
-        <div className="cn-table-wrap">
+        <div className="cn-table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways on a narrow screen)">
           <table className="cn-table tm-table">
             <thead>
               <tr>

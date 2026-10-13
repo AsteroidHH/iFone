@@ -23,7 +23,7 @@ export function RetrievalQuality() {
         <b>Does the right fact come back?</b> {fmt(bench.facts)} facts across {bench.topics} topics, {fmt(bench.questions)} questions, scored on whether the right fact is the top result. Keyword ranking only, against Quorum&apos;s keyword plus vector ranking (
         {bench.embedding_provider === 'local' ? 'built-in local vectors, no model' : bench.embedding_provider}).
       </p>
-      <div className="cn-table-wrap">
+      <div className="cn-table-wrap" tabIndex={0} role="region" aria-label="Retrieval quality by wording (scrolls sideways on a narrow screen)">
         <table className="measured-t">
           <thead>
             <tr>
@@ -75,7 +75,7 @@ export function RetrievalQuality() {
         <b>Real AIs, same memory.</b> Claude Sonnet and Claude Haiku each answered {ai.questions} questions from the {ai.facts}-fact memory through Quorum&apos;s MCP tools, once on a hub ranking with keywords only and once with keywords plus vectors. A
         correct answer has the exact number from the fact; an off-topic question must come back NOT FOUND.
       </p>
-      <div className="cn-table-wrap">
+      <div className="cn-table-wrap" tabIndex={0} role="region" aria-label="Real AIs answering from the memory (scrolls sideways on a narrow screen)">
         <table className="measured-t">
           <thead>
             <tr>
