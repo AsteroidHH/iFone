@@ -28,7 +28,8 @@ jobs:
       - name: Tests with coverage (FalkorDB is a service container)
         run: python -m pytest -q --cov=backend/app --cov-report=term-missing:skip-covered --cov-fail-under=90
       - name: Retrieval benchmark (offline)
-        run: python bench/retrieval_bench.py && git diff --exit-code bench/retrieval_bench.json || echo "benchmark numbers changed: review bench/retrieval_bench.json"
+        run: |
+          python bench/retrieval_bench.py && git diff --exit-code bench/retrieval_bench.json || echo "benchmark numbers changed: review bench/retrieval_bench.json"
 
   frontend:
     runs-on: ubuntu-latest
