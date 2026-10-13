@@ -4,8 +4,9 @@ import { ErrorBody } from './schemas';
 import { mockBackend } from '../mocks/backend';
 import { reportBlocked } from './blocked';
 
-/** Live is the default. The in-browser sample backend only runs when a build asks for it with VITE_API_MODE=mock. */
-export const API_MODE: 'mock' | 'live' = import.meta.env.VITE_API_MODE === 'mock' ? 'mock' : 'live';
+/** Live is the default. The in-browser sample backend runs when VITE_API_MODE=mock or MODE=mock. */
+export const API_MODE: 'mock' | 'live' =
+  import.meta.env.VITE_API_MODE === 'mock' || import.meta.env.MODE === 'mock' ? 'mock' : 'live';
 
 export type Role = 'human' | 'auditor' | 'agent';
 
