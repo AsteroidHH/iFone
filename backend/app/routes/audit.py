@@ -126,8 +126,8 @@ def audit(
         import datetime as _dt
 
         for e in events:
-            # a leading = + - @ would make a spreadsheet run the cell as a formula
-            cell = lambda v: ("'" + v) if isinstance(v, str) and v[:1] in "=+-@" else v  # noqa: E731
+            # a leading = + - @ \t \r would make a spreadsheet run the cell as a formula
+            cell = lambda v: ("'" + v) if isinstance(v, str) and bool(v) and v[0] in "=+-@\t\r" else v  # noqa: E731
             w.writerow([_dt.datetime.fromtimestamp(e["ts"] / 1000, _dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S"), cell(e["who"]), cell(e["team"] or ""), e["client"] or "", e["tool"], cell(e["text"]), e["severity"], e["ok"], e["tokens"], e["saved"]])
         return Response(buf.getvalue(), media_type="text/csv", headers={"Content-Disposition": 'attachment; filename="quorum-audit.csv"'})
     by_sev: Dict[str, int] = {}

@@ -17,6 +17,8 @@ def _remember_delivery(store, auth: Dict[str, Any], ids: List[str], query: Optio
     with store._lock:
         st = store.agent_state.setdefault(_agent_key(auth), {"ids": set(), "query": "", "epoch": store.epoch})
         st["ids"].update(ids)
+        if len(st["ids"]) > 500:
+            st["ids"] = set(list(st["ids"])[-500:])
         st["epoch"] = store.epoch
         if query is not None:
             st["query"] = query
@@ -137,7 +139,10 @@ def delta(token: str = "") -> Dict[str, Any]:
     text = "\n".join(body)
     _remember_delivery(store, auth, p["ids"])
     with store._lock:
-        store.agent_state[_agent_key(auth)]["ids"] = still | set(p["ids"])
+        cur_ids = still | set(p["ids"])
+        if len(cur_ids) > 500:
+            cur_ids = set(list(cur_ids)[-500:])
+        store.agent_state[_agent_key(auth)]["ids"] = cur_ids
     return {
         "epoch": store.epoch,
         "text": text,

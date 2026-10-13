@@ -278,6 +278,7 @@ def remove_member(store, member_id: str) -> None:
         _member(store, member_id)
         ws["members"] = [m for m in ws["members"] if m["id"] != member_id]
         ws["links"] = [l for l in ws["links"] if l["a"] != member_id and l["b"] != member_id]
+        store.agent_state.pop(member_id, None)
 
 
 def link(store, a: str, b: str, scope: str) -> Dict[str, Any]:

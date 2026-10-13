@@ -393,6 +393,8 @@ class GraphStore:
 # Global store instance per tenant
 _stores: Dict[str, GraphStore] = {}
 _stores_lock = threading.Lock()
+_missing_tenants: Dict[str, float] = {}
+_missing_lock = threading.Lock()
 
 
 def get_graph_store(tenant: str = "acme") -> GraphStore:
@@ -410,6 +412,8 @@ def get_graph_store(tenant: str = "acme") -> GraphStore:
             if not store.persister.load():
                 store.persister.sync()
         _stores[tenant] = store
+        with _missing_lock:
+            _missing_tenants.pop(tenant, None)
         return store
 
 
@@ -420,10 +424,26 @@ def tenant_exists(tenant: str) -> bool:
             return True
     if settings.PERSISTENCE != "falkordb":
         return False
+    import time
+    now = time.monotonic()
+    with _missing_lock:
+        last = _missing_tenants.get(tenant)
+        if last is not None and now - last < 30.0:
+            return False
     from app import db
 
     db.require_db()
-    return f"quorum:{tenant}" in db.get_client().list_graphs()
+    exists = f"quorum:{tenant}" in db.get_client().list_graphs()
+    with _missing_lock:
+        if not exists:
+            _missing_tenants[tenant] = now
+            if len(_missing_tenants) > 5000:
+                cutoff = now - 60.0
+                for k in [k for k, t in _missing_tenants.items() if t < cutoff]:
+                    del _missing_tenants[k]
+        else:
+            _missing_tenants.pop(tenant, None)
+    return exists
 
 
 def sync_all(request_id: Optional[str] = None) -> int:
@@ -437,3 +457,5 @@ def forget_stores() -> None:
     """Drop the in-memory view (not the data). The next access reloads from FalkorDB, like a restart."""
     with _stores_lock:
         _stores.clear()
+    with _missing_lock:
+        _missing_tenants.clear()

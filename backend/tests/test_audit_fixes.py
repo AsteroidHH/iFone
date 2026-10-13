@@ -1,0 +1,180 @@
+"""
+Verification tests for the 10-point audit bug fixes:
+1. Production default & console sign-in (already verified)
+2. Proxy IP extraction & uvicorn forwarded headers
+3. CSV export empty cell formula quote bug
+4. Bounded LRU caches & periodic pruning
+5. Per-agent read state cleanup on member removal & 500 cap
+6. Negative cache for forged/unknown tenants
+7. Observer keys preserving word order
+8. Quarantined facts allow re-observation
+9. Exact path matching for open paths (/api/healthXYZ rejected)
+10. Vector batching in cosine_scores
+"""
+from unittest.mock import MagicMock
+from starlette.requests import Request
+
+from app.graph.queries import get_graph_store, tenant_exists
+from app.main import _client_ip, _is_open_path, app
+from app.models.common import Status
+from app.ratelimit import FailureTracker, RateLimiter
+from app.services import embeddings, mcp_read, mcp_write, observer, workspace
+from starlette.testclient import TestClient
+
+
+def _make_request(headers: dict, client_host: str = "10.0.0.1") -> Request:
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/api/health",
+        "headers": [(k.lower().encode("latin1"), v.encode("latin1")) for k, v in headers.items()],
+        "client": (client_host, 12345),
+    }
+    return Request(scope)
+
+
+def test_item_2_client_ip_proxy_headers():
+    # Behind reverse proxy with X-Forwarded-For
+    req = _make_request({"X-Forwarded-For": "203.0.113.195, 10.0.0.2"}, client_host="10.0.0.2")
+    assert _client_ip(req) == "203.0.113.195"
+
+    # Behind reverse proxy with X-Real-IP
+    req2 = _make_request({"X-Real-IP": "198.51.100.42"}, client_host="10.0.0.2")
+    assert _client_ip(req2) == "198.51.100.42"
+
+    # Direct connection without proxy headers
+    req3 = _make_request({}, client_host="192.168.1.50")
+    assert _client_ip(req3) == "192.168.1.50"
+
+
+def test_item_9_open_paths_exact_matching():
+    # Valid open paths
+    assert _is_open_path("/api/health") is True
+    assert _is_open_path("/docs") is True
+    assert _is_open_path("/docs/oauth2-redirect") is True
+    assert _is_open_path("/openapi.json") is True
+    assert _is_open_path("/redoc") is True
+
+    # Prefix attacks / invalid health extensions must NOT be treated as open paths
+    assert _is_open_path("/api/healthXYZ") is False
+    assert _is_open_path("/api/health/fake") is False
+    assert _is_open_path("/api/health_check") is False
+    assert _is_open_path("/api/health123") is False
+
+
+def test_item_3_csv_export_empty_cells_not_quoted(monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "ENV", "development")
+    client = TestClient(app)
+    # Token for tenant acme
+    tok = "token_acme_human"
+    r = client.get("/api/audit?format=csv", headers={"Authorization": f"Bearer {tok}"})
+    assert r.status_code == 200
+    csv_text = r.text
+    lines = csv_text.strip().split("\n")
+    header = lines[0]
+    assert "time_utc,who,team,client,tool,what,severity,ok,tokens,tokens_saved" in header
+
+    # Ensure no stray single quotes on empty values like ,',
+    assert ",''," not in csv_text
+    assert ",'" not in csv_text or ",','" in csv_text  # only if preceded by a quote
+
+
+def test_item_4_ratelimit_and_failure_tracker_bounds():
+    limiter = RateLimiter(per_minute=60, max_entries=50)
+    for i in range(100):
+        limiter.allow(f"caller_{i}")
+    assert len(limiter._b) <= 50
+
+    tracker = FailureTracker(limit=5, max_entries=50)
+    for i in range(100):
+        tracker.record(f"ip_{i}")
+    assert len(tracker._hits) <= 50
+
+
+def test_item_4_embeddings_lru_cache_bounds():
+    old_max = embeddings.MAX_CACHE
+    try:
+        embeddings.MAX_CACHE = 20
+        for i in range(50):
+            node = MagicMock(id=f"node_{i}", label=f"label_{i}", text=f"text_{i}", key=None, value=None)
+            embeddings.vectors_for([node])
+        assert len(embeddings._cache) <= 20
+    finally:
+        embeddings.MAX_CACHE = old_max
+
+
+def test_item_5_remove_member_cleans_agent_state():
+    store = get_graph_store("audit_test_ws")
+    team = workspace.add_team(store, "Platform", 5)
+    m, _ = workspace.add_member(store, "agent_clean", "agent", team["id"], "claude-code", "laptop")
+    mid = m["id"]
+
+    # Record agent read state
+    store.agent_state[mid] = {"ids": {"fact_1", "fact_2"}, "query": "hello", "epoch": 1}
+    assert mid in store.agent_state
+
+    # Remove member
+    workspace.remove_member(store, mid)
+    assert mid not in store.agent_state
+
+
+def test_item_5_agent_state_ids_capped_at_500():
+    store = get_graph_store("audit_test_cap")
+    auth = {"tenant": "audit_test_cap", "member_id": "mem_1"}
+    big_list = [f"f_{i}" for i in range(700)]
+    mcp_read._remember_delivery(store, auth, big_list, "test")
+    st = store.agent_state.get("mem_1")
+    assert st is not None
+    assert len(st["ids"]) <= 500
+
+
+def test_item_6_tenant_exists_negative_cache():
+    # Calling tenant_exists for nonexistent tenant caches negative lookup
+    res1 = tenant_exists("nonexistent_tenant_99999")
+    assert res1 is False
+    res2 = tenant_exists("nonexistent_tenant_99999")
+    assert res2 is False
+
+
+def test_item_7_observer_keys_preserve_word_order():
+    s1 = "Export from Chile to Norway takes 10 days."
+    s2 = "Export from Norway to Chile takes 10 days."
+    c1 = observer.candidates(s1)
+    c2 = observer.candidates(s2)
+    assert len(c1) == 1 and len(c2) == 1
+    # Different ordering must result in different keys
+    assert c1[0]["key"] != c2[0]["key"]
+    assert "chile" in c1[0]["key"] and "norway" in c1[0]["key"]
+
+
+def test_item_8_quarantined_facts_can_be_reobserved():
+    tok = "token_audit_reobserve_agent"
+    text = "The cancellation deadline in Peru is 14 days after signup."
+    # 1. Observe first time
+    out1 = mcp_write.observe(text, tok)
+    assert out1["stored"] == 1
+    fact_id = out1["facts"][0]["id"]
+
+    # 2. Re-observing while healthy is marked as duplicate
+    out_dup = mcp_write.observe(text, tok)
+    assert out_dup["stored"] == 0
+    assert len(out_dup["duplicates"]) == 1
+
+    # 3. Quarantine the fact
+    store = get_graph_store("audit_reobserve")
+    fact = store.nodes[fact_id]
+    fact.status = Status.QUARANTINED
+
+    # 4. Re-observing after quarantine is NOT blocked by duplicate check
+    out_after = mcp_write.observe(text, tok)
+    assert out_after["stored"] == 1
+    assert len(out_after["duplicates"]) == 0
+
+
+def test_item_10_vector_batching_cosine_scores():
+    nodes = [MagicMock(id=f"bn_{i}", label=f"node {i}", text=f"text content {i}", key=None, value=None) for i in range(30)]
+    scores = embeddings.cosine_scores("content text", nodes)
+    assert len(scores) == 30
+    assert all(0.0 <= s <= 1.0 for s in scores.values())

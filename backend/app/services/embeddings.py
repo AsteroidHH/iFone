@@ -15,6 +15,7 @@ Two providers:
 Vectors are cached per node and stored in FalkorDB (property `embedding` on the node, with a vector index), so a restart
 does not recompute them and FalkorDB can answer nearest-neighbour queries (see /api/context/semantic-check).
 """
+from collections import OrderedDict
 import hashlib
 import re
 import threading
@@ -200,9 +201,9 @@ class _OpenAIProvider:
             out.append(a / n if n > 0 else a)
         return out
 
-
 _openai = _OpenAIProvider()
-_cache: Dict[str, Tuple[str, np.ndarray]] = {}  # node id -> (text hash, vector)
+_cache: OrderedDict[str, Tuple[str, np.ndarray]] = OrderedDict()  # node id -> (text hash, vector)
+MAX_CACHE = 10000
 _lock = threading.Lock()
 _provider_failed_at = 0.0
 
@@ -225,6 +226,22 @@ def _digest(s: str) -> str:
     return hashlib.blake2b(s.encode("utf8"), digest_size=8).hexdigest() + provider_name()
 
 
+def _cache_touch(k: str) -> None:
+    if hasattr(_cache, "move_to_end"):
+        _cache.move_to_end(k)
+
+
+def _cache_put(k: str, val: Tuple[str, np.ndarray]) -> None:
+    _cache[k] = val
+    if hasattr(_cache, "move_to_end"):
+        _cache.move_to_end(k)
+    if len(_cache) > MAX_CACHE:
+        if hasattr(_cache, "popitem"):
+            _cache.popitem(last=False)
+        else:
+            del _cache[next(iter(_cache))]
+
+
 def vectors_for(nodes: Iterable) -> Dict[str, np.ndarray]:
     """Vectors for the nodes, from cache where the text has not changed."""
     global _provider_failed_at
@@ -239,6 +256,7 @@ def vectors_for(nodes: Iterable) -> Dict[str, np.ndarray]:
             d = _digest(t)
             hit = _cache.get(n.id)
             if hit and hit[0] == d:
+                _cache_touch(n.id)
                 out[n.id] = hit[1]
             else:
                 missing.append((n.id, t, d))
@@ -259,7 +277,7 @@ def vectors_for(nodes: Iterable) -> Dict[str, np.ndarray]:
             for (nid, _, d), v in zip(missing, vecs, strict=True):
                 # Never cache a fallback vector under the neural provider's digest.
                 if provider_name() == "local" or v.shape[0] != DIM or time.time() - _provider_failed_at > 30:
-                    _cache[nid] = (d, v)
+                    _cache_put(nid, (d, v))
                 out[nid] = v
     return out
 
@@ -278,7 +296,7 @@ def peek(n) -> Optional[np.ndarray]:
 def seed_cache(node_id: str, digest: str, vec: Sequence[float]) -> None:
     """Load a vector persisted in FalkorDB (already checked against the node's current digest) so a restart does not recompute it."""
     with _lock:
-        _cache[node_id] = (digest, np.asarray(vec, dtype=np.float32))
+        _cache_put(node_id, (digest, np.asarray(vec, dtype=np.float32)))
 
 
 def query_vector(q: str) -> np.ndarray:
@@ -299,13 +317,14 @@ def cosine_scores(query: str, nodes: Sequence) -> Dict[str, float]:
         return {}
     qv = query_vector(query)
     vecs = vectors_for(nodes)
-    out: Dict[str, float] = {}
-    for n in nodes:
-        v = vecs.get(n.id)
-        if v is None or v.shape != qv.shape:
-            continue
-        out[n.id] = max(0.0, float(np.dot(qv, v)))
-    return out
+    valid_nodes = [n for n in nodes if n.id in vecs and vecs[n.id].shape == qv.shape]
+    if not valid_nodes:
+        return {}
+    if len(valid_nodes) > 16:
+        mat = np.stack([vecs[n.id] for n in valid_nodes])
+        dots = np.clip(np.dot(mat, qv), 0.0, 1.0)
+        return {n.id: float(d) for n, d in zip(valid_nodes, dots, strict=True)}
+    return {n.id: max(0.0, float(np.dot(qv, vecs[n.id]))) for n in valid_nodes}
 
 
 def as_list(vec: np.ndarray) -> List[float]:

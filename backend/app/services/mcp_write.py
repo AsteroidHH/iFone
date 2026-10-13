@@ -79,8 +79,16 @@ def observe_text(auth: Dict[str, Any], text: str, source: str = "chat", dry_run:
         return {"error": "scope must be commons or team.", "success": False}
     cands = observer.candidates(text, settings.OBSERVER_MAX_FACTS)
     with store._lock:
-        known = {observer.fingerprint(n.quote or n.text or ""): n.id for n in store.nodes.values() if n.kind == NodeKind.FACT and (n.quote or n.text)}
-        known.update({observer.fingerprint(n.text or ""): n.id for n in store.nodes.values() if n.kind == NodeKind.FACT and n.text})
+        known = {
+            observer.fingerprint(n.quote or n.text or ""): n.id
+            for n in store.nodes.values()
+            if n.kind == NodeKind.FACT and (n.quote or n.text) and n.status != Status.QUARANTINED
+        }
+        known.update({
+            observer.fingerprint(n.text or ""): n.id
+            for n in store.nodes.values()
+            if n.kind == NodeKind.FACT and n.text and n.status != Status.QUARANTINED
+        })
     stored, duplicates, verdicts = [], [], []
     for c in cands:
         if c["fingerprint"] in known:

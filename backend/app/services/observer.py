@@ -75,7 +75,14 @@ def candidates(text: str, max_facts: int = 12) -> List[Dict[str, Any]]:
         value: Optional[str] = nu.group(0).strip() if nu else None
         key: Optional[str] = None
         if value:
-            words = sorted(set(_content_words(_NUM_UNIT.sub(" ", s))))[:5]
+            words = []
+            seen_words = set()
+            for w in _content_words(_NUM_UNIT.sub(" ", s)):
+                if w not in seen_words:
+                    seen_words.add(w)
+                    words.append(w)
+                    if len(words) >= 6:
+                        break
             key = "_".join(words)[:60] or None
         out.append({"text": s, "key": key, "value": value, "confidence": round(min(1.0, 0.25 * score), 2), "signals": signals, "fingerprint": fp})
     out.sort(key=lambda c: -c["confidence"])

@@ -117,7 +117,8 @@ async def request_id_middleware(request: Request, call_next):
     return response
 
 
-_OPEN_PATHS = ("/api/health", "/docs", "/openapi.json", "/redoc")
+def _is_open_path(path: str) -> bool:
+    return path in ("/api/health", "/docs", "/openapi.json", "/redoc") or path.startswith("/docs/")
 
 
 def _unavailable(reason: str) -> JSONResponse:
@@ -158,6 +159,12 @@ async def security_headers(request: Request, call_next):
 
 
 def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip:
+        return real_ip.strip()
     return request.client.host if request.client else "unknown"
 
 
@@ -169,7 +176,7 @@ async def edge_guard(request: Request, call_next):
     """
     path = request.url.path
     is_mcp = path == "/mcp" or path.startswith("/mcp/")
-    if request.method == "OPTIONS" or not (is_mcp or path.startswith("/api/")) or path.startswith(_OPEN_PATHS):
+    if request.method == "OPTIONS" or not (is_mcp or path.startswith("/api/")) or _is_open_path(path):
         return await call_next(request)
     if int(request.headers.get("content-length") or 0) > settings.MAX_BODY_BYTES:
         return _problem(413, "PAYLOAD_TOO_LARGE", f"Requests are limited to {settings.MAX_BODY_BYTES} bytes.")
@@ -213,7 +220,7 @@ def _audit_console_action(request: Request, token: str, ms: float) -> None:
 async def falkordb_gate(request: Request, call_next):
     """Every API call needs FalkorDB. If it is down, nothing is served and the caller is told how to fix it."""
     path = request.url.path
-    guarded = (path.startswith("/api/") or path.startswith("/mcp")) and not path.startswith(_OPEN_PATHS)
+    guarded = (path.startswith("/api/") or path.startswith("/mcp")) and not _is_open_path(path)
     if settings.PERSISTENCE != "falkordb" or not guarded or request.method == "OPTIONS":
         return await call_next(request)
     h = db.check_health()
