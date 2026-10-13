@@ -54,9 +54,15 @@ export function Context() {
   const pushToast = useStore((s) => s.pushToast);
 
   const [source, setSource] = useState<Source>(API_MODE === 'live' ? 'live' : '400');
-  const [query, setQuery] = useState('refund window');
+  const [query, setQuery] = useState(API_MODE === 'live' ? '' : 'refund window');
   const [budget, setBudget] = useState(420);
-  const dq = useDeferredValue(query);
+  // On a live memory the example question comes from the person's own facts, not from the demo.
+  const suggested = useMemo(() => {
+    const facts = Object.values(nodesMap).filter((n) => n.kind === 'fact' && n.status === 'HEALTHY');
+    const f = facts[facts.length - 1];
+    return f ? f.label.split(/\s+/).filter((w) => w.length > 2).slice(0, 4).join(' ') : '';
+  }, [nodesMap]);
+  const dq = useDeferredValue(query || (API_MODE === 'live' ? suggested : 'refund window'));
 
   const live = useMemo(() => ({ nodes: Object.values(nodesMap), edges: Object.values(edgesMap) }), [nodesMap, edgesMap]);
   const graph = useMemo(() => (source === 'live' ? live : synthGraph(Number(source))), [source, live]);
@@ -88,7 +94,9 @@ export function Context() {
     : svLocal;
 
   const sentTokens = sv.packedTokens + sv.mapTokens;
-  const cut = pct(sv.ragTokens - sentTokens, sv.ragTokens);
+  const noMatch = packed.included.length === 0;
+  const comparable = !noMatch && sv.ragTokens > sentTokens;
+  const cut = comparable ? pct(sv.ragTokens - sentTokens, sv.ragTokens) : 0;
   const shown = useCountUp(cut);
   const max = Math.max(sv.rawTokens, sv.proseTokens, 1);
   const saved = API_MODE === 'mock' ? Math.max(0, totals.naive - totals.used) : (stats.data?.saved ?? 0);
@@ -124,7 +132,7 @@ export function Context() {
         </label>
         <label className="field grow">
           <span>What is the agent asking?</span>
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="refund window" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={suggested || 'Ask about something an agent has saved'} />
         </label>
         <label className="field">
           <span>Token budget: {fmt(budget)}</span>
@@ -137,13 +145,35 @@ export function Context() {
       <div className="ctx-hero">
         <section className="card ctx-big" aria-label="Savings">
           <p className="lp-k">Fewer tokens than a top-8 RAG lookup</p>
-          <div className="ctx-pct num">
-            {shown}
-            <small>%</small>
-          </div>
-          <p className="muted">
-            A typical top-8 retriever sends {fmt(sv.ragTokens)} tokens per question. Quorum sends {fmt(sentTokens)}: the map ({fmt(sv.mapTokens)}, once per session) plus the packed answer ({fmt(sv.packedTokens)}). Against pasting the whole memory as notes ({fmt(sv.proseTokens)}) the cut is {pct(sv.vsProse, sv.proseTokens)}%, and against raw graph JSON ({fmt(sv.rawTokens)}) it is {pct(sv.vsRaw, sv.rawTokens)}%.
-          </p>
+          {comparable ? (
+            <>
+              <div className="ctx-pct num">
+                {shown}
+                <small>%</small>
+              </div>
+              <p className="muted">
+                A typical top-8 retriever sends {fmt(sv.ragTokens)} tokens per question. Quorum sends {fmt(sentTokens)}: the map ({fmt(sv.mapTokens)}, once per session) plus the packed answer ({fmt(sv.packedTokens)}). Against pasting the whole memory as notes ({fmt(sv.proseTokens)}) the cut is {pct(sv.vsProse, sv.proseTokens)}%, and against raw graph JSON ({fmt(sv.rawTokens)}) it is {pct(sv.vsRaw, sv.rawTokens)}%.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="ctx-pct num">
+                <small>{noMatch ? 'No match' : 'Too small to compare'}</small>
+              </div>
+              <p className="muted">
+                {!dq
+                  ? 'This memory is empty, so there is nothing to pack and compare yet. Once an agent has saved facts, ask a question about them here.'
+                  : noMatch
+                  ? `Nothing in this memory matches "${dq}", so there is nothing to pack and no fair comparison. Ask about something an agent has actually saved${suggested && source === 'live' ? ', for example:' : '.'}`
+                  : `For this question a plain retriever sends ${fmt(sv.ragTokens)} tokens, less than Quorum's map plus answer (${fmt(sentTokens)}). The map is sent once per session and the saving appears on larger memories and across many questions.`}
+              </p>
+              {noMatch && suggested && source === 'live' && (
+                <button className="btn primary" onClick={() => setQuery(suggested)}>
+                  Try &ldquo;{suggested}&rdquo;
+                </button>
+              )}
+            </>
+          )}
           <p className="ctx-fine">
             Estimates: about 4.5 characters per token for words and one token per symbol, within roughly 15% of a real tokenizer. The map is sent once per session; each question after that only costs the packed answer.
           </p>
@@ -172,13 +202,17 @@ export function Context() {
         </section>
       </div>
 
-      <section className="card wide" aria-label="Measured with a real AI">
-        <Measured />
-      </section>
-
-      <section className="card wide" aria-label="Retrieval quality">
-        <RetrievalQuality />
-      </section>
+      <details className="card wide ctx-evidence">
+        <summary>
+          <b>Evidence</b> <span className="muted">Measured with real AIs: token savings and whether the right fact comes back</span>
+        </summary>
+        <section aria-label="Measured with a real AI">
+          <Measured />
+        </section>
+        <section aria-label="Retrieval quality">
+          <RetrievalQuality />
+        </section>
+      </details>
 
       <section className="card wide" aria-label="Where the savings come from">
         <header className="card-h">

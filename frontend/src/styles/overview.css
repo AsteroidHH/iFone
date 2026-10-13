@@ -51,3 +51,8 @@
 .canvas-empty-art .btn { pointer-events: auto; }
 
 .ov-card .btn { justify-self: start; }
+.ctx-evidence > summary { cursor: pointer; list-style: none; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; padding: 2px 0; }
+.ctx-evidence > summary::-webkit-details-marker { display: none; }
+.ctx-evidence > summary::before { content: '+'; font: 600 16px var(--f-mono, monospace); width: 20px; }
+.ctx-evidence[open] > summary::before { content: '\2212'; }
+.ctx-evidence > section { margin-top: 16px; }
