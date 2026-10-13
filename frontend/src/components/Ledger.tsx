@@ -195,11 +195,20 @@ export function Ledger() {
             const ds = actionDisplayState(a);
             return (
               <li key={a.id}>
-                <button
+                <div
                   className="action-row"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => {
                     set({ selectedId: a.id, tab: 'graph' });
                     graphBus.focus.emit(a.id);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      set({ selectedId: a.id, tab: 'graph' });
+                      graphBus.focus.emit(a.id);
+                    }
                   }}
                 >
                   <strong>{a.label}</strong>
@@ -230,7 +239,7 @@ export function Ledger() {
                       ? `. Rollback ${copy.ledger.rollbackStatus[a.action.compensation.status] ?? 'unknown'}, ${a.action.compensation.attempts} attempt${a.action.compensation.attempts === 1 ? '' : 's'}`
                       : ''}
                   </span>
-                </button>
+                </div>
               </li>
             );
           })}
