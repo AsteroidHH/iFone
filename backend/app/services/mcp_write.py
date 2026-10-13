@@ -105,21 +105,21 @@ def observe_text(auth: Dict[str, Any], text: str, source: str = "chat", dry_run:
                 fact_id = f"{base_id}_{uuid.uuid4().hex[:4]}"
             else:
                 fact_id = base_id
-        fact = GraphNode(
-            id=fact_id,
-            kind=NodeKind.FACT,
-            label=c["text"][:60],
-            status=Status.HEALTHY,
-            stale=False,
-            key=c["key"],
-            value=c["value"],
-            text=c["text"],
-            quote=c["text"],
-            origin=f"observer:{source}"[:60],
-            scope_team=auth["team_id"] if scope == "team" else None,
-            asserted_by=AssertedBy(id=auth.get("agent_id", "agent"), name=auth.get("agent_id", "Agent"), tier=Tier.NEW),
-        )
-        store.add_node(fact)
+            fact = GraphNode(
+                id=fact_id,
+                kind=NodeKind.FACT,
+                label=c["text"][:60],
+                status=Status.HEALTHY,
+                stale=False,
+                key=c["key"],
+                value=c["value"],
+                text=c["text"],
+                quote=c["text"],
+                origin=f"observer:{source}"[:60],
+                scope_team=auth["team_id"] if scope == "team" else None,
+                asserted_by=AssertedBy(id=auth.get("agent_id", "agent"), name=auth.get("agent_id", "Agent"), tier=Tier.NEW),
+            )
+            store.add_node(fact)
         _emit(auth["tenant"], nodes=[fact])
         v = auditor_service.check_contradiction(store, fact, tenant=auth["tenant"])
         if v:

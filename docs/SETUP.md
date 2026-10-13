@@ -64,6 +64,7 @@ Open **Team** in the console (you need a `human` token). Add a team, then add a 
 | `QUORUM_TOKENS_JSON` | empty | `{"<token>": {"tenant": "acme", "role": "agent", "agent_id": "scout"}}`. With member tokens issued from the Team page, the only tokens accepted in production. |
 | `QUORUM_ALLOW_DYNAMIC_TOKENS` | on only in development | Accept ad-hoc `token_<tenant>_<role>` tokens. Anyone can forge these, so keep it off in production. |
 | `QUORUM_CORS_ORIGINS` | localhost only | Comma separated origins allowed to call the API from a browser. |
+| `QUORUM_TRUSTED_PROXIES` | `127.0.0.1,::1` | Comma-separated list of IP addresses or CIDR ranges trusted as reverse proxies (e.g. `172.16.0.0/12,10.0.0.0/8,192.168.0.0/16` for Docker/Caddy). Forwarded headers (`X-Forwarded-For`, `X-Real-IP`) are only parsed when received from trusted proxies. |
 | `QUORUM_PUBLIC_URL` | empty | Where other machines reach this hub (for example `https://quorum.example.com:8443`). The Connect page prints it in the snippets. |
 | `QUORUM_MCP_REQUIRE_HEADER` | on in production | Refuse `/mcp` requests that carry no `Authorization` header. A wrong header token is always refused. |
 | `QUORUM_RATE_LIMIT_TOOLS_PER_MIN` | `600` | Tool calls per token per minute (burst a sixth of it). `0` is off. Bulk imports need it raised. |

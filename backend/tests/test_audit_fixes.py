@@ -141,6 +141,44 @@ def test_item_5_agent_state_ids_capped_at_500_by_recency():
     assert st["ids"][-1] == "f_699"
 
 
+def test_item_5_agent_state_persistence_order_preserved():
+    import json
+    from app.persistence import Persister  # noqa: F401
+    store = get_graph_store("audit_test_persist_order")
+    auth = {"tenant": "audit_test_persist_order", "member_id": "agent_fifo"}
+    # Insert non-alphabetical IDs to verify sort order is not applied
+    order = ["zeta_fact", "alpha_fact", "mu_fact", "beta_fact", "delta_fact"]
+    mcp_read._remember_delivery(store, auth, order, "query_persist")
+
+    st = store.agent_state.get("agent_fifo")
+    assert st["ids"] == order
+
+    # Simulate serialization done during persistence sync
+    cur_agents = {
+        k: json.dumps({"ids": list(v.get("ids", [])), "query": v.get("query", ""), "epoch": v.get("epoch", 0)}, sort_keys=True)
+        for k, v in store.agent_state.items()
+    }
+    # Ensure raw serialized json retains list order, not sorted alphabetically
+    saved_obj = json.loads(cur_agents["agent_fifo"])
+    assert saved_obj["ids"] == order
+    assert saved_obj["ids"] != sorted(order)
+
+    # Simulate restoration done during persistence load
+    new_store = get_graph_store("audit_test_persist_order_restored")
+    new_store.agent_state.clear()
+    for aid, js in cur_agents.items():
+        d = json.loads(js)
+        new_store.agent_state[aid] = {"ids": list(d.get("ids", [])), "query": d.get("query", ""), "epoch": d.get("epoch", 0)}
+
+    restored_st = new_store.agent_state.get("agent_fifo")
+    assert isinstance(restored_st["ids"], list)
+    assert restored_st["ids"] == order
+
+    # Further deliveries to restored store continue strictly in FIFO order
+    mcp_read._remember_delivery(new_store, auth, ["omega_fact"])
+    assert new_store.agent_state["agent_fifo"]["ids"] == order + ["omega_fact"]
+
+
 def test_item_6_tenant_exists_negative_cache():
     # Calling tenant_exists for nonexistent tenant caches negative lookup
     res1 = tenant_exists("nonexistent_tenant_99999")

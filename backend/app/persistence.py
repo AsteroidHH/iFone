@@ -127,7 +127,7 @@ class Persister:
             store.agent_state.clear()
             for aid, js in agents:
                 d = json.loads(js)
-                store.agent_state[aid] = {"ids": set(d.get("ids", [])), "query": d.get("query", ""), "epoch": d.get("epoch", 0)}
+                store.agent_state[aid] = {"ids": list(d.get("ids", [])), "query": d.get("query", ""), "epoch": d.get("epoch", 0)}
                 self.agents[aid] = _h(js)
         return bool(nodes or edges or hands or meta or ws or calls or agents)
 
@@ -142,7 +142,7 @@ class Persister:
             epoch = store.epoch
             cur_ws = json.dumps(store.workspace, sort_keys=True)
             cur_calls = {c["id"]: json.dumps(c, sort_keys=True) for c in store.calls}
-            cur_agents = {k: json.dumps({"ids": sorted(v["ids"]), "query": v["query"], "epoch": v["epoch"]}, sort_keys=True) for k, v in store.agent_state.items()}
+            cur_agents = {k: json.dumps({"ids": list(v.get("ids", [])), "query": v.get("query", ""), "epoch": v.get("epoch", 0)}, sort_keys=True) for k, v in store.agent_state.items()}
             nodes_by_id = dict(store.nodes)
             edges_by_id = {e.id: e for e in store.edges}
 

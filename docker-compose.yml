@@ -55,6 +55,8 @@ services:
       - HELPDESK_URL=http://mock-helpdesk:8002
       # Where other machines reach this hub (shown on the Connect page), e.g. https://quorum.example.com:8443
       - QUORUM_PUBLIC_URL=${QUORUM_PUBLIC_URL:-}
+      # Trusted reverse proxies (e.g. Caddy proxy container on Docker private networks)
+      - QUORUM_TRUSTED_PROXIES=${QUORUM_TRUSTED_PROXIES:-127.0.0.1,::1,172.16.0.0/12,10.0.0.0/8,192.168.0.0/16}
     depends_on:
       falkordb:
         condition: service_healthy
