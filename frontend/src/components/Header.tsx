@@ -26,6 +26,9 @@ const VIEWS: { id: View; icon: string }[] = [
   { id: 'activity', icon: 'list' },
 ];
 
+/** Tab-bar labels on a phone, where nine tabs share the width. */
+const SHORT: Partial<Record<View, string>> = { benchmark: 'Bench', tenants: 'Tenants' };
+
 function SavedPill() {
   const naive = useLive((s) => s.totals.naive);
   const used = useLive((s) => s.totals.used);
@@ -113,7 +116,7 @@ export function Header() {
   const mode = meta?.mode ?? 'UNKNOWN';
 
   return (
-    <header className="header">
+    <header className="header" aria-label="Quorum console">
       <button className="brand" onClick={() => go('landing')} aria-label="Quorum home" title="Back to the landing page">
         <span className="brand-mark">
           <Icon name="logo" size={20} />
@@ -124,7 +127,10 @@ export function Header() {
         {VIEWS.map((v) => (
           <button key={v.id} className={`navbtn${view === v.id ? ' on' : ''}`} aria-current={view === v.id ? 'page' : undefined} aria-label={copy.nav[v.id]} title={copy.nav[v.id]} onClick={() => set({ view: v.id })}>
             <Icon name={v.icon} size={16} />
-            <span className="nav-label">{copy.nav[v.id]}</span>
+            <span className="nav-label">
+              <span className="nl-full">{copy.nav[v.id]}</span>
+              <span className="nl-short" aria-hidden="true">{SHORT[v.id] ?? copy.nav[v.id]}</span>
+            </span>
           </button>
         ))}
       </nav>

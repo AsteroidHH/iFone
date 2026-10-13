@@ -98,7 +98,7 @@ export function Benchmark() {
   const q = useQuery({ queryKey: ['bench'], queryFn: getBench });
   const d = q.data;
   return (
-    <div className="page">
+    <div className="page" tabIndex={0}>
       <PageHead page="bench" />
       {q.isLoading && <Skeleton lines={8} />}
       {q.isError && <ErrorState error={q.error} onRetry={() => void q.refetch()} />}

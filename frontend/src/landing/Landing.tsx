@@ -154,7 +154,7 @@ function Hero() {
             {caption}
           </span>
         </div>
-        <div className="lp-window-body">
+        <div className="lp-window-body" tabIndex={0} role="region" aria-label={L.hero.windowLabel}>
           <LandingGraph cascade={cascade} theme="dark" suspect={step === 1 ? 'f2' : undefined} label={L.hero.windowLabel} />
         </div>
         <div className="lp-window-foot">
@@ -178,7 +178,7 @@ function Hero() {
 function Marquee() {
   const items = [...L.marquee, ...L.marquee];
   return (
-    <div className="lp-marquee" aria-label="Built with">
+    <div className="lp-marquee" role="region" tabIndex={0} aria-label="Built with">
       <div className="lp-marquee-track">
         {items.map((m, i) => (
           <span key={i} aria-hidden={i >= L.marquee.length}>

@@ -109,7 +109,7 @@ export function Context() {
   const small = source === 'live' && live.nodes.length < 40;
 
   return (
-    <div className="page ctx">
+    <div className="page ctx" tabIndex={0}>
       <Header />
 
       <section className="card wide ctx-controls" aria-label="Context controls">
@@ -239,7 +239,7 @@ export function Context() {
               Download
             </button>
           </div>
-          <pre className="terminal mono ctx-pre">{mapText}</pre>
+          <pre className="terminal mono ctx-pre" tabIndex={0}>{mapText}</pre>
           <div className="ctx-doc-head">
             <b>packed answer</b>
             <span className="muted num">{fmt(packed.tokens)} tokens, per question</span>
@@ -248,7 +248,7 @@ export function Context() {
               <Icon name="copy" size={14} /> Copy
             </button>
           </div>
-          <pre className="terminal mono ctx-pre">{packed.text}</pre>
+          <pre className="terminal mono ctx-pre" tabIndex={0}>{packed.text}</pre>
         </section>
       </div>
     </div>

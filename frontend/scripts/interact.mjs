@@ -444,6 +444,31 @@ check('autopilot ran poison, audit and supersede', feed.includes('Quarantined') 
 await wait(9000);
 check('autopilot finishes and re-enables controls', !(await btn('Inject poisoned webhook').isDisabled()));
 
+
+// ---- the console on a phone ----
+{
+  const ph = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  ph.on('pageerror', (e) => problems.push(`pageerror (phone): ${e.message}`));
+  await ph.goto(base + '#/app');
+  await ph.locator('.header').waitFor({ timeout: 15000 });
+  await ph.waitForTimeout(1500);
+  const views = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
+  let wide = [];
+  for (const k of views) {
+    await ph.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
+    await ph.keyboard.press(k);
+    await ph.waitForTimeout(900);
+    if (await ph.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)) wide.push(k);
+  }
+  check('phone: no horizontal scroll on any of the nine views', wide.length === 0, wide.length ? `wide on ${wide.join(',')}` : '');
+  const bar = await ph.evaluate(() => { const n = document.querySelector('.header .nav'); const r = n.getBoundingClientRect(); return { bottom: Math.round(innerHeight - r.bottom), fixed: getComputedStyle(n).position, tabs: n.querySelectorAll('.navbtn').length, visible: [...n.querySelectorAll('.navbtn')].every((b) => { const q = b.getBoundingClientRect(); return q.left >= 0 && q.right <= innerWidth + 1; }) }; });
+  check('phone: the navigation is a fixed bottom tab bar with all nine tabs on screen', bar.fixed === 'fixed' && bar.bottom === 0 && bar.tabs === 9 && bar.visible, JSON.stringify(bar));
+  await ph.keyboard.press('1');
+  await ph.waitForTimeout(800);
+  const order = await ph.evaluate(() => { const g = document.querySelector('.col.center').getBoundingClientRect().top; const r = document.querySelector('.col.right').getBoundingClientRect().top; const l = document.querySelector('.col.left').getBoundingClientRect().top; return g < r && r < l; });
+  check('phone: the graph comes first, then the inspector, then the history', order);
+  await ph.close();
+}
 await browser.close();
 const failed = results.filter((r) => !r.ok);
 if (problems.length) console.error('PROBLEMS:\n' + problems.join('\n'));

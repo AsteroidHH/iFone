@@ -39,7 +39,7 @@ describe('the API client', () => {
   it('sends a JSON body with the right content type', async () => {
     const f = reply(200, { id: 'x' });
     await c.api(Thing, 'POST', 'thing', { body: { n: 1 } });
-    const init = f.mock.calls[0]![1] as unknown as RequestInit;
+    const init = (f.mock.calls[0] as unknown as [string, RequestInit])[1];
     expect(init.body).toBe('{"n":1}');
     expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
   });
@@ -143,7 +143,7 @@ describe('small helpers', () => {
     const p = await probeMcp('/mcp', 'qtk_t');
     expect(p.state).toBe('unexpected');
     expect(p.detail).toMatch(/wants an Authorization header/);
-    expect((f.mock.calls[0]![1] as unknown as RequestInit).headers).toMatchObject({ Authorization: 'Bearer qtk_t' });
+    expect((f.mock.calls[0] as unknown as [string, RequestInit])[1].headers).toMatchObject({ Authorization: 'Bearer qtk_t' });
     reply(500, {});
     expect((await probeMcp()).detail).toMatch(/HTTP 500/);
     vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new Error('offline'))));

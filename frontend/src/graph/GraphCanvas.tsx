@@ -283,11 +283,11 @@ export function GraphCanvas({ active }: { active: boolean }) {
               />
             </label>
             <div className="seg" role="group" aria-label="View">
-              <button className={`seg-btn${!listView ? ' on' : ''}`} aria-pressed={!listView} onClick={() => set({ listView: false })}>
+              <button className={`seg-btn${!listView ? ' on' : ''}`} aria-pressed={!listView} aria-label={copy.canvas.graph} onClick={() => set({ listView: false })}>
                 <Icon name="graph" size={14} />
                 <span className="seg-label">{copy.canvas.graph}</span>
               </button>
-              <button className={`seg-btn${listView ? ' on' : ''}`} aria-pressed={listView} onClick={() => set({ listView: true })} title="L">
+              <button className={`seg-btn${listView ? ' on' : ''}`} aria-pressed={listView} aria-label={copy.canvas.list} onClick={() => set({ listView: true })} title="L">
                 <Icon name="list" size={14} />
                 <span className="seg-label">{copy.canvas.list}</span>
               </button>

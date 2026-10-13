@@ -151,6 +151,8 @@ function Shell() {
   const loaded = useStore((s) => s.loaded);
   const paletteOpen = useStore((s) => s.paletteOpen);
   useShortcuts();
+  // The console view has its own <main>; every other view is the page's one main landmark.
+  const Stage = (view === 'console' ? 'div' : 'main') as 'div';
 
   useEffect(() => {
     void startSession();
@@ -194,13 +196,12 @@ function Shell() {
   return (
     <QueryClientProvider client={queryClient}>
       <div className={`app${presentation ? ' presenting' : ''}${demo ? ' demo' : ''}`}>
-        {view === 'console' && <h1 className="sr-only">Quorum console</h1>}
         <Header />
         <Banners />
         {vs === 'major' ? (
           <VersionBlock />
         ) : (
-          <div className="stage">
+          <Stage className="stage">
             <Suspense fallback={<ViewFallback />}>
               <div className="view" hidden={view !== 'console'}>
                 <Console visible={view === 'console'} />
@@ -214,7 +215,7 @@ function Shell() {
               {view === 'team' && <Team />}
               {view === 'activity' && <Activity />}
             </Suspense>
-          </div>
+          </Stage>
         )}
         <LoadError />
         <Toasts />

@@ -12,7 +12,7 @@ export function Tenants() {
   const d = q.data;
   const denied = d?.result === 'DENIED';
   return (
-    <div className="page">
+    <div className="page" tabIndex={0}>
       <PageHead page="tenants" />
       <section className="card wide" aria-label={copy.tenants.title}>
         {q.isLoading && <Skeleton lines={5} />}
@@ -54,11 +54,11 @@ export function Tenants() {
             </p>
             <div className="grid-2 tight">
               <div>
-                <h3 className="sub">{copy.tenants.detail}</h3>
+                <h2 className="sub">{copy.tenants.detail}</h2>
                 <pre className="terminal mono">{d.detail}</pre>
               </div>
               <div>
-                <h3 className="sub">{copy.tenants.visible}</h3>
+                <h2 className="sub">{copy.tenants.visible}</h2>
                 <ul className="graphs mono">
                   {d.visible_graph_names.map((g) => (
                     <li key={g}>

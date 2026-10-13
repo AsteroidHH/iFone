@@ -93,7 +93,7 @@ export function RetrievalQuality() {
                 const r = ai.summary[`${arm}/${m}` as keyof typeof ai.summary];
                 return (
                   <tr key={`${arm}/${m}`}>
-                    <th scope="row">{arm === 'keyword' ? m : ''}</th>
+                    <th scope="row">{m}</th>
                     <td>{arm === 'keyword' ? 'keywords only' : 'keywords + vectors'}</td>
                     <td className="num">
                       {r.by_kind.para_known.correct}/{r.by_kind.para_known.questions}

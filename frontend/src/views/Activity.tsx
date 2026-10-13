@@ -64,7 +64,7 @@ export function Activity() {
   const saved = all.reduce((n, e) => n + e.saved, 0);
 
   return (
-    <div className="page au">
+    <div className="page au" tabIndex={0}>
       <header className="page-head">
         <p className="page-tag">
           <span>[09]</span> Activity
@@ -143,7 +143,7 @@ export function Activity() {
                 {g.rows.map((e) => (
                   <li key={e.id} className={`au-row ${e.severity}`}>
                     <time className="muted num">{time(e.ts)}</time>
-                    <span className={`au-ico ${e.severity}`} title={SEV_LABEL[e.severity]} aria-label={SEV_LABEL[e.severity]}>
+                    <span className={`au-ico ${e.severity}`} role="img" title={SEV_LABEL[e.severity]} aria-label={SEV_LABEL[e.severity]}>
                       <Icon name={SEV_ICON[e.severity]} size={14} />
                     </span>
                     <p>

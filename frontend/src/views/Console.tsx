@@ -42,12 +42,13 @@ export function Console({ visible }: { visible: boolean }) {
   return (
     <div className={`console${presentation ? ' presenting' : ''}`}>
       {!presentation && (
-        <aside className="col left">
+        <aside className="col left" aria-label="Scenario and history">
           <ScenarioControls />
           <HistoryFeed />
         </aside>
       )}
       <main className="col center">
+        <h1 className="sr-only">Quorum console</h1>
         <div className="center-head">
           <div className="seg" role="tablist">
             {TABS.map((t) => (
@@ -67,7 +68,7 @@ export function Console({ visible }: { visible: boolean }) {
           {tab === 'insights' && <Insights />}
         </Suspense>
       </main>
-      <aside className="col right">
+      <aside className="col right" aria-label="Inspector">
         <Containment />
         {!presentation && <Inspector />}
         {presentation && !reportRoot && <p className="empty">{copy.containment.empty}</p>}

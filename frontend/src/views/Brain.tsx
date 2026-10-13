@@ -201,7 +201,7 @@ function Trace() {
 export function Brain() {
   const prefill = useStore((s) => s.brainQuestion);
   return (
-    <div className="page">
+    <div className="page" tabIndex={0}>
       <PageHead page="brain" />
       <Ask key={prefill ?? ''} prefill={prefill} />
       <div className="grid-2">

@@ -493,7 +493,7 @@ function expiry(at: number | undefined, now: number): string {
 export function Team() {
   const ws = useWs();
   return (
-    <div className="page tm">
+    <div className="page tm" tabIndex={0}>
       <header className="page-head">
         <p className="page-tag">
           <span>[08]</span> Team

@@ -49,7 +49,7 @@ function CopyBlock({ title, body, lang, note }: { title: string; body: string; l
           <Icon name="copy" size={14} /> Copy
         </button>
       </div>
-      <pre className="terminal mono" data-lang={lang}>
+      <pre className="terminal mono" data-lang={lang} tabIndex={0} aria-label={`${title}: command to copy`}>
         {body}
       </pre>
       {note && <p className="cn-help">{note}</p>}
@@ -339,7 +339,7 @@ function Feeds() {
             </button>
           </div>
           {rows.length ? (
-            <ul className="cn-list" aria-live={paused ? 'off' : 'polite'} aria-relevant="additions">
+            <ul className="cn-list" aria-live={paused ? 'off' : 'polite'} aria-relevant="additions" tabIndex={0} aria-label="Live feed">
               {rows.slice(0, 60).map((a) => (
                 <Row key={a.id} a={a} />
               ))}
@@ -452,7 +452,7 @@ function LiveFeed() {
             </label>
           </div>
           {rows.length ? (
-            <ul className="cn-list" aria-live="polite" aria-relevant="additions">
+            <ul className="cn-list" aria-live="polite" aria-relevant="additions" tabIndex={0} aria-label="Live feed">
               {rows.slice(0, 80).map((c) => (
                 <Row key={c.id} a={toRow(c)} />
               ))}
@@ -503,7 +503,7 @@ function LiveFeed() {
 
 export function Connect() {
   return (
-    <div className="page cn">
+    <div className="page cn" tabIndex={0}>
       <header className="page-head">
         <p className="page-tag">
           <span>[07]</span> Connect

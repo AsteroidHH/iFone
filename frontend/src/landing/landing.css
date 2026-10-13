@@ -702,7 +702,7 @@
 .lp-marquee {
   margin: clamp(64px, 8vw, 110px) 0 0;
   border-block: 1px solid var(--lp-line);
-  overflow: hidden;
+  contain: paint; /* clips the endless track without making this a scroll region */
   padding: 22px 0;
 }
 .lp-marquee-track {
@@ -748,7 +748,7 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  opacity: 0.2;
+  opacity: 0.62; /* the steps that are not current stay readable (AA), only softer */
   transition: opacity 0.5s var(--ease);
   padding-right: 24px;
 }

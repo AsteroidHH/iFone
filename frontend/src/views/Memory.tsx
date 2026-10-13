@@ -144,7 +144,7 @@ function Resume({ agent }: { agent: string | null }) {
 export function Memory() {
   const [agent, setAgent] = useState<string | null>('agent_refunder');
   return (
-    <div className="page">
+    <div className="page" tabIndex={0}>
       <PageHead page="memory" />
       <div className="grid-3">
         <Agents selected={agent} onPick={setAgent} />
