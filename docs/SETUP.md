@@ -30,10 +30,12 @@ On Windows PowerShell set the variable first: `$env:QUORUM_EMBED_MCP = "1"`.
 Open the **Connect** page in the console for paste-ready setup for Claude Code, Claude Desktop, Cursor, VS Code, Windsurf, Antigravity and any MCP client. For Claude Code:
 
 ```bash
-claude mcp add --transport http quorum http://localhost:8000/mcp
+claude mcp add --transport http quorum http://localhost:8000/mcp --header "Authorization: Bearer <your-token>"
 ```
 
-Every tool takes your token as the `token` argument. Give the agent its rules from the Connect page so it passes the right one.
+The token travels in the connection (an `Authorization` header, or `QUORUM_MCP_TOKEN` for stdio), so the model never sees it and the tools need no `token` argument. Clients that cannot send a header (ChatGPT) pass it as a tool argument instead. Which clients were really run, and how, is in [`MCP.md`](MCP.md). For apps that only launch commands (Claude Desktop), use the stdio bridge, `python mcp/bridge.py`.
+
+To capture facts without the agent calling anything, add the Claude Code hook from [`MCP.md`](MCP.md#passive-capture-no-tool-call-needed) (`scripts/quorum_observer.py`).
 
 ## 4. Teams, members and tokens
 
@@ -62,6 +64,13 @@ Open **Team** in the console (you need a `human` token). Add a team, then add a 
 | `QUORUM_TOKENS_JSON` | empty | `{"<token>": {"tenant": "acme", "role": "agent", "agent_id": "scout"}}`. With member tokens issued from the Team page, the only tokens accepted in production. |
 | `QUORUM_ALLOW_DYNAMIC_TOKENS` | on outside production | Accept ad-hoc `token_<tenant>_<role>` tokens. Anyone can forge these, so keep it off in production. |
 | `QUORUM_CORS_ORIGINS` | localhost only | Comma separated origins allowed to call the API from a browser. |
+| `QUORUM_PUBLIC_URL` | empty | Where other machines reach this hub (for example `https://quorum.example.com:8443`). The Connect page prints it in the snippets. |
+| `QUORUM_MCP_REQUIRE_HEADER` | on in production | Refuse `/mcp` requests that carry no `Authorization` header. A wrong header token is always refused. |
+| `QUORUM_RATE_LIMIT_TOOLS_PER_MIN` | `600` | Tool calls per token per minute (burst a sixth of it). `0` is off. Bulk imports need it raised. |
+| `QUORUM_RATE_LIMIT_HTTP_PER_MIN` | `3000` | HTTP requests per token or address per minute. `0` is off. |
+| `QUORUM_RANKING` | `hybrid` | `keyword` turns the vector part of ranking off, for comparison. |
+| `QUORUM_EMBED_PROVIDER`, `QUORUM_EMBED_URL`, `QUORUM_EMBED_MODEL`, `QUORUM_EMBED_API_KEY` | `local` | Use any OpenAI-compatible embeddings endpoint (OpenAI, Ollama, LM Studio, vLLM) instead of the built-in vectors. |
+| `QUORUM_OBSERVER_MAX_FACTS` | `12` | Most facts one `observe` call may store. |
 | `QUORUM_PERSISTENCE` | `falkordb` | `memory` exists for unit tests only and shows a warning banner. Never use it for real work. |
 
 ## Production checklist
@@ -69,7 +78,7 @@ Open **Team** in the console (you need a `human` token). Add a team, then add a 
 1. `QUORUM_ENV=production`, and `QUORUM_TOKENS_JSON` with real tokens. Replace `frontend/public/config.json` at deploy time with a file holding the same tokens for the console.
 2. FalkorDB with a volume and a password in `QUORUM_FALKORDB_URL` (`redis://:password@host:6379`). Do not expose port 6379.
 3. One backend process. Atomic guards run in the process under locks, so do not run several API workers against one FalkorDB.
-4. Put HTTPS in front of the console and the API, and set `QUORUM_CORS_ORIGINS` to the console's origin.
+4. Put HTTPS in front of the console, the API and `/mcp`: `docker compose --profile tls up -d` runs a Caddy proxy (see [`MCP.md`](MCP.md#https-for-a-team)). Set `QUORUM_PUBLIC_URL` to its address and `QUORUM_CORS_ORIGINS` to the console's origin.
 5. `python scripts/doctor.py` and `GET /api/health` should both report ready.
 
 ## Troubleshooting
@@ -80,5 +89,7 @@ Open **Team** in the console (you need a `human` token). Add a team, then add a 
 | "Redis is running but the FalkorDB graph module is not loaded" | You started plain Redis. Use the `falkordb/falkordb` image. |
 | "Backend not running" screen | Start the backend (step 2), or `docker compose up -d backend`. |
 | Console loads but every call is 401 | The tokens in `frontend/public/config.json` do not match the backend's tokens (see `QUORUM_TOKENS_JSON`). |
-| Agent writes do not show in the console | The MCP server is a separate process. Use `QUORUM_EMBED_MCP=1` instead of the standalone server. |
+| Agent writes do not show in the console | The MCP server is a separate process. Use `QUORUM_EMBED_MCP=1`, and for stdio apps use `mcp/bridge.py` rather than the standalone server. |
+| An MCP client gets 401 | The `Authorization` header is missing or the token is wrong. A member token is shown once; rotate it on the Team page. |
+| Tool calls answer `rate_limited` or HTTP 429 | The per-token limit was hit. Wait `retry_after` seconds, or raise `QUORUM_RATE_LIMIT_TOOLS_PER_MIN` (a bulk import needs it). |
 | `docker compose build` fails at `pip install` | The Docker engine has no network. Check Docker Desktop's proxy and DNS settings. |

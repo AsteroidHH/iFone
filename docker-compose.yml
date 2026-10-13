@@ -50,6 +50,8 @@ services:
       - QUORUM_EMBED_MCP=1
       - QUORUM_MODE=replay
       - HELPDESK_URL=http://mock-helpdesk:8002
+      # Where other machines reach this hub (shown on the Connect page), e.g. https://quorum.example.com:8443
+      - QUORUM_PUBLIC_URL=${QUORUM_PUBLIC_URL:-}
     depends_on:
       falkordb:
         condition: service_healthy
@@ -87,5 +89,24 @@ services:
       - backend
     restart: unless-stopped
 
+  # Optional HTTPS front door for a team: docker compose --profile tls up -d   (see deploy/Caddyfile, docs/SETUP.md)
+  proxy:
+    image: caddy:2-alpine
+    container_name: quorum-proxy
+    ports:
+      - "8443:8443"
+    environment:
+      - QUORUM_DOMAIN=${QUORUM_DOMAIN:-localhost}
+      - QUORUM_TLS=${QUORUM_TLS:-internal}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+    profiles: ["tls"]
+
 volumes:
   falkordb_data:
+  caddy_data:

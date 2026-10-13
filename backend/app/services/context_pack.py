@@ -131,7 +131,7 @@ def _ancestors(inn: Dict[str, List[str]], start: str, limit: int) -> List[str]:
     return order
 
 
-_STOP = set("the and for are was were with that this from what which who how when where why does did can its has have not you your our their about into than then them they will would should could been being also any all per via out off over under".split())
+_STOP = set("is on do to of in at by an it be or as if so up we me my am no get got make made take like just very much many more most some such only own same too use used using one two long often can the and for are was were with that this from what which who how when where why does did can its has have not you your our their about into than then them they will would should could been being also any all per via out off over under".split())
 
 
 def _node_words(n: GraphNode) -> Set[str]:
@@ -163,6 +163,36 @@ def _relevance(n: GraphNode, qwords: Set[str], idf: Optional[Dict[str, float]] =
     if _kind(n) in ("fact", "conclusion"):
         score += 0.2
     return float(score)
+
+
+SEM_MIN = 0.30  # cosine a node needs on its own (no shared keyword) to count as a semantic match
+_LEX_W, _SEM_W = 0.5, 0.5
+
+
+def rank(candidates: List[GraphNode], query: str, idf: Dict[str, float]) -> List[Tuple[GraphNode, float, float]]:
+    """
+    Hybrid ranking, best first: (node, score, cosine). Keyword evidence (IDF-weighted coverage of the question's words)
+    still leads; the vector similarity breaks ties and rescues paraphrases that share no keyword with the question.
+    A node with no keyword hit needs a cosine of at least SEM_MIN. Score 0 means no match.
+    """
+    from app.services import embeddings
+
+    qw = set(_words(query))
+    lex = {n.id: _relevance(n, qw, idf) for n in candidates}
+    # A question word the memory has never seen counts against coverage as much as the rarest word it has.
+    unseen = max(idf.values()) if idf else 1.0
+    lmax = sum(idf.get(w, unseen) for w in qw if w not in _STOP) + 0.2
+    from app.config import settings
+
+    cos = embeddings.cosine_scores(query, candidates) if settings.RANKING != "keyword" else {}
+    out: List[Tuple[GraphNode, float, float]] = []
+    for n in candidates:
+        l, c = lex[n.id], cos.get(n.id, 0.0)
+        if l <= 0 and c < SEM_MIN:
+            out.append((n, 0.0, c))
+            continue
+        out.append((n, _LEX_W * min(1.0, l / lmax) + _SEM_W * c + (0.02 if _kind(n) in ("fact", "conclusion") else 0.0), c))
+    return sorted(out, key=lambda x: -x[1])
 
 
 def _raw(n: GraphNode) -> Dict[str, Any]:
@@ -204,7 +234,7 @@ def pack(
 
     qw = set(_words(query))
     idf = idf_weights(live.values())
-    ranked = sorted(((n, _relevance(n, qw, idf)) for n in live.values()), key=lambda x: -x[1])
+    ranked = [(n, sc) for n, sc, _ in rank(list(live.values()), query, idf)]
     picked: List[str] = []
     seen: Set[str] = set()
 

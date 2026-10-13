@@ -27,6 +27,7 @@ mcp_server.tool()(mcp_tools.guarded(mcp_tools.get_map))
 mcp_server.tool()(mcp_tools.guarded(mcp_tools.get_node))
 mcp_server.tool()(mcp_tools.guarded(mcp_tools.find_path))
 mcp_server.tool()(mcp_tools.guarded(mcp_tools.delta))
+mcp_server.tool()(mcp_tools.guarded(mcp_tools.observe))
 
 
 def main():

@@ -5,12 +5,16 @@ Everything below runs against a real FalkorDB. Nothing here uses the in-browser 
 | Command | What it proves | Needs |
 | --- | --- | --- |
 | `python -m pytest backend/tests tests` | Backend logic, persistence in FalkorDB, the FalkorDB gate, auth hardening, the graph layer | FalkorDB. The persistence and gate tests fail loudly without it. |
-| `cd frontend && npm run verify` | Types, lint, 66 unit tests, contrast, contract, live and sample builds | nothing running |
-| `cd frontend && npm run qa` | The console on sample data (88 checks) | `npm run build:mock && npm run preview:mock` |
-| `cd frontend && npm run qa:live` | The console against the live backend: an MCP client as an agent, the 14 tools, teams, member tokens, team scope and links, presence, token savings, the feed and sessions (50 checks) | the stack below |
+| `cd frontend && npm run verify` | Types, lint, 79 unit tests, contrast, contract, live and sample builds | nothing running |
+| `cd frontend && npm run qa` | The console on sample data (98 checks) | `npm run build:mock && npm run preview:mock` |
+| `cd frontend && npm run qa:live` | The console against the live backend: an MCP client as an agent, the 15 tools, header auth, passive capture, semantic ranking, the audit log, teams, member tokens, team scope and links, presence, token savings, the feed and sessions (59 checks) | the stack below |
 | `cd frontend && node scripts/resilience.mjs [BASE] [API]` | FalkorDB stopped under a running product: lock screen, 503s, MCP refused, automatic recovery, data intact (15 checks) | the stack, Docker |
 | `cd frontend && node scripts/token_bench.mjs [API] [RUNS] [short or long]` | The measured token comparison: fresh Claude Code sessions with a typical top-8 retrieval vs Quorum's compact format. Writes `bench/token_bench_<scenario>.json`, which the Context and landing pages read. Costs a few dollars of Claude usage. | the stack, the `claude` CLI logged in |
 | `cd frontend && node scripts/claude_e2e.mjs [API] [BASE]` | Real Claude Code sessions use Quorum as shared memory: write, read from a fresh session, revert a wrong fact (17 checks). Costs a little Claude usage (about $0.70 as reported by the CLI). | the stack, the `claude` CLI logged in |
+| `python scripts/qa_mcp_clients.py --hub http://127.0.0.1:8010 --strict-hub http://127.0.0.1:8011` | The wire behaviour real MCP clients depend on, against a running hub: streamable HTTP with only an Authorization header, stdio via `mcp/server.py` and via `mcp/bridge.py`, a wrong token refused, a hub that requires the header, tool rate limits (16 checks). Run the second hub with `QUORUM_MCP_REQUIRE_HEADER=true QUORUM_RATE_LIMIT_TOOLS_PER_MIN=60`. It does not drive any client's user interface. Use `--hub https://localhost:8443` with `SSL_CERT_FILE` set to test through the TLS proxy. | a hub with `QUORUM_EMBED_MCP=1` |
+| `python scripts/claude_e2e_v2.py --hub http://127.0.0.1:8010` | Two real Claude Code checks: header auth with a paraphrased question and no token anywhere in the prompt, and passive capture through the Stop hook with no Quorum tools (6 checks). Costs a little Claude usage. | a hub, the `claude` CLI logged in |
+| `python bench/retrieval_bench.py` | 190 questions on a 336-fact memory: keyword ranking vs keywords plus vectors, no AI needed. | nothing running |
+| `python bench/ai_retrieval_bench.py --hybrid URL --keyword URL` | The same memory answered by real Claude Sonnet and Haiku on two hubs (one started with `QUORUM_RANKING=keyword`). About 90 short runs. Start both hubs with `QUORUM_RATE_LIMIT_TOOLS_PER_MIN=0`. | two hubs, the `claude` CLI |
 | `python bench/run.py` | The benchmark on FalkorDB. Refuses to run without it (`--memory` runs the model and labels the results so). | FalkorDB |
 
 ## The stack

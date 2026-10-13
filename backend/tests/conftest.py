@@ -5,6 +5,9 @@ Unit tests run the API logic on the in-memory view. Persistence and the FalkorDB
 import os
 
 os.environ.setdefault("QUORUM_PERSISTENCE", "memory")
+# Limits have their own tests; the rest of the suite should not trip them.
+os.environ.setdefault("QUORUM_RATE_LIMIT_HTTP_PER_MIN", "0")
+os.environ.setdefault("QUORUM_RATE_LIMIT_TOOLS_PER_MIN", "0")
 
 import pytest
 

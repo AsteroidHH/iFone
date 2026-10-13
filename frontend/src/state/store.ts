@@ -5,7 +5,7 @@ import type { Role } from '../api/client';
 import { emptyCore, type CoreState } from './reducer';
 import { addToast, type Toast, type ToastTone } from './toasts';
 
-export type View = 'console' | 'memory' | 'brain' | 'tenants' | 'benchmark' | 'context' | 'connect' | 'team';
+export type View = 'console' | 'memory' | 'brain' | 'tenants' | 'benchmark' | 'context' | 'connect' | 'team' | 'activity';
 export type Tab = 'graph' | 'mindmap' | 'diff' | 'ledger' | 'insights';
 export type InspectorTab = 'path' | 'details' | 'links' | 'cypher';
 export type FeedFilter = 'all' | 'graph' | 'actions' | 'handoffs' | 'system';

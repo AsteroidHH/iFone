@@ -22,6 +22,7 @@ TOOLS = (
     "get_node",
     "find_path",
     "delta",
+    "observe",
 )
 
 

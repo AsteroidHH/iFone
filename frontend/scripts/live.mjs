@@ -88,7 +88,7 @@ check('live feed is labelled as coming from the backend, not simulated', !(await
 await rpc('initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'live-qa', version: '1' } });
 await rpc('notifications/initialized', undefined, true);
 const listed = (await rpc('tools/list', {})).result.tools.map((t) => t.name);
-check('MCP server lists all fourteen tools, the four token savers included', listed.length === 14 && ['get_map', 'get_node', 'find_path', 'delta'].every((n) => listed.includes(n)), listed.join(','));
+check('MCP server lists all fifteen tools, the token savers and observe included', listed.length === 15 && ['get_map', 'get_node', 'find_path', 'delta', 'observe'].every((n) => listed.includes(n)), listed.join(','));
 await page.keyboard.press('1');
 await sleep(500);
 await page.getByRole('button', { name: 'List view' }).click();
@@ -223,6 +223,34 @@ await page.getByRole('tab', { name: 'Sessions' }).click();
 await page.locator('.cn-people button', { hasText: miraName }).click();
 await sleep(1200);
 check("a member's session shows their tool calls", (await page.locator('.cn-turn').count()) >= 2);
+check('Connect reads the tool list from the hub', (await page.locator('.cn-table tbody tr').count()) === 15 && (await text('.card-sub >> nth=-1')).length > 0 && (await page.locator('.cn-table tbody th', { hasText: /^observe$/ }).count()) === 1);
+check('Connect shows the hub policy (header, limit, ranking)', /Authorization header/.test(await text('.cn')) && /tool calls a minute/.test(await text('.cn')));
+
+/* ---- header auth, passive capture, semantic ranking and the audit log, on the live hub ---- */
+const hdr = (tok) => ({ 'content-type': 'application/json', accept: 'application/json, text/event-stream', Authorization: `Bearer ${tok}` });
+const hinit = await fetch(`${API}/mcp`, { method: 'POST', headers: hdr(miraToken), body: JSON.stringify({ jsonrpc: '2.0', id: 91, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'qa', version: '1' } } }) });
+const hsid = hinit.headers.get('mcp-session-id');
+await fetch(`${API}/mcp`, { method: 'POST', headers: { ...hdr(miraToken), 'mcp-session-id': hsid }, body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) });
+const hcall = async (name, args) => {
+  const r = await fetch(`${API}/mcp`, { method: 'POST', headers: { ...hdr(miraToken), 'mcp-session-id': hsid }, body: JSON.stringify({ jsonrpc: '2.0', id: 92, method: 'tools/call', params: { name, arguments: args } }) });
+  const t = await r.text();
+  const line = t.split('\n').find((l) => l.startsWith('data:'));
+  return JSON.parse(JSON.parse(line ? line.slice(5) : t).result.content[0].text);
+};
+const viaHeader = await hcall('observe', { text: `The ${run} retention period for audit exports is 400 days and must never be shortened.`, source: 'qa' });
+check('a tool call with only an Authorization header works (no token argument)', viaHeader.success === true && viaHeader.stored === 1, JSON.stringify(viaHeader.facts?.[0]?.key));
+const badTok = await fetch(`${API}/mcp`, { method: 'POST', headers: hdr('qrm_acme_wrongwrongwrong'), body: '{}' });
+check('a wrong header token is refused with 401', badTok.status === 401);
+const para = await hcall('retrieve_context', { query: `how many days do we keep audit exports ${run}`, format: 'compact' });
+check('a paraphrased question finds the observed fact', /400 days/.test(para.packed ?? ''), (para.packed ?? '').split('\n')[1]?.slice(0, 70));
+const sem = await fetch(`${API}/api/context/semantic-check?query=${encodeURIComponent('how long are audit exports retained')}`, { headers: human }).then((r) => r.json());
+check("FalkorDB's own vector index agrees with the ranking", sem.agrees === true && sem.falkordb_top?.length > 0, `${sem.falkordb_top?.[0]?.id} (${sem.provider})`);
+await page.keyboard.press('9');
+await sleep(2200);
+check('Activity lists real events in plain words, with the member named', (await page.locator('.au-row').count()) >= 3 && (await text('.au-list')).includes(miraName) && /captured facts|looked up|recorded a fact/.test(await text('.au-list')));
+check('Activity does not claim to be sample data', !(await text('.au')).includes('Sample data'));
+const csv = await fetch(`${API}/api/audit?format=csv`, { headers: human });
+check('the audit log exports as CSV', csv.headers.get('content-type')?.startsWith('text/csv') && (await csv.text()).split('\n').length > 3);
 await page.keyboard.press('6');
 await sleep(2000);
 check('the Context page shows the backend numbers', /\d+/.test(await text('.ctx-pct')) && Number((await text('.ctx-session .ctx-pct')).replace(/\D/g, '')) > 0);

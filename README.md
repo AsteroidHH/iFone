@@ -249,7 +249,8 @@ Built with ❤️ for the <b>Graph Hacks: Context for AI Agents</b> Hackathon (O
 ## Context, Connect and Team (console)
 
 - **Context** shows the memory as a mind map for people and as a compact map plus packed answer for agents, with live token numbers against a top-8 retriever, pasted notes and raw JSON. In live mode the numbers come from the backend with the same code agents call, and the page shows what was **measured with real Claude Code sessions**: 78% fewer tool-result tokens and 18% lower session cost on real-sized documents, same answers (`docs/TOKEN_SAVING.md`).
-- **Connect** shows a real MCP handshake, gives paste-ready setup for Claude Code, Claude Desktop, Cursor, VS Code, Windsurf, Antigravity and any MCP client, lists the 14 tools, and shows every real tool call (who, what, tokens used vs a top-8 retriever) plus per-member tool-call sessions.
+- **Connect** shows a real MCP handshake, gives paste-ready setup for Claude Code, Claude Desktop, Cursor, VS Code, Windsurf, Antigravity and any MCP client, lists the 15 tools (read from the hub), and shows every real tool call (who, what, tokens used vs a top-8 retriever) plus per-member tool-call sessions.
+- **Activity** is the audit log in plain sentences (who did what, when, what it cost), filterable, with a CSV export, for people who do not read graphs.
 - **Team** manages plan, teams, seats, members and links on the server. Each member gets their own token (shown once, stored as a hash) and presence comes from their real calls. Facts saved with `scope="team"` stay private to the team until a link shares them.
 
-Details: [`docs/TOKEN_SAVING.md`](docs/TOKEN_SAVING.md), [`docs/CONTRACT_PROPOSALS.md`](docs/CONTRACT_PROPOSALS.md) (what the backend now provides and what is still open).
+Details: [`docs/MCP.md`](docs/MCP.md) (clients, header auth, rate limits, the stdio bridge, passive capture, semantic ranking, HTTPS), [`docs/TOKEN_SAVING.md`](docs/TOKEN_SAVING.md), [`docs/CONTRACT_PROPOSALS.md`](docs/CONTRACT_PROPOSALS.md) (what the backend now provides and what is still open).

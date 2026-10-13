@@ -24,7 +24,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.config import settings
 from app import db
 from app.db import FalkorUnavailable
+from app.auth import resolve_token
 from app.graph.queries import sync_all
+from app.ratelimit import http_limiter
 from app.models.common import ErrorCode, ErrorResponse, ErrorDetail
 from app.routes import (
     meta,
@@ -124,6 +126,38 @@ def _unavailable(reason: str) -> JSONResponse:
         },
         headers={"Retry-After": "3"},
     )
+
+
+def _bearer(request: Request) -> str:
+    auth = request.headers.get("authorization") or ""
+    if auth[:7].lower() == "bearer ":
+        return auth[7:].strip()
+    return (request.headers.get("x-quorum-token") or "").strip()
+
+
+def _problem(status_code: int, code: str, message: str, headers: dict | None = None) -> JSONResponse:
+    return JSONResponse(status_code=status_code, content={"error": {"code": code, "message": message}}, headers=headers or {})
+
+
+@app.middleware("http")
+async def edge_guard(request: Request, call_next):
+    """Rate limit every API and MCP caller, and check the Authorization header on /mcp before a request reaches a tool."""
+    path = request.url.path
+    is_mcp = path == "/mcp" or path.startswith("/mcp/")
+    if request.method == "OPTIONS" or not (is_mcp or path.startswith("/api/")) or path.startswith(_OPEN_PATHS):
+        return await call_next(request)
+    token = _bearer(request)
+    if path != "/api/events":
+        ok, wait = http_limiter.allow(token or (request.client.host if request.client else "unknown"))
+        if not ok:
+            return _problem(429, "RATE_LIMITED", f"Too many requests. Retry in {wait:.1f}s.", {"Retry-After": str(max(1, int(wait + 0.999)))})
+    if is_mcp:
+        if token:
+            if not resolve_token(token):
+                return _problem(401, ErrorCode.UNAUTHENTICATED.value, "Invalid token in the Authorization header.", {"WWW-Authenticate": "Bearer"})
+        elif settings.mcp_header_required():
+            return _problem(401, ErrorCode.UNAUTHENTICATED.value, "This hub requires Authorization: Bearer <token> on /mcp.", {"WWW-Authenticate": "Bearer"})
+    return await call_next(request)
 
 
 @app.middleware("http")

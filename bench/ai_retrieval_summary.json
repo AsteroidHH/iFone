@@ -1,0 +1,95 @@
+{
+  "facts": 336,
+  "questions": 22,
+  "models": [
+    "sonnet",
+    "haiku"
+  ],
+  "summary": {
+    "hybrid/sonnet": {
+      "by_kind": {
+        "para_known": {
+          "questions": 12,
+          "correct": 12
+        },
+        "para_unknown": {
+          "questions": 6,
+          "correct": 3
+        },
+        "none": {
+          "questions": 4,
+          "correct": 4
+        }
+      },
+      "correct": 19,
+      "questions": 22,
+      "median_turns": 3.0,
+      "median_input_tokens": 155481,
+      "cost_usd_total": 3.383
+    },
+    "hybrid/haiku": {
+      "by_kind": {
+        "para_known": {
+          "questions": 12,
+          "correct": 12
+        },
+        "para_unknown": {
+          "questions": 6,
+          "correct": 3
+        },
+        "none": {
+          "questions": 4,
+          "correct": 4
+        }
+      },
+      "correct": 19,
+      "questions": 22,
+      "median_turns": 3.0,
+      "median_input_tokens": 105213,
+      "cost_usd_total": 0.704
+    },
+    "keyword/sonnet": {
+      "by_kind": {
+        "para_known": {
+          "questions": 12,
+          "correct": 7
+        },
+        "para_unknown": {
+          "questions": 6,
+          "correct": 0
+        },
+        "none": {
+          "questions": 4,
+          "correct": 4
+        }
+      },
+      "correct": 11,
+      "questions": 22,
+      "median_turns": 3.0,
+      "median_input_tokens": 155528,
+      "cost_usd_total": 3.38
+    },
+    "keyword/haiku": {
+      "by_kind": {
+        "para_known": {
+          "questions": 12,
+          "correct": 5
+        },
+        "para_unknown": {
+          "questions": 6,
+          "correct": 0
+        },
+        "none": {
+          "questions": 4,
+          "correct": 4
+        }
+      },
+      "correct": 9,
+      "questions": 22,
+      "median_turns": 3.0,
+      "median_input_tokens": 105285,
+      "cost_usd_total": 0.711
+    }
+  },
+  "note": "Each model answered each question once per hub. Small sample: read it as direction, not precision."
+}

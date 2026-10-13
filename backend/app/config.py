@@ -24,6 +24,23 @@ class Settings(BaseSettings):
     ALLOW_DYNAMIC_TOKENS: bool | None = None
     # Comma separated browser origins allowed to call the API. Empty means localhost only.
     CORS_ORIGINS: str = ""
+    # Where agents reach this hub from other machines, e.g. https://quorum.example.com (shown on the Connect page).
+    PUBLIC_URL: str = ""
+    # Require MCP clients to send the token as an Authorization header (so the model never sees it). Default: on in production.
+    MCP_REQUIRE_HEADER: bool | None = None
+    # Calls per minute per token for MCP tools, and per token or address for HTTP. 0 turns a limit off.
+    RATE_LIMIT_TOOLS_PER_MIN: int = 600
+    RATE_LIMIT_HTTP_PER_MIN: int = 3000
+    # Passive fact extraction from transcripts (POST /api/observe and the observe tool).
+    OBSERVER_MAX_FACTS: int = 12
+    # "hybrid" ranks by keywords plus vectors (default). "keyword" turns the vectors off, for comparison runs.
+    RANKING: Literal["hybrid", "keyword"] = "hybrid"
+    # Optional neural embeddings. "local" is built in; "openai" means any OpenAI-compatible /v1/embeddings endpoint
+    # (OpenAI, Ollama, LM Studio, vLLM) at EMBED_URL.
+    EMBED_PROVIDER: Literal["local", "openai"] = "local"
+    EMBED_URL: str = ""
+    EMBED_MODEL: str = ""
+    EMBED_API_KEY: str = ""
     # JSON object {"<token>": {"tenant": "...", "role": "agent|auditor|human", "agent_id": "..."}} added to the demo tokens.
     TOKENS_JSON: str = ""
 
@@ -42,6 +59,9 @@ class Settings(BaseSettings):
 
     def dynamic_tokens_allowed(self) -> bool:
         return self.ALLOW_DYNAMIC_TOKENS if self.ALLOW_DYNAMIC_TOKENS is not None else self.ENV != "production"
+
+    def mcp_header_required(self) -> bool:
+        return self.MCP_REQUIRE_HEADER if self.MCP_REQUIRE_HEADER is not None else self.ENV == "production"
 
     def cors_origin_list(self) -> list:
         if self.CORS_ORIGINS.strip():

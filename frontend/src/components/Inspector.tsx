@@ -50,6 +50,11 @@ function PathTab({ nodes }: { nodes: GraphNode[] }) {
           {n.origin && (
             <p className="muted small">
               {copy.inspector.origin}: <span className="mono">{n.origin}</span>
+              {n.origin.startsWith('observer:') && (
+                <em className="cn-tag" title="Quorum read this sentence in text the agent produced and saved it. No one called remember_fact.">
+                  captured automatically
+                </em>
+              )}
             </p>
           )}
         </li>

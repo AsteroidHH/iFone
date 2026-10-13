@@ -5,9 +5,9 @@ import { fmt, pct } from '../context/tokens';
 import { useStore } from '../state/store';
 import { useLive, type Activity } from '../workspace/live';
 import { copyText } from '../workspace/clipboard';
-import { agentRules, CLIENTS, DEFAULT_MCP_URL, DEFAULT_REPO, MCP_TOOLS, setupSnippet, WHO_LABEL, type ClientId } from '../workspace/mcp';
+import { agentRules, CLIENTS, DEFAULT_MCP_URL, DEFAULT_REPO, fromCatalog, MCP_TOOLS, setupSnippet, tokenHidden, WHO_LABEL, type ClientId, type McpTool } from '../workspace/mcp';
 import { useWs } from '../workspace/useWs';
-import { getActivity } from '../workspace/server';
+import { getActivity, getCatalog } from '../workspace/server';
 import { useQuery } from '@tanstack/react-query';
 import type { McpCall } from '../api/schemas';
 
@@ -28,7 +28,14 @@ const WORD: Record<string, string> = {
   unexpected: 'Reachable, handshake refused',
 };
 
-function CopyBlock({ title, body, lang }: { title: string; body: string; lang?: string }) {
+/** Live: the tools this hub actually serves (read from the code). Sample build or hub unreachable: the built-in list. */
+function useHub() {
+  const q = useQuery({ queryKey: ['catalog'], queryFn: getCatalog, enabled: API_MODE === 'live', staleTime: 30_000, retry: 1 });
+  const tools: McpTool[] = q.data ? fromCatalog(q.data.tools) : MCP_TOOLS;
+  return { tools, hub: q.data, fromBackend: !!q.data };
+}
+
+function CopyBlock({ title, body, lang, note }: { title: string; body: string; lang?: string; note?: string }) {
   const pushToast = useStore((s) => s.pushToast);
   return (
     <div className="cn-block">
@@ -45,11 +52,13 @@ function CopyBlock({ title, body, lang }: { title: string; body: string; lang?: 
       <pre className="terminal mono" data-lang={lang}>
         {body}
       </pre>
+      {note && <p className="cn-help">{note}</p>}
     </div>
   );
 }
 
 function Status() {
+  const { tools } = useHub();
   const mcp = useLive((s) => s.mcp);
   const check = useLive((s) => s.checkMcp);
   const [url, setUrl] = useState(DEFAULT_MCP_URL);
@@ -84,7 +93,7 @@ function Status() {
         </div>
         <div>
           <dt>Tools</dt>
-          <dd className="num">{MCP_TOOLS.filter((t) => !t.proposed).length} live</dd>
+          <dd className="num">{tools.length} live</dd>
         </div>
       </dl>
       <button className="btn primary" onClick={() => void check()} disabled={mcp.state === 'checking'}>
@@ -96,9 +105,11 @@ function Status() {
 
 function Setup() {
   const ws = useWs();
+  const { hub } = useHub();
   const members = ws.members;
-  // Laptops on other machines connect to the workspace hub; on this machine, localhost.
-  const mcpUrl = ws.hub ? `${ws.hub.replace(/\/+$/, '')}/mcp` : DEFAULT_MCP_URL;
+  // Laptops on other machines connect to the hub's public address (QUORUM_PUBLIC_URL), then the workspace label, then localhost.
+  const base = hub?.public_url || ws.hub;
+  const mcpUrl = base && /^https?:\/\//.test(base) ? `${base.replace(/\/+$/, '')}/mcp` : DEFAULT_MCP_URL;
   const [client, setClient] = useState<ClientId>('claude-code');
   const [transport, setTransport] = useState<'http' | 'stdio'>('http');
   const [memberId, setMemberId] = useState(members[0]?.id ?? '');
@@ -106,7 +117,8 @@ function Setup() {
   const info = CLIENTS.find((c) => c.id === client)!;
   const tr = info.transport === 'http' ? 'http' : info.transport === 'stdio' ? 'stdio' : transport;
   const member = members.find((m) => m.id === memberId) ?? members[0];
-  const snip = setupSnippet({ client, transport: tr, url: mcpUrl, repoPath: repo });
+  const hidden = tokenHidden(client, tr);
+  const snip = setupSnippet({ client, transport: tr, url: mcpUrl, repoPath: repo, token: member?.token });
   return (
     <section className="card wide" aria-label="Connect your AI">
       <header className="card-h">
@@ -132,22 +144,27 @@ function Setup() {
               <div className="seg" role="group" aria-label="Transport">
                 {(['http', 'stdio'] as const).map((t) => (
                   <button key={t} className={`seg-btn${transport === t ? ' on' : ''}`} aria-pressed={transport === t} onClick={() => setTransport(t)}>
-                    {t === 'http' ? 'HTTP (shared server)' : 'stdio (this laptop)'}
+                    {t === 'http' ? 'HTTP (direct to the hub)' : 'stdio bridge (for apps that launch a command)'}
                   </button>
                 ))}
               </div>
             )}
             {tr === 'stdio' && (
               <label className="field inline">
-                <span>Path to the repo</span>
+                <span>Path to the iFone repo (for mcp/bridge.py)</span>
                 <input value={repo} onChange={(e) => setRepo(e.target.value)} spellCheck={false} />
               </label>
             )}
           </div>
-          <CopyBlock title={snip.file} body={snip.body} lang={snip.lang} />
+          <CopyBlock title={snip.file} body={snip.body} lang={snip.lang} note={snip.note} />
         </li>
         <li>
-          <b>3. Give the agent its rules and token.</b> <span className="muted">The tools take your token as an argument, so tell the agent which one. Real tokens are shown once, when a member is added; use that one in place of &lt;YOUR_TOKEN&gt;.</span>
+          <b>3. Give the agent its rules.</b>{' '}
+          <span className="muted">
+            {hidden
+              ? 'Your token travels in the connection (an Authorization header or an environment variable), so the model never sees it. Real tokens are shown once, when a member is added; use that one in place of <YOUR_TOKEN>.'
+              : 'This client cannot send a header, so the token is passed as a tool argument and the model can see it. Keep this hub private.'}
+          </span>
           <label className="field inline">
             <span>Member</span>
             <select value={member?.id ?? ''} onChange={(e) => setMemberId(e.target.value)}>
@@ -158,7 +175,7 @@ function Setup() {
               ))}
             </select>
           </label>
-          {member ? <CopyBlock title="Paste into the agent's rules (CLAUDE.md, .cursorrules, system prompt)" body={agentRules(member.token ?? '<YOUR_TOKEN>', member.role)} /> : <p className="muted">Add a member on the Team page first.</p>}
+          {member ? <CopyBlock title="Paste into the agent's rules (CLAUDE.md, .cursorrules, system prompt)" body={agentRules(member.token ?? '<YOUR_TOKEN>', member.role, hidden)} /> : <p className="muted">Add a member on the Team page first.</p>}
         </li>
       </ol>
     </section>
@@ -166,14 +183,20 @@ function Setup() {
 }
 
 function Tools() {
+  const { tools: MCP_TOOLS, hub, fromBackend } = useHub();
   return (
     <section className="card wide" aria-label="MCP tools">
       <header className="card-h">
         <h2>Tools your agent gets</h2>
         <span className="card-sub">
-          {MCP_TOOLS.length} tools, {MCP_TOOLS.filter((t) => !t.writes).length} of them read-only
+          {MCP_TOOLS.length} tools, {MCP_TOOLS.filter((t) => !t.writes).length} of them read-only{fromBackend ? ' · read from the hub' : ''}
         </span>
       </header>
+      {hub && (
+        <p className="cn-help" role="note">
+          This hub {hub.header_required ? 'requires' : 'accepts'} an Authorization header on /mcp, limits each token to {hub.rate_limit_per_min.tools} tool calls a minute, and ranks context with {hub.embedding_provider === 'local' ? 'keywords plus built-in local vectors (no model, no network)' : `keywords plus ${hub.embedding_provider} embeddings`}.
+        </p>
+      )}
       <div className="cn-table-wrap">
         <table className="cn-table">
           <thead>
@@ -374,6 +397,7 @@ const toRow = (c: McpCall): Activity => ({
 /** Live mode: every MCP call the backend recorded, plus per-member tool-call transcripts. Nothing is simulated. */
 function LiveFeed() {
   const ws = useWs();
+  const { tools: MCP_TOOLS } = useHub();
   const conn = useStore((st) => st.conn);
   const [tab, setTab] = useState<'feed' | 'chats'>('feed');
   const [who, setWho] = useState('all');

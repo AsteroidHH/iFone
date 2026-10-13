@@ -41,3 +41,31 @@ How to read it:
 - Savings grow with the size of the memory and the length of the session. A five-question session on a 160-fact memory is a small case.
 
 Reproduce: `cd frontend && node scripts/token_bench.mjs http://127.0.0.1:8000 2 long` (costs a few dollars of Claude usage; use `short` for the other memory).
+
+## Does the right fact come back?
+
+Saving tokens is worthless if the right fact is missing. Ranking is keyword coverage (weighted by rarity) **plus vector similarity** (see [`MCP.md`](MCP.md#ranking-keywords-plus-vectors)). Two benchmarks check it.
+
+**Offline, 190 questions** (`python bench/retrieval_bench.py`, results in `bench/retrieval_bench.json`). A synthetic memory of 14 topics × 24 countries = 336 facts, each unique through its country. Percent of questions where the right fact is the top result (top 3 in brackets):
+
+| How the question is worded | Keywords only | Keywords + vectors |
+| --- | --- | --- |
+| Same words as the fact | 100% (100%) | 100% (100%) |
+| Different words the built-in vocabulary knows ("money back") | 38% (52%) | **87% (100%)** |
+| Different words it does not know ("cash back") | 25% (38%) | 35% (40%) |
+| Off-topic questions that correctly return nothing | 9 of 10 | 9 of 10 |
+
+The miss on the off-topic row is a real shared word ("office"), not a guess. The paraphrases were written together with the vocabulary, so the middle row is optimistic, and the third row is the honest limit of the built-in vectors. A neural embedding endpoint is the way past it.
+
+**Real AIs, same memory** (`python bench/ai_retrieval_bench.py`, results in `bench/ai_retrieval_bench.json`). Two Claude models (Sonnet and Haiku, through the `claude` CLI) each answered 22 questions from the 336-fact memory using only Quorum's MCP tools, on two hubs: one ranking with keywords only, one with keywords plus vectors. A correct answer has the exact number from the fact; an off-topic question must come back `NOT FOUND`.
+
+| Model | Ranking | Different words, known (12) | Different words, unknown (6) | Off-topic (4) | Total (22) |
+| --- | --- | --- | --- | --- | --- |
+| Sonnet | keywords only | 7 | 0 | 4 | 11 |
+| Sonnet | keywords + vectors | **12** | **3** | 4 | **19** |
+| Haiku | keywords only | 5 | 0 | 4 | 9 |
+| Haiku | keywords + vectors | **12** | **3** | 4 | **19** |
+
+Read it as direction, not precision: 22 questions, one run per model per hub. It is the same two-model result as the offline one: vectors rescue paraphrases the vocabulary knows, help some of the ones it does not (the model also rephrases its own query), and never invent an answer to an off-topic question. The first attempt at this benchmark was invalid for a good reason: the hub's new rate limit throttled the bulk seeding and only half the facts were stored. The script now retries when throttled and refuses to run unless every fact is stored.
+
+Cost and turns were the same in both arms (3 turns, about the same input tokens, $0.70 for Haiku and $3.38 for Sonnet per 22-question arm); ranking does not change the token bill, it changes whether the answer is found.

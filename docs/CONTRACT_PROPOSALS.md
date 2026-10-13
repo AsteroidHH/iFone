@@ -4,9 +4,9 @@ Everything the Context, Connect and Team pages need from the backend now exists 
 
 ## Implemented
 
-### MCP tools (14)
+### MCP tools (15)
 
-The original ten, plus `get_map`, `get_node`, `find_path` and `delta`. `retrieve_context` gained `format` (`"full"` default, or `"compact"`) and `budget_tokens`. `remember_fact` gained `scope` (`"commons"` default, or `"team"`). Every response carries `tokens` and `tokens_baseline`. Method and measurements: [`TOKEN_SAVING.md`](TOKEN_SAVING.md).
+The original ten, plus `get_map`, `get_node`, `find_path`, `delta` and `observe` (passive fact capture). `retrieve_context` gained `format` (`"full"` default, or `"compact"`) and `budget_tokens`. `remember_fact` gained `scope` (`"commons"` default, or `"team"`). Every response carries `tokens` and `tokens_baseline`. Method and measurements: [`TOKEN_SAVING.md`](TOKEN_SAVING.md).
 
 ### Workspace service (server side, persisted in FalkorDB with the tenant graph)
 
@@ -41,9 +41,21 @@ GET /api/health                           FalkorDB status and setup steps (no to
 
 Presence is derived from calls: online within two minutes of a call, idle within fifteen, otherwise offline. New events on the stream: `mcp_call` (`data.call`) and `workspace_changed`.
 
+### Added later
+
+```
+GET  /api/mcp/catalog                      the tools the hub serves (read from the code), header/limit/embedding settings, public URL
+POST /api/observe                          { text, source?, dry_run?, scope? } -> facts extracted from a transcript or tool output
+GET  /api/audit?limit=&since=&agent=&severity=&format=json|csv     the call log as plain sentences, with a CSV export
+GET  /api/context/semantic-check?query=    FalkorDB's own vector index vs the API's ranking
+```
+
+`/mcp` accepts `Authorization: Bearer <token>` (or `X-Quorum-Token`); with it every tool's `token` argument is optional. 401 for a bad header token, 429 + `Retry-After` for HTTP limits, `{"rate_limited": true}` for tool limits. Agent read-state, node vectors and the call log (5,000 calls) are persisted in FalkorDB. Details: [`MCP.md`](MCP.md).
+
 ## Still open
 
-- **Chats.** Quorum sees an agent's tool calls, not the conversation around them. The Sessions tab shows exactly that and says so. A real transcript would need the AI client to send it.
-- **Agent state for `delta`** (what each agent has already read) is held in the API process and is lost on restart; the next `delta` after a restart says nothing has been read.
+- **Chats.** Quorum sees tool calls and, with the capture hook, what an agent wrote; not the conversation. The Sessions tab shows the calls and says so.
 - **Several API processes** against one FalkorDB are not supported: guards run in the process under locks.
-- **Hub.** The workspace `hub` field is a label the console shows. Nothing relays between hubs yet; laptops connect to the one backend.
+- **Hub.** There is one hub per FalkorDB, with HTTPS from `docker compose --profile tls`. Nothing relays between hubs, and the workspace `hub` field is a label.
+- **Neural embeddings** are wired and tested against a stub endpoint, not yet run against a real embedding model.
+- **Console actions** (a person quarantining in the UI) are not in the audit log; MCP tool calls are.

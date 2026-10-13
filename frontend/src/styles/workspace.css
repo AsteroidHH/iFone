@@ -5,7 +5,8 @@
 
 .ctx,
 .cn,
-.tm {
+.tm,
+.au {
   --jack: var(--text);
 }
 
@@ -271,3 +272,28 @@
 .measured-t td b { font-size: 15px; }
 .lp .measured { margin-top: 26px; padding: 18px 20px; border: 2px solid var(--lp-ink, #0b1218); border-radius: 18px; background: #fff; box-shadow: 6px 6px 0 #3ddbb0; }
 .lp .measured-f, .lp .measured-t small { color: var(--lp-ink2, #44505c); }
+
+/* ---------- activity (the plain-language log) ---------- */
+.au-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 0; }
+.au-tiles > div { border: 1.5px solid var(--text); border-radius: 12px; padding: 12px 14px; background: #fff; }
+.au-tiles dt { font-size: var(--t12); margin: 0 0 4px; }
+.au-tiles dd { margin: 0; font: 600 34px/1 'Silkscreen', var(--f-mono, monospace); letter-spacing: -0.01em; }
+.au-tiles .au-attn { background: #fff3d6; box-shadow: 3px 3px 0 var(--text); }
+@media (max-width: 760px) { .au-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.au-day h3 { margin: 18px 0 6px; font: 600 11.5px var(--f-mono, monospace); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); }
+.au-list { list-style: none; margin: 0; padding: 0; }
+.au-row { display: grid; grid-template-columns: 76px 26px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 9px 4px; border-top: 1px solid var(--line); }
+.au-row p { margin: 0; font-size: var(--t14, 14px); line-height: 1.4; overflow-wrap: anywhere; }
+.au-row small { display: block; font-size: 12px; }
+.au-row time { font-size: 12px; white-space: nowrap; }
+.au-ico { width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid var(--text); display: inline-grid; place-items: center; background: #fff; }
+.au-ico.write { background: var(--mint); }
+.au-ico.alert { background: #fff3d6; }
+.au-ico.failed { background: #ffd9d6; }
+.au-row.failed p b { color: var(--bad); }
+.au-tok { white-space: nowrap; font-size: 12px; text-align: right; }
+@media (max-width: 640px) {
+  .au-row { grid-template-columns: 26px minmax(0, 1fr); }
+  .au-row time { grid-column: 2; order: 3; }
+  .au-tok { grid-column: 2; text-align: left; }
+}

@@ -4,6 +4,7 @@ import { getContextPreview, getTokenStats } from '../workspace/server';
 import { API_MODE } from '../api/client';
 import { Icon } from '../components/Icon';
 import { Measured } from '../components/Measured';
+import { RetrievalQuality } from '../components/RetrievalQuality';
 import { MindMap } from '../components/MindMap';
 import { useCountUp } from '../components/ui';
 import { buildMap, pack, savings } from '../context/packer';
@@ -173,6 +174,10 @@ export function Context() {
 
       <section className="card wide" aria-label="Measured with a real AI">
         <Measured />
+      </section>
+
+      <section className="card wide" aria-label="Retrieval quality">
+        <RetrievalQuality />
       </section>
 
       <section className="card wide" aria-label="Where the savings come from">

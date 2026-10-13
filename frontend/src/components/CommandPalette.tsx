@@ -69,6 +69,7 @@ function PaletteBody() {
       { id: 'v-context', group: 'go', label: 'Context and token savings', hint: '6', icon: 'sparkle', run: view('context') },
       { id: 'v-connect', group: 'go', label: 'Connect an AI (MCP)', hint: '7', icon: 'link', run: view('connect') },
       { id: 'v-team', group: 'go', label: 'Team and workspace', hint: '8', icon: 'user', run: view('team') },
+      { id: 'v-activity', group: 'go', label: 'Activity log (what agents did)', hint: '9', icon: 'list', run: view('activity') },
       { id: 't-mind', group: 'go', label: 'Mind map', icon: 'map', run: view('console', 'mindmap') },
       { id: 't-diff', group: 'go', label: 'Prompt diff', icon: 'doc', run: view('console', 'diff') },
       { id: 't-ledger', group: 'go', label: 'Actions and handoffs', icon: 'bolt', run: view('console', 'ledger') },

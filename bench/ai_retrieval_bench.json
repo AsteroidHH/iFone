@@ -1,0 +1,1064 @@
+{
+  "facts": 336,
+  "questions": 22,
+  "models": [
+    "sonnet",
+    "haiku"
+  ],
+  "summary": {
+    "hybrid/sonnet": {
+      "by_kind": {
+        "para_known": {
+          "questions": 12,
+          "correct": 12
+        },
+        "para_unknown": {
+          "questions": 6,
+          "correct": 3
+        },
+        "none": {
+          "questions": 4,
+          "correct": 4
+        }
+      },
+      "correct": 19,
+      "questions": 22,
+      "median_turns": 3.0,
+      "median_input_tokens": 155481,
+      "cost_usd_total": 3.383
+    },
+    "hybrid/haiku": {
+      "by_kind": {
+        "para_known": {
+          "questions": 12,
+          "correct": 12
+        },
+        "para_unknown": {
+          "questions": 6,
+          "correct": 3
+        },
+        "none": {
+          "questions": 4,
+          "correct": 4
+        }
+      },
+      "correct": 19,
+      "questions": 22,
+      "median_turns": 3.0,
+      "median_input_tokens": 105213,
+      "cost_usd_total": 0.704
+    },
+    "keyword/sonnet": {
+      "by_kind": {
+        "para_known": {
+          "questions": 12,
+          "correct": 7
+        },
+        "para_unknown": {
+          "questions": 6,
+          "correct": 0
+        },
+        "none": {
+          "questions": 4,
+          "correct": 4
+        }
+      },
+      "correct": 11,
+      "questions": 22,
+      "median_turns": 3.0,
+      "median_input_tokens": 155528,
+      "cost_usd_total": 3.38
+    },
+    "keyword/haiku": {
+      "by_kind": {
+        "para_known": {
+          "questions": 12,
+          "correct": 5
+        },
+        "para_unknown": {
+          "questions": 6,
+          "correct": 0
+        },
+        "none": {
+          "questions": 4,
+          "correct": 4
+        }
+      },
+      "correct": 9,
+      "questions": 22,
+      "median_turns": 3.0,
+      "median_input_tokens": 105285,
+      "cost_usd_total": 0.711
+    }
+  },
+  "rows": [
+    {
+      "answer": "Shoppers in Greece have 21 days from delivery to request a refund.",
+      "turns": 3,
+      "input_tokens": 155575,
+      "cost": 0.1547244,
+      "arm": "keyword",
+      "model": "sonnet",
+      "kind": "para_known",
+      "question": "How long do shoppers in Greece have to get their money back?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 105329,
+      "cost": 0.0325893,
+      "arm": "hybrid",
+      "model": "haiku",
+      "kind": "none",
+      "question": "What is the airspeed velocity of an unladen swallow?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 155281,
+      "cost": 0.1526826,
+      "arm": "keyword",
+      "model": "sonnet",
+      "kind": "none",
+      "question": "What is the airspeed velocity of an unladen swallow?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 155175,
+      "cost": 0.15166229999999997,
+      "arm": "hybrid",
+      "model": "sonnet",
+      "kind": "none",
+      "question": "How do I bake sourdough bread?",
+      "correct": true
+    },
+    {
+      "answer": "Standard shipping to Finland takes 62 business days.",
+      "turns": 3,
+      "input_tokens": 105292,
+      "cost": 0.0319736,
+      "arm": "hybrid",
+      "model": "haiku",
+      "kind": "para_known",
+      "question": "How long does delivery to Finland usually take?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND.",
+      "turns": 3,
+      "input_tokens": 155522,
+      "cost": 0.1537317,
+      "arm": "keyword",
+      "model": "sonnet",
+      "kind": "para_unknown",
+      "question": "What is the shelf life of saved images of the Iceland tables?",
+      "correct": false
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 155289,
+      "cost": 0.15261570000000002,
+      "arm": "hybrid",
+      "model": "sonnet",
+      "kind": "none",
+      "question": "What is the airspeed velocity of an unladen swallow?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND.",
+      "turns": 3,
+      "input_tokens": 155559,
+      "cost": 0.1541385,
+      "arm": "hybrid",
+      "model": "sonnet",
+      "kind": "para_unknown",
+      "question": "Up to when may people in Ghana ask for cash back on a purchase?",
+      "correct": false
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 155537,
+      "cost": 0.1536933,
+      "arm": "keyword",
+      "model": "sonnet",
+      "kind": "para_unknown",
+      "question": "Up to when may people in Ghana ask for cash back on a purchase?",
+      "correct": false
+    },
+    {
+      "answer": "New hires in Vietnam complete onboarding in 31 days.",
+      "turns": 3,
+      "input_tokens": 155496,
+      "cost": 0.1539933,
+      "arm": "hybrid",
+      "model": "sonnet",
+      "kind": "para_known",
+      "question": "How long does it take to induct recruits in Vietnam?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND.",
+      "turns": 3,
+      "input_tokens": 155623,
+      "cost": 0.15468479999999998,
+      "arm": "hybrid",
+      "model": "sonnet",
+      "kind": "para_unknown",
+      "question": "What is the shelf life of saved images of the Uruguay tables?",
+      "correct": false
+    },
+    {
+      "answer": "NOT FOUND.",
+      "turns": 3,
+      "input_tokens": 155496,
+      "cost": 0.1535499,
+      "arm": "keyword",
+      "model": "sonnet",
+      "kind": "para_known",
+      "question": "How long does it take to induct recruits in Canada?",
+      "correct": false
+    },
+    {
+      "answer": "A severe outage in Argentina must be escalated to the on-call manager within 56 minutes.",
+      "turns": 3,
+      "input_tokens": 105502,
+      "cost": 0.032637900000000004,
+      "arm": "hybrid",
+      "model": "haiku",
+      "kind": "para_known",
+      "question": "How quickly should a critical incident in Argentina be handed off to the manager?",
+      "correct": true
+    },
+    {
+      "answer": "Orders shipped to Croatia include a 27 percent VAT (F294).",
+      "turns": 3,
+      "input_tokens": 155557,
+      "cost": 0.1544121,
+      "arm": "hybrid",
+      "model": "sonnet",
+      "kind": "para_known",
+      "question": "What tax rate is added to purchases sent to Croatia?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 155204,
+      "cost": 0.1518165,
+      "arm": "keyword",
+      "model": "sonnet",
+      "kind": "none",
+      "question": "What is the weather forecast for Mars colony Alpha?",
+      "correct": true
+    },
+    {
+      "answer": "The lawful-conformity inspection in Uruguay takes place every 54 months.",
+      "turns": 3,
+      "input_tokens": 105167,
+      "cost": 0.031562200000000006,
+      "arm": "hybrid",
+      "model": "haiku",
+      "kind": "para_unknown",
+      "question": "At what interval does the lawful-conformity inspection take place in Uruguay?",
+      "correct": true
+    },
+    {
+      "answer": "Devices sold in Thailand carry a guarantee of 63 months.",
+      "turns": 3,
+      "input_tokens": 155467,
+      "cost": 0.15359609999999999,
+      "arm": "hybrid",
+      "model": "sonnet",
+      "kind": "para_known",
+      "question": "How long is the guarantee on devices sold in Thailand?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 105224,
+      "cost": 0.0318662,
+      "arm": "keyword",
+      "model": "haiku",
+      "kind": "para_known",
+      "question": "What rebate applies to yearly subscriptions bought in Japan?",
+      "correct": false
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 155586,
+      "cost": 0.15413069999999998,
+      "arm": "keyword",
+      "model": "sonnet",
+      "kind": "para_unknown",
+      "question": "From which day does walking away from a deal in Argentina become costly?",
+      "correct": false
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 155620,
+      "cost": 0.15459749999999997,
+      "arm": "keyword",
+      "model": "sonnet",
+      "kind": "para_unknown",
+      "question": "At what interval does the lawful-conformity inspection take place in Uruguay?",
+      "correct": false
+    },
+    {
+      "answer": "New hires in Canada complete onboarding in 52 days.",
+      "turns": 3,
+      "input_tokens": 155415,
+      "cost": 0.1532403,
+      "arm": "hybrid",
+      "model": "sonnet",
+      "kind": "para_known",
+      "question": "How long does it take to induct recruits in Canada?",
+      "correct": true
+    },
+    {
+      "answer": "Walking away from a deal in Argentina becomes costly after 33 days.",
+      "turns": 3,
+      "input_tokens": 105206,
+      "cost": 0.0316673,
+      "arm": "hybrid",
+      "model": "haiku",
+      "kind": "para_unknown",
+      "question": "From which day does walking away from a deal in Argentina become costly?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 155580,
+      "cost": 0.1543374,
+      "arm": "keyword",
+      "model": "sonnet",
+      "kind": "para_known",
+      "question": "How fast does the helpdesk respond to requests from Peru?",
+      "correct": false
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 105073,
+      "cost": 0.03165,
+      "arm": "hybrid",
+      "model": "haiku",
+      "kind": "none",
+      "question": "Who won the 1998 football world cup?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 105285,
+      "cost": 0.0319988,
+      "arm": "keyword",
+      "model": "haiku",
+      "kind": "para_known",
+      "question": "What rebate applies to yearly subscriptions bought in Austria?",
+      "correct": false
+    },
+    {
+      "answer": "Shoppers in Greece can request a refund within 21 days of delivery.",
+      "turns": 3,
+      "input_tokens": 155660,
+      "cost": 0.15507569999999998,
+      "arm": "hybrid",
+      "model": "sonnet",
+      "kind": "para_known",
+      "question": "How long do shoppers in Greece have to get their money back?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND.",
+      "turns": 3,
+      "input_tokens": 155312,
+      "cost": 0.152901,
+      "arm": "hybrid",
+      "model": "sonnet",
+      "kind": "none",
+      "question": "What is the weather forecast for Mars colony Alpha?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 155603,
+      "cost": 0.154614,
+      "arm": "hybrid",
+      "model": "sonnet",
+      "kind": "para_unknown",
+      "question": "What is the shelf life of saved images of the Iceland tables?",
+      "correct": false
+    },
+    {
+      "answer": "Vendor payments in Kenya are settled within 12 days.",
+      "turns": 3,
+      "input_tokens": 105140,
+      "cost": 0.0315843,
+      "arm": "hybrid",
+      "model": "haiku",
+      "kind": "para_known",
+      "question": "How soon do we pay suppliers in Kenya?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND.",
+      "turns": 3,
+      "input_tokens": 105208,
+      "cost": 0.031998900000000004,
+      "arm": "keyword",
+      "model": "haiku",
+      "kind": "para_unknown",
+      "question": "At what interval does the lawful-conformity inspection take place in Uruguay?",
+      "correct": false
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 105189,
+      "cost": 0.032053000000000005,
+      "arm": "hybrid",
+      "model": "haiku",
+      "kind": "para_unknown",
+      "question": "What is the shelf life of saved images of the Iceland tables?",
+      "correct": false
+    },
+    {
+      "answer": "Orders shipped to Croatia include a 27 percent VAT (F294).",
+      "turns": 3,
+      "input_tokens": 155531,
+      "cost": 0.1540329,
+      "arm": "keyword",
+      "model": "sonnet",
+      "kind": "para_known",
+      "question": "What tax rate is added to purchases sent to Croatia?",
+      "correct": true
+    },
+    {
+      "answer": "A severe outage in Argentina must be escalated to the on-call manager within 56 minutes.",
+      "turns": 3,
+      "input_tokens": 155559,
+      "cost": 0.1542267,
+      "arm": "keyword",
+      "model": "sonnet",
+      "kind": "para_known",
+      "question": "How quickly should a critical incident in Argentina be handed off to the manager?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 105211,
+      "cost": 0.032044,
+      "arm": "keyword",
+      "model": "haiku",
+      "kind": "none",
+      "question": "What is the weather forecast for Mars colony Alpha?",
+      "correct": true
+    },
+    {
+      "answer": "The lawful-conformity (compliance audit) inspection in Uruguay takes place every 54 months.",
+      "turns": 3,
+      "input_tokens": 155526,
+      "cost": 0.1544814,
+      "arm": "hybrid",
+      "model": "sonnet",
+      "kind": "para_unknown",
+      "question": "At what interval does the lawful-conformity inspection take place in Uruguay?",
+      "correct": true
+    },
+    {
+      "answer": "Orders shipped to Croatia include 27 percent VAT.",
+      "turns": 3,
+      "input_tokens": 105121,
+      "cost": 0.0313156,
+      "arm": "hybrid",
+      "model": "haiku",
+      "kind": "para_known",
+      "question": "What tax rate is added to purchases sent to Croatia?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 105488,
+      "cost": 0.0331027,
+      "arm": "hybrid",
+      "model": "haiku",
+      "kind": "none",
+      "question": "What is the weather forecast for Mars colony Alpha?",
+      "correct": true
+    },
+    {
+      "answer": "Standard shipping to Finland takes 62 business days.",
+      "turns": 3,
+      "input_tokens": 155491,
+      "cost": 0.1536135,
+      "arm": "keyword",
+      "model": "sonnet",
+      "kind": "para_known",
+      "question": "How long does delivery to Finland usually take?",
+      "correct": true
+    },
+    {
+      "answer": "Orders shipped to Nigeria include 32 percent VAT.",
+      "turns": 3,
+      "input_tokens": 155465,
+      "cost": 0.1536069,
+      "arm": "hybrid",
+      "model": "sonnet",
+      "kind": "para_known",
+      "question": "What tax rate is added to purchases sent to Nigeria?",
+      "correct": true
+    },
+    {
+      "answer": "Annual plans bought in Austria get a 39 percent discount.",
+      "turns": 3,
+      "input_tokens": 105333,
+      "cost": 0.032231,
+      "arm": "hybrid",
+      "model": "haiku",
+      "kind": "para_known",
+      "question": "What rebate applies to yearly subscriptions bought in Austria?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 105262,
+      "cost": 0.0324475,
+      "arm": "keyword",
+      "model": "haiku",
+      "kind": "para_unknown",
+      "question": "What is the shelf life of saved images of the Iceland tables?",
+      "correct": false
+    },
+    {
+      "answer": "Orders shipped to Nigeria include 32 percent VAT.",
+      "turns": 3,
+      "input_tokens": 105164,
+      "cost": 0.031578300000000004,
+      "arm": "hybrid",
+      "model": "haiku",
+      "kind": "para_known",
+      "question": "What tax rate is added to purchases sent to Nigeria?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 105266,
+      "cost": 0.0320232,
+      "arm": "hybrid",
+      "model": "haiku",
+      "kind": "para_unknown",
+      "question": "Up to when may people in Ghana ask for cash back on a purchase?",
+      "correct": false
+    },
+    {
+      "answer": "New hires in Vietnam complete onboarding in 31 days.",
+      "turns": 3,
+      "input_tokens": 105369,
+      "cost": 0.0323847,
+      "arm": "hybrid",
+      "model": "haiku",
+      "kind": "para_known",
+      "question": "How long does it take to induct recruits in Vietnam?",
+      "correct": true
+    },
+    {
+      "answer": "Hardware sold in Thailand carries a warranty of 63 months.",
+      "turns": 3,
+      "input_tokens": 105197,
+      "cost": 0.0315699,
+      "arm": "hybrid",
+      "model": "haiku",
+      "kind": "para_known",
+      "question": "How long is the guarantee on devices sold in Thailand?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND.",
+      "turns": 3,
+      "input_tokens": 155528,
+      "cost": 0.1536579,
+      "arm": "keyword",
+      "model": "sonnet",
+      "kind": "para_known",
+      "question": "What rebate applies to yearly subscriptions bought in Austria?",
+      "correct": false
+    },
+    {
+      "answer": "Devices sold in Thailand have a 26-day guarantee period for refunds after delivery.",
+      "turns": 3,
+      "input_tokens": 105313,
+      "cost": 0.0331789,
+      "arm": "keyword",
+      "model": "haiku",
+      "kind": "para_known",
+      "question": "How long is the guarantee on devices sold in Thailand?",
+      "correct": false
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 155526,
+      "cost": 0.1536273,
+      "arm": "keyword",
+      "model": "sonnet",
+      "kind": "para_known",
+      "question": "What rebate applies to yearly subscriptions bought in Japan?",
+      "correct": false
+    },
+    {
+      "answer": "The lawful-conformity inspection in Brazil takes place every 81 months.",
+      "turns": 3,
+      "input_tokens": 105141,
+      "cost": 0.0315185,
+      "arm": "hybrid",
+      "model": "haiku",
+      "kind": "para_unknown",
+      "question": "At what interval does the lawful-conformity inspection take place in Brazil?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 105024,
+      "cost": 0.0312993,
+      "arm": "keyword",
+      "model": "haiku",
+      "kind": "none",
+      "question": "What is the airspeed velocity of an unladen swallow?",
+      "correct": true
+    },
+    {
+      "answer": "Walking away from the Argentina deal becomes costly after day 33.",
+      "turns": 3,
+      "input_tokens": 155509,
+      "cost": 0.1538595,
+      "arm": "hybrid",
+      "model": "sonnet",
+      "kind": "para_unknown",
+      "question": "From which day does walking away from a deal in Argentina become costly?",
+      "correct": true
+    },
+    {
+      "answer": "Standard shipping to Finland takes 62 business days.",
+      "turns": 3,
+      "input_tokens": 105365,
+      "cost": 0.0322849,
+      "arm": "keyword",
+      "model": "haiku",
+      "kind": "para_known",
+      "question": "How long does delivery to Finland usually take?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 155583,
+      "cost": 0.1542852,
+      "arm": "keyword",
+      "model": "sonnet",
+      "kind": "para_unknown",
+      "question": "What is the shelf life of saved images of the Uruguay tables?",
+      "correct": false
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 155199,
+      "cost": 0.15171510000000002,
+      "arm": "keyword",
+      "model": "sonnet",
+      "kind": "none",
+      "question": "How do I bake sourdough bread?",
+      "correct": true
+    },
+    {
+      "answer": "Annual plans bought in Japan get an 86 percent discount.",
+      "turns": 3,
+      "input_tokens": 155457,
+      "cost": 0.15345750000000002,
+      "arm": "hybrid",
+      "model": "sonnet",
+      "kind": "para_known",
+      "question": "What rebate applies to yearly subscriptions bought in Japan?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 105221,
+      "cost": 0.031840900000000005,
+      "arm": "hybrid",
+      "model": "haiku",
+      "kind": "para_unknown",
+      "question": "What is the shelf life of saved images of the Uruguay tables?",
+      "correct": false
+    },
+    {
+      "answer": "Suppliers in Kenya are paid within 12 days.",
+      "turns": 3,
+      "input_tokens": 155506,
+      "cost": 0.1537635,
+      "arm": "keyword",
+      "model": "sonnet",
+      "kind": "para_known",
+      "question": "How soon do we pay suppliers in Kenya?",
+      "correct": true
+    },
+    {
+      "answer": "Standard shipping to Finland takes 62 business days.",
+      "turns": 3,
+      "input_tokens": 155516,
+      "cost": 0.1541196,
+      "arm": "hybrid",
+      "model": "sonnet",
+      "kind": "para_known",
+      "question": "How long does delivery to Finland usually take?",
+      "correct": true
+    },
+    {
+      "answer": "Vendor payments in Kenya are settled within 12 days.",
+      "turns": 3,
+      "input_tokens": 155428,
+      "cost": 0.1532763,
+      "arm": "hybrid",
+      "model": "sonnet",
+      "kind": "para_known",
+      "question": "How soon do we pay suppliers in Kenya?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 155194,
+      "cost": 0.1516815,
+      "arm": "keyword",
+      "model": "sonnet",
+      "kind": "none",
+      "question": "Who won the 1998 football world cup?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 104994,
+      "cost": 0.0314539,
+      "arm": "hybrid",
+      "model": "haiku",
+      "kind": "none",
+      "question": "How do I bake sourdough bread?",
+      "correct": true
+    },
+    {
+      "answer": "A severe outage in Argentina must be escalated to the on-call manager within 56 minutes.",
+      "turns": 3,
+      "input_tokens": 155785,
+      "cost": 0.15593759999999998,
+      "arm": "hybrid",
+      "model": "sonnet",
+      "kind": "para_known",
+      "question": "How quickly should a critical incident in Argentina be handed off to the manager?",
+      "correct": true
+    },
+    {
+      "answer": "From day 16, walking away from a deal in Argentina becomes costly (customers can request a refund only within 15 days of delivery).",
+      "turns": 3,
+      "input_tokens": 105291,
+      "cost": 0.0334936,
+      "arm": "keyword",
+      "model": "haiku",
+      "kind": "para_unknown",
+      "question": "From which day does walking away from a deal in Argentina become costly?",
+      "correct": false
+    },
+    {
+      "answer": "Devices sold in Thailand carry a 63-month guarantee.",
+      "turns": 3,
+      "input_tokens": 155526,
+      "cost": 0.1543569,
+      "arm": "keyword",
+      "model": "sonnet",
+      "kind": "para_known",
+      "question": "How long is the guarantee on devices sold in Thailand?",
+      "correct": true
+    },
+    {
+      "answer": "A severe outage in Argentina must be escalated to the on-call manager within 56 minutes.",
+      "turns": 3,
+      "input_tokens": 105243,
+      "cost": 0.0319101,
+      "arm": "keyword",
+      "model": "haiku",
+      "kind": "para_known",
+      "question": "How quickly should a critical incident in Argentina be handed off to the manager?",
+      "correct": true
+    },
+    {
+      "answer": "Orders shipped to Nigeria include a 32 percent VAT tax rate.",
+      "turns": 3,
+      "input_tokens": 105324,
+      "cost": 0.0321376,
+      "arm": "keyword",
+      "model": "haiku",
+      "kind": "para_known",
+      "question": "What tax rate is added to purchases sent to Nigeria?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 155269,
+      "cost": 0.15246990000000002,
+      "arm": "hybrid",
+      "model": "sonnet",
+      "kind": "none",
+      "question": "Who won the 1998 football world cup?",
+      "correct": true
+    },
+    {
+      "answer": "Orders shipped to Nigeria include a 32 percent VAT (F305).",
+      "turns": 3,
+      "input_tokens": 155542,
+      "cost": 0.15412889999999999,
+      "arm": "keyword",
+      "model": "sonnet",
+      "kind": "para_known",
+      "question": "What tax rate is added to purchases sent to Nigeria?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 105307,
+      "cost": 0.0323745,
+      "arm": "keyword",
+      "model": "haiku",
+      "kind": "para_known",
+      "question": "How long does it take to induct recruits in Canada?",
+      "correct": false
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 105076,
+      "cost": 0.0315484,
+      "arm": "keyword",
+      "model": "haiku",
+      "kind": "none",
+      "question": "Who won the 1998 football world cup?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 105118,
+      "cost": 0.031748,
+      "arm": "keyword",
+      "model": "haiku",
+      "kind": "none",
+      "question": "How do I bake sourdough bread?",
+      "correct": true
+    },
+    {
+      "answer": "Annual plans bought in Japan get an 86 percent discount.",
+      "turns": 3,
+      "input_tokens": 105408,
+      "cost": 0.032532599999999995,
+      "arm": "hybrid",
+      "model": "haiku",
+      "kind": "para_known",
+      "question": "What rebate applies to yearly subscriptions bought in Japan?",
+      "correct": true
+    },
+    {
+      "answer": "New hires in Canada complete onboarding in 52 days.",
+      "turns": 3,
+      "input_tokens": 105184,
+      "cost": 0.0317045,
+      "arm": "hybrid",
+      "model": "haiku",
+      "kind": "para_known",
+      "question": "How long does it take to induct recruits in Canada?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 105307,
+      "cost": 0.032203999999999997,
+      "arm": "keyword",
+      "model": "haiku",
+      "kind": "para_known",
+      "question": "How soon do we pay suppliers in Kenya?",
+      "correct": false
+    },
+    {
+      "answer": "Shoppers in Greece have 21 days to request a refund after delivery.",
+      "turns": 3,
+      "input_tokens": 105450,
+      "cost": 0.0323982,
+      "arm": "hybrid",
+      "model": "haiku",
+      "kind": "para_known",
+      "question": "How long do shoppers in Greece have to get their money back?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 105223,
+      "cost": 0.0321894,
+      "arm": "keyword",
+      "model": "haiku",
+      "kind": "para_unknown",
+      "question": "What is the shelf life of saved images of the Uruguay tables?",
+      "correct": false
+    },
+    {
+      "answer": "Yearly subscriptions bought in Austria get a 39 percent discount.",
+      "turns": 3,
+      "input_tokens": 155465,
+      "cost": 0.1535313,
+      "arm": "hybrid",
+      "model": "sonnet",
+      "kind": "para_known",
+      "question": "What rebate applies to yearly subscriptions bought in Austria?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 105360,
+      "cost": 0.0327311,
+      "arm": "keyword",
+      "model": "haiku",
+      "kind": "para_unknown",
+      "question": "At what interval does the lawful-conformity inspection take place in Brazil?",
+      "correct": false
+    },
+    {
+      "answer": "The helpdesk responds to support tickets from Peru within 7 hours (F283).",
+      "turns": 3,
+      "input_tokens": 155430,
+      "cost": 0.1533669,
+      "arm": "hybrid",
+      "model": "sonnet",
+      "kind": "para_known",
+      "question": "How fast does the helpdesk respond to requests from Peru?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 105238,
+      "cost": 0.0327092,
+      "arm": "keyword",
+      "model": "haiku",
+      "kind": "para_known",
+      "question": "How fast does the helpdesk respond to requests from Peru?",
+      "correct": false
+    },
+    {
+      "answer": "NOT FOUND.",
+      "turns": 3,
+      "input_tokens": 105285,
+      "cost": 0.0331483,
+      "arm": "keyword",
+      "model": "haiku",
+      "kind": "para_unknown",
+      "question": "Up to when may people in Ghana ask for cash back on a purchase?",
+      "correct": false
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 155538,
+      "cost": 0.15378209999999998,
+      "arm": "keyword",
+      "model": "sonnet",
+      "kind": "para_unknown",
+      "question": "At what interval does the lawful-conformity inspection take place in Brazil?",
+      "correct": false
+    },
+    {
+      "answer": "Shoppers in Greece have 21 days to request a refund from the date of delivery.",
+      "turns": 3,
+      "input_tokens": 105303,
+      "cost": 0.0321531,
+      "arm": "keyword",
+      "model": "haiku",
+      "kind": "para_known",
+      "question": "How long do shoppers in Greece have to get their money back?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND",
+      "turns": 3,
+      "input_tokens": 155529,
+      "cost": 0.1537287,
+      "arm": "keyword",
+      "model": "sonnet",
+      "kind": "para_known",
+      "question": "How long does it take to induct recruits in Vietnam?",
+      "correct": false
+    },
+    {
+      "answer": "The lawful-conformity (compliance audit) inspection in Brazil takes place every 81 months.",
+      "turns": 3,
+      "input_tokens": 155505,
+      "cost": 0.15417029999999998,
+      "arm": "hybrid",
+      "model": "sonnet",
+      "kind": "para_unknown",
+      "question": "At what interval does the lawful-conformity inspection take place in Brazil?",
+      "correct": true
+    },
+    {
+      "answer": "NOT FOUND.",
+      "turns": 3,
+      "input_tokens": 105313,
+      "cost": 0.0320958,
+      "arm": "keyword",
+      "model": "haiku",
+      "kind": "para_known",
+      "question": "How long does it take to induct recruits in Vietnam?",
+      "correct": false
+    },
+    {
+      "answer": "Orders shipped to Croatia include 27 percent VAT.",
+      "turns": 3,
+      "input_tokens": 105600,
+      "cost": 0.0331157,
+      "arm": "keyword",
+      "model": "haiku",
+      "kind": "para_known",
+      "question": "What tax rate is added to purchases sent to Croatia?",
+      "correct": true
+    },
+    {
+      "answer": "Support tickets from Peru are answered within 7 hours.",
+      "turns": 3,
+      "input_tokens": 105304,
+      "cost": 0.0321322,
+      "arm": "hybrid",
+      "model": "haiku",
+      "kind": "para_known",
+      "question": "How fast does the helpdesk respond to requests from Peru?",
+      "correct": true
+    }
+  ]
+}

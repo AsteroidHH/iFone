@@ -23,6 +23,7 @@ const VIEWS: { id: View; icon: string }[] = [
   { id: 'context', icon: 'sparkle' },
   { id: 'connect', icon: 'link' },
   { id: 'team', icon: 'user' },
+  { id: 'activity', icon: 'list' },
 ];
 
 function SavedPill() {

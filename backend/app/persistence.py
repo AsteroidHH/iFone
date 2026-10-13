@@ -42,6 +42,8 @@ class Persister:
         self.epoch: Optional[int] = None
         self.workspace: Optional[str] = None
         self.calls: Dict[int, str] = {}
+        self.agents: Dict[str, str] = {}
+        self.emb: Dict[str, str] = {}  # node id -> digest of the text its stored vector was computed from
 
     @property
     def graph(self):
@@ -63,9 +65,17 @@ class Persister:
             "CREATE INDEX FOR (h:QHandoff) ON (h.id)",
             "CREATE INDEX FOR (m:QMeta) ON (m.id)",
             "CREATE INDEX FOR (c:QCall) ON (c.id)",
+            "CREATE INDEX FOR (a:QAgent) ON (a.id)",
         ):
             try:
                 g.query(stmt)
+            except Exception:
+                pass  # already exists
+        from app.services import embeddings
+
+        if embeddings.provider_name() == "local":
+            try:
+                g.query(f"CREATE VECTOR INDEX FOR (n:QNode) ON (n.embedding) OPTIONS {{dimension:{embeddings.DIM}, similarityFunction:'cosine'}}")
             except Exception:
                 pass  # already exists
 
@@ -74,20 +84,26 @@ class Persister:
         """Rebuild the store from FalkorDB. Returns True if the tenant already had data."""
         self.ensure_schema()
         store = self.store
-        nodes = self.graph.query("MATCH (n:QNode) RETURN n.json").result_set
+        nodes = self.graph.query("MATCH (n:QNode) RETURN n.json, n.embedding, n.emb").result_set
         edges = self.graph.query("MATCH (:QNode)-[r]->(:QNode) WHERE r.id IS NOT NULL RETURN r.json").result_set
         hands = self.graph.query("MATCH (h:QHandoff) RETURN h.json").result_set
         meta = self.graph.query("MATCH (m:QMeta {id:'meta'}) RETURN m.epoch").result_set
         ws = self.graph.query("MATCH (w:QWorkspace {id:'ws'}) RETURN w.json").result_set
         calls = self.graph.query("MATCH (c:QCall) RETURN c.json ORDER BY c.id").result_set
+        agents = self.graph.query("MATCH (a:QAgent) RETURN a.id, a.json").result_set
+        from app.services import embeddings
+
         with store._lock:
             store.nodes.clear()
             store.edges.clear()
             store.handoffs.clear()
-            for (js,) in nodes:
+            for js, vec, dig in nodes:
                 n = GraphNode.model_validate_json(js)
                 store.nodes[n.id] = n
                 self.nodes[n.id] = _h(js)
+                if vec and dig and dig == embeddings.digest_for(n):
+                    embeddings.seed_cache(n.id, dig, vec)  # the stored vector is current: no recompute after a restart
+                    self.emb[n.id] = dig
             for (js,) in edges:
                 e = GraphEdge.model_validate_json(js)
                 store.edges.append(e)
@@ -108,7 +124,12 @@ class Persister:
                 store.calls.append(c)
                 self.calls[c["id"]] = _h(js)
             store.call_seq = max([c["id"] for c in store.calls], default=0)
-        return bool(nodes or edges or hands or meta or ws or calls)
+            store.agent_state.clear()
+            for aid, js in agents:
+                d = json.loads(js)
+                store.agent_state[aid] = {"ids": set(d.get("ids", [])), "query": d.get("query", ""), "epoch": d.get("epoch", 0)}
+                self.agents[aid] = _h(js)
+        return bool(nodes or edges or hands or meta or ws or calls or agents)
 
     # ---------- sync ----------
     def sync(self, request_id: Optional[str] = None) -> int:
@@ -121,6 +142,7 @@ class Persister:
             epoch = store.epoch
             cur_ws = json.dumps(store.workspace, sort_keys=True)
             cur_calls = {c["id"]: json.dumps(c, sort_keys=True) for c in store.calls}
+            cur_agents = {k: json.dumps({"ids": sorted(v["ids"]), "query": v["query"], "epoch": v["epoch"]}, sort_keys=True) for k, v in store.agent_state.items()}
             nodes_by_id = dict(store.nodes)
             edges_by_id = {e.id: e for e in store.edges}
 
@@ -134,7 +156,17 @@ class Persister:
         ws_changed = self.workspace != _h(cur_ws)
         up_calls = [i for i, js in cur_calls.items() if i not in self.calls]
         del_calls = [i for i in self.calls if i not in cur_calls]
-        if not (up_nodes or del_nodes or up_edges or del_edges or up_hands or del_hands or epoch_changed or ws_changed or up_calls or del_calls):
+        up_agents = [k for k, js in cur_agents.items() if self.agents.get(k) != _h(js)]
+        del_agents = [k for k in self.agents if k not in cur_agents]
+        from app.services import embeddings
+
+        want_vec = [i for i in up_nodes if nodes_by_id[i].kind.value in ("fact", "conclusion")]
+        if embeddings.provider_name() == "local":
+            vec_rows = want_vec
+        else:  # a network call has no place in the write path: store only vectors a query already computed
+            vec_rows = [i for i in want_vec if embeddings.peek(nodes_by_id[i]) is not None]
+        up_vec = [i for i in vec_rows if self.emb.get(i) != embeddings.digest_for(nodes_by_id[i])]
+        if not (up_agents or del_agents or up_vec or up_nodes or del_nodes or up_edges or del_edges or up_hands or del_hands or epoch_changed or ws_changed or up_calls or del_calls):
             return 0
 
         n_stmts = 0
@@ -199,6 +231,18 @@ class Persister:
             )
             n_stmts += 1
 
+        if up_vec:
+            vecs = embeddings.vectors_for([nodes_by_id[i] for i in up_vec])
+            rows = [{"id": i, "vec": embeddings.as_list(vecs[i]), "d": embeddings.digest_for(nodes_by_id[i])} for i in up_vec if i in vecs]
+            self._q("store_embeddings", "UNWIND $rows AS row MATCH (n:QNode {id: row.id}) SET n.embedding = vecf32(row.vec), n.emb = row.d", {"rows": rows}, request_id)
+            n_stmts += 1
+        if up_agents:
+            rows = [{"id": k, "json": cur_agents[k]} for k in up_agents]
+            self._q("save_agent_state", "UNWIND $rows AS row MERGE (a:QAgent {id: row.id}) SET a.json = row.json", {"rows": rows}, request_id)
+            n_stmts += 1
+        if del_agents:
+            self._q("forget_agent_state", "UNWIND $ids AS id MATCH (a:QAgent {id:id}) DELETE a", {"ids": del_agents}, request_id)
+            n_stmts += 1
         if ws_changed:
             self._q("save_workspace", "MERGE (w:QWorkspace {id:'ws'}) SET w.json = $js", {"js": cur_ws}, request_id)
             n_stmts += 1
@@ -220,6 +264,13 @@ class Persister:
         self.epoch = epoch
         self.workspace = _h(cur_ws)
         self.calls = {i: _h(js) for i, js in cur_calls.items()}
+        self.agents = {k: _h(js) for k, js in cur_agents.items()}
+        for i in up_vec:
+            self.emb[i] = embeddings.digest_for(nodes_by_id[i])
+        for i in del_nodes:
+            self.emb.pop(i, None)
+        if del_nodes:
+            embeddings.forget(del_nodes)
         return n_stmts
 
     def wipe(self) -> None:
@@ -229,3 +280,4 @@ class Persister:
         except Exception:
             pass
         self.nodes, self.edges, self.handoffs, self.epoch, self.workspace, self.calls = {}, {}, {}, None, None, {}
+        self.agents, self.emb = {}, {}

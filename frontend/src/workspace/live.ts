@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { API_MODE } from '../api/client';
+import { API_MODE, tokenFor } from '../api/client';
 import { buildMap, pack, ragBaseline, shortIds, type Graph } from '../context/packer';
 import { synthGraph } from '../context/synth';
 import { estimateTokens } from '../context/tokens';
@@ -85,7 +85,7 @@ export const useLive = create<Live>((set, get) => ({
       return;
     }
     set((s) => ({ mcp: { ...s.mcp, state: 'checking', detail: 'Checking…' } }));
-    const p = await probeMcp();
+    const p = await probeMcp('/mcp', tokenFor('human'));
     set({ mcp: { state: p.state, latencyMs: p.latencyMs, detail: p.detail, checkedAt: Date.now() } });
   },
 

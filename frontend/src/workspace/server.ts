@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { api } from '../api/client';
+import { api, tokenFor } from '../api/client';
 import { McpCall, TokenStats, ContextPreview } from '../api/schemas';
 
 const nul = <T extends z.ZodTypeAny>(t: T) => t.nullish().transform((v) => v ?? undefined);
@@ -52,3 +52,71 @@ export const removeLink = (id: string) => api(WsView, 'DELETE', `workspace/links
 export const getActivity = (memberId?: string) => api(z.array(McpCall), 'GET', 'mcp/activity', { query: { limit: 150, member_id: memberId } });
 export const getTokenStats = () => api(TokenStats, 'GET', 'token-stats');
 export const getContextPreview = (query: string, budget: number) => api(ContextPreview, 'GET', 'context/preview', { query: { query, budget } });
+
+const CatalogTool = z
+  .object({
+    name: z.string(),
+    summary: z.string(),
+    args: z.array(z.object({ name: z.string(), required: z.boolean(), default: z.unknown().optional() }).passthrough()),
+    who: z.enum(['agent', 'auditor', 'human', 'any']).catch('any'),
+    writes: z.boolean(),
+    saves: z.string(),
+  })
+  .passthrough();
+
+export const Catalog = z
+  .object({
+    tools: z.array(CatalogTool),
+    public_url: nul(z.string()),
+    header_required: z.boolean(),
+    rate_limit_per_min: z.object({ tools: z.number(), http: z.number() }),
+    embedding_provider: z.string(),
+  })
+  .passthrough();
+export type Catalog = z.infer<typeof Catalog>;
+export const getCatalog = () => api(Catalog, 'GET', 'mcp/catalog');
+
+export const AuditEvent = z
+  .object({
+    id: z.number(),
+    ts: z.number(),
+    who: z.string(),
+    team: nul(z.string()),
+    client: nul(z.string()),
+    tool: z.string(),
+    text: z.string(),
+    severity: z.enum(['read', 'write', 'alert', 'failed']).catch('read'),
+    ok: z.boolean(),
+    tokens: z.number(),
+    saved: z.number(),
+  })
+  .passthrough();
+export type AuditEvent = z.infer<typeof AuditEvent>;
+
+export const Audit = z.object({
+  events: z.array(AuditEvent),
+  summary: z.object({ events: z.number(), agents: z.number(), by_severity: z.record(z.number()), tokens: z.number(), tokens_saved: z.number() }),
+  retention: z.string(),
+});
+export type Audit = z.infer<typeof Audit>;
+export const getAudit = (q: { severity?: string; agent?: string; limit?: number }) => api(Audit, 'GET', 'audit', { query: { ...q, limit: q.limit ?? 300 } });
+
+/** The audit log as a spreadsheet. Fetched with the session token, then saved by the browser. */
+export async function downloadAuditCsv(): Promise<boolean> {
+  const token = tokenFor('human');
+  try {
+    const res = await fetch('/api/audit?format=csv&limit=2000', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) return false;
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'quorum-audit.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return true;
+  } catch {
+    return false;
+  }
+}

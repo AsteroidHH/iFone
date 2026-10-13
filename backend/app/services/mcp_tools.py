@@ -1,3 +1,4 @@
+import contextvars
 import json
 import os
 import time
@@ -22,7 +23,7 @@ from app.services.auditor import auditor_service
 from app.config import settings
 from app.auth import resolve_token
 from app.services.event_bus import event_bus
-from app.services import context_pack as cp, workspace
+from app.services import context_pack as cp, observer, workspace
 from app.services.context_pack import estimate_tokens
 
 
@@ -38,10 +39,25 @@ class AuthError(Exception):
     pass
 
 
-def _get_auth(token: str) -> Dict[str, Any]:
-    info = resolve_token(token)
+class RateLimited(Exception):
+    def __init__(self, retry_after: float):
+        self.retry_after = retry_after
+
+
+# The token the connection proved with its Authorization header. Set per call by `guarded`; a header token wins over
+# a token passed as a tool argument, and the argument stays supported for clients that cannot send headers.
+_header_token: contextvars.ContextVar[str] = contextvars.ContextVar("quorum_header_token", default="")
+
+
+def effective_token(arg: Any = "") -> str:
+    """Header token, else the token argument, else QUORUM_MCP_TOKEN (set on a stdio server so the model never sees it)."""
+    return _header_token.get() or (arg if isinstance(arg, str) else "") or os.getenv("QUORUM_MCP_TOKEN", "")
+
+
+def _get_auth(token: str = "") -> Dict[str, Any]:
+    info = resolve_token(effective_token(token))
     if not info:
-        raise AuthError("Invalid token.")
+        raise AuthError("Missing or invalid token. Send Authorization: Bearer <token> on the connection, or pass token.")
     return info
 
 
@@ -57,8 +73,7 @@ def _summary(tool: str, bound: Dict[str, Any]) -> str:
 
 def _record(tool: str, bound: Dict[str, Any], out: Any, ms: float) -> None:
     """Every tool call becomes a row: who, what, how many tokens it cost, and what a typical retriever would have sent."""
-    token = bound.get("token")
-    info = resolve_token(token) if isinstance(token, str) else None
+    info = resolve_token(effective_token(bound.get("token")))
     if not info:
         return
     store = get_graph_store(info["tenant"])
@@ -82,22 +97,41 @@ def _record(tool: str, bound: Dict[str, Any], out: Any, ms: float) -> None:
     event_bus.publish(info["tenant"], "mcp_call", {"call": rec})
 
 
+def _header_from(ctx) -> str:
+    """The bearer token on the HTTP request that carries this tool call (streamable HTTP only)."""
+    try:
+        req = ctx.request_context.request
+        h = req.headers
+    except Exception:
+        return ""
+    auth = h.get("authorization") or ""
+    if auth[:7].lower() == "bearer ":
+        return auth[7:].strip()
+    return (h.get("x-quorum-token") or "").strip()
+
+
 def guarded(fn):
     """
-    Wraps an MCP tool: refuses to run without FalkorDB, turns a bad token into a clear error, records the call, and
-    persists the tool's writes before returning. The signature is preserved so MCP can still describe the tool.
+    Wraps an MCP tool: refuses to run without FalkorDB, reads the Authorization header, rate limits per token, turns a
+    bad token into a clear error, records the call, and persists the tool's writes before returning. The tool's
+    signature is preserved (plus an injected `ctx`) so MCP can still describe it.
     """
     import functools
     import inspect
 
+    from mcp.server.mcpserver import Context
+
     sig = inspect.signature(fn)
+    ctx_param = inspect.Parameter("ctx", inspect.Parameter.KEYWORD_ONLY, default=None, annotation=Context)
 
     @functools.wraps(fn)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args, ctx=None, **kwargs):
         from app import db
         from app.db import FalkorUnavailable
         from app.graph.queries import sync_all
+        from app.ratelimit import tool_limiter
 
+        reset = _header_token.set(_header_from(ctx) if ctx is not None else "")
         try:
             if settings.PERSISTENCE == "falkordb":
                 db.require_db()
@@ -106,11 +140,15 @@ def guarded(fn):
                     from app.graph.queries import forget_stores
 
                     forget_stores()
+            bound_args = dict(sig.bind(*args, **kwargs).arguments)
+            who = effective_token(bound_args.get("token")) or "anonymous"
+            ok, wait = tool_limiter.allow(who)
+            if not ok:
+                return {"error": f"Rate limit reached. Retry in {wait:.1f}s.", "success": False, "rate_limited": True, "retry_after": round(wait, 1)}
             t0 = time.time()
             out = fn(*args, **kwargs)
             try:
-                bound = dict(sig.bind(*args, **kwargs).arguments)
-                _record(fn.__name__, bound, out, (time.time() - t0) * 1000)
+                _record(fn.__name__, bound_args, out, (time.time() - t0) * 1000)
             except AuthError:
                 pass
             if settings.PERSISTENCE == "falkordb":
@@ -120,7 +158,11 @@ def guarded(fn):
             return {"error": str(e), "success": False}
         except FalkorUnavailable as e:
             raise RuntimeError(f"FALKORDB_UNAVAILABLE: {e.reason}. Start FalkorDB (docker compose up -d falkordb) and retry.")
+        finally:
+            _header_token.reset(reset)
 
+    wrapper.__signature__ = sig.replace(parameters=[*sig.parameters.values(), ctx_param])
+    wrapper.__annotations__ = {**getattr(fn, "__annotations__", {}), "ctx": Context}
     return wrapper
 
 
@@ -132,7 +174,7 @@ def remember_fact(
     key: str,
     value: str,
     text: str,
-    token: str,
+    token: str = "",
     id: Optional[str] = None,
     quote: Optional[str] = None,
     origin: Optional[str] = None,
@@ -184,10 +226,71 @@ def remember_fact(
     }
 
 
+def observe_text(auth: Dict[str, Any], text: str, source: str = "chat", dry_run: bool = False, scope: str = "commons") -> Dict[str, Any]:
+    """Pull durable facts out of text the agent already produced and store them with their source sentence."""
+    store = get_graph_store(auth["tenant"])
+    if scope == "team" and not auth.get("team_id"):
+        return {"error": "scope=team needs a member token that belongs to a team.", "success": False}
+    if scope not in ("commons", "team"):
+        return {"error": "scope must be commons or team.", "success": False}
+    cands = observer.candidates(text, settings.OBSERVER_MAX_FACTS)
+    with store._lock:
+        known = {observer.fingerprint(n.quote or n.text or ""): n.id for n in store.nodes.values() if n.kind == NodeKind.FACT and (n.quote or n.text)}
+        known.update({observer.fingerprint(n.text or ""): n.id for n in store.nodes.values() if n.kind == NodeKind.FACT and n.text})
+    stored, duplicates, verdicts = [], [], []
+    for c in cands:
+        if c["fingerprint"] in known:
+            duplicates.append({"text": c["text"], "existing_id": known[c["fingerprint"]]})
+            continue
+        item = {"text": c["text"], "key": c["key"], "value": c["value"], "confidence": c["confidence"], "signals": c["signals"]}
+        if dry_run:
+            stored.append({**item, "id": None})
+            continue
+        fact = GraphNode(
+            id=f"obs_{c['fingerprint'][:8]}",
+            kind=NodeKind.FACT,
+            label=c["text"][:60],
+            status=Status.HEALTHY,
+            stale=False,
+            key=c["key"],
+            value=c["value"],
+            text=c["text"],
+            quote=c["text"],
+            origin=f"observer:{source}"[:60],
+            scope_team=auth["team_id"] if scope == "team" else None,
+            asserted_by=AssertedBy(id=auth.get("agent_id", "agent"), name=auth.get("agent_id", "Agent"), tier=Tier.NEW),
+        )
+        store.add_node(fact)
+        _emit(auth["tenant"], nodes=[fact])
+        v = auditor_service.check_contradiction(store, fact, tenant=auth["tenant"])
+        if v:
+            verdicts.append({"fact_id": fact.id, **v})
+        stored.append({**item, "id": fact.id})
+    return {
+        "epoch": store.epoch,
+        "dry_run": dry_run,
+        "candidates": len(cands),
+        "stored": len(stored) if not dry_run else 0,
+        "facts": stored,
+        "duplicates": duplicates,
+        "conflicts": verdicts,
+        "success": True,
+    }
+
+
+def observe(text: str, token: str = "", source: str = "chat", dry_run: bool = False, scope: str = "commons") -> Dict[str, Any]:
+    """
+    Reads text you already produced (a reply, a tool result, a ticket thread) and saves the facts in it: numbers with
+    units, policies, limits, dates. Each keeps its source sentence. Duplicates are skipped and a conflicting number opens a
+    review. Use dry_run=true to preview. You can skip remember_fact for ordinary facts and call this once at the end.
+    """
+    return observe_text(_get_auth(token), text, source, dry_run, scope)
+
+
 def derive(
     text: str,
     parent_ids: List[str],
-    token: str,
+    token: str = "",
     id: Optional[str] = None,
     is_decision: bool = False,
     owner_team: Optional[str] = None,
@@ -257,7 +360,7 @@ def _remember_delivery(store, auth: Dict[str, Any], ids: List[str], query: Optio
 
 def retrieve_context(
     query: str,
-    token: str,
+    token: str = "",
     k: int = 5,
     format: str = "full",
     budget_tokens: Optional[int] = None,
@@ -294,7 +397,7 @@ def retrieve_context(
     qw = set(cp._words(query))
     candidates = [n for n in nodes if n.kind == NodeKind.FACT and n.status == Status.HEALTHY and not n.stale]
     idf = cp.idf_weights(candidates)
-    ranked = sorted(((n, cp._relevance(n, qw, idf)) for n in candidates), key=lambda x: -x[1])
+    ranked = [(n, sc) for n, sc, _ in cp.rank(candidates, query, idf)]
     matched = [
         {
             "id": f.id,
@@ -314,7 +417,7 @@ def retrieve_context(
     return out
 
 
-def get_map(token: str) -> Dict[str, Any]:
+def get_map(token: str = "") -> Dict[str, Any]:
     """A small index of the shared memory: areas, hubs and how to ask. Read it once per session instead of loading the graph."""
     auth = _get_auth(token)
     store = get_graph_store(auth["tenant"])
@@ -322,7 +425,7 @@ def get_map(token: str) -> Dict[str, Any]:
     return {"epoch": m["epoch"], "map": m["text"], "tokens": m["tokens"], "tokens_baseline": m["tokens_baseline"]}
 
 
-def get_node(id: str, token: str) -> Dict[str, Any]:
+def get_node(id: str, token: str = "") -> Dict[str, Any]:
     """One node, its parents and its children, by short id (F3, C2) or full id. A few lines instead of a document."""
     auth = _get_auth(token)
     store = get_graph_store(auth["tenant"])
@@ -332,14 +435,14 @@ def get_node(id: str, token: str) -> Dict[str, Any]:
     return v
 
 
-def find_path(from_id: str, to_id: str, token: str) -> Dict[str, Any]:
+def find_path(from_id: str, to_id: str, token: str = "") -> Dict[str, Any]:
     """The shortest causal chain between two nodes: provenance without the whole subgraph."""
     auth = _get_auth(token)
     store = get_graph_store(auth["tenant"])
     return cp.find_path(store, from_id, to_id, _viewer(auth, store))
 
 
-def delta(token: str) -> Dict[str, Any]:
+def delta(token: str = "") -> Dict[str, Any]:
     """
     What changed since you last read: facts you were given that are no longer valid (drop them), and new matches for
     your last question. Call it when the epoch in any response changes, instead of re-reading everything.
@@ -387,7 +490,7 @@ def stage_action(
     action_type: str,
     reversibility: str,
     parent_ids: List[str],
-    token: str,
+    token: str = "",
     id: Optional[str] = None,
     procedure_id: Optional[str] = None,
     idempotency_key: Optional[str] = None,
@@ -456,7 +559,7 @@ def stage_action(
         }
 
 
-def execute_action(id: str, token: str) -> Dict[str, Any]:
+def execute_action(id: str, token: str = "") -> Dict[str, Any]:
     """Runs atomic execute guard and dispatches to external Helpdesk."""
     auth = _get_auth(token)
     store = get_graph_store(auth["tenant"])
@@ -479,7 +582,7 @@ def execute_action(id: str, token: str) -> Dict[str, Any]:
         }
 
 
-def claim_handoff(id: str, token: str) -> Dict[str, Any]:
+def claim_handoff(id: str, token: str = "") -> Dict[str, Any]:
     """Claims a handoff task with atomic lease. Agent tokens restricted to kind=TASK."""
     auth = _get_auth(token)
     store = get_graph_store(auth["tenant"])
@@ -515,7 +618,7 @@ def claim_handoff(id: str, token: str) -> Dict[str, Any]:
         return {"epoch": store.epoch, "handoff_id": id, "status": target.status.value, "success": True}
 
 
-def quarantine(root_id: str, token: str, reason: str = "Manual auditor quarantine") -> Dict[str, Any]:
+def quarantine(root_id: str, token: str = "", reason: str = "Manual auditor quarantine") -> Dict[str, Any]:
     """Auditor-only tool: Quarantines root fact and cascades down causal descendants."""
     auth = _get_auth(token)
     if auth["role"] not in ["auditor", "human"]:
@@ -532,7 +635,7 @@ def quarantine(root_id: str, token: str, reason: str = "Manual auditor quarantin
     }
 
 
-def restore(root_id: str, token: str) -> Dict[str, Any]:
+def restore(root_id: str, token: str = "") -> Dict[str, Any]:
     """Auditor-only tool: Restores root fact and valid descendants if all parents are healthy."""
     auth = _get_auth(token)
     if auth["role"] not in ["auditor", "human"]:
@@ -549,7 +652,7 @@ def restore(root_id: str, token: str) -> Dict[str, Any]:
     }
 
 
-def explain_blast_radius(root_id: str, token: str) -> Dict[str, Any]:
+def explain_blast_radius(root_id: str, token: str = "") -> Dict[str, Any]:
     """Auditor tool: Dry-run blast radius calculation."""
     auth = _get_auth(token)
     store = get_graph_store(auth["tenant"])
@@ -563,7 +666,7 @@ def explain_blast_radius(root_id: str, token: str) -> Dict[str, Any]:
     }
 
 
-def review_handoff(id: str, decision: str, token: str, note: Optional[str] = None) -> Dict[str, Any]:
+def review_handoff(id: str, decision: str, token: str = "", note: Optional[str] = None) -> Dict[str, Any]:
     """Human-only tool: Approves or rejects a gate-blocked review handoff."""
     auth = _get_auth(token)
     if auth["role"] != "human":

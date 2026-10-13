@@ -103,6 +103,11 @@ def main():
             )
             with urllib.request.urlopen(req, timeout=4) as r:
                 check("MCP endpoint answers", r.status == 200, f"{API}/mcp")
+        except urllib.error.HTTPError as e:
+            if e.code == 401:  # it answered, and it wants a token: that is a hub with header auth required
+                check("MCP endpoint answers", True, f"{API}/mcp (requires an Authorization header)")
+            else:
+                check("MCP endpoint answers", False, f"HTTP {e.code}", "See the backend log")
         except Exception as e:
             check("MCP endpoint answers", False, f"{type(e).__name__}", "Start the backend with QUORUM_EMBED_MCP=1 so agents and the console share one graph")
             try:

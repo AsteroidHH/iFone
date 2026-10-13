@@ -26,6 +26,7 @@ const Benchmark = lazy(() => import('./views/Benchmark').then((m) => ({ default:
 const Context = lazy(() => import('./views/Context').then((m) => ({ default: m.Context })));
 const Connect = lazy(() => import('./views/Connect').then((m) => ({ default: m.Connect })));
 const Team = lazy(() => import('./views/Team').then((m) => ({ default: m.Team })));
+const Activity = lazy(() => import('./views/Activity').then((m) => ({ default: m.Activity })));
 const CommandPalette = lazy(() => import('./components/CommandPalette').then((m) => ({ default: m.CommandPalette })));
 
 function ViewFallback() {
@@ -122,6 +123,9 @@ function useShortcuts() {
         case '8':
           st.set({ view: 'team' });
           break;
+        case '9':
+          st.set({ view: 'activity' });
+          break;
       }
     };
     const onPointer = (e: PointerEvent) => {
@@ -207,6 +211,7 @@ function Shell() {
               {view === 'context' && <Context />}
               {view === 'connect' && <Connect />}
               {view === 'team' && <Team />}
+              {view === 'activity' && <Activity />}
             </Suspense>
           </div>
         )}

@@ -42,7 +42,7 @@ class GraphStore:
         # What each agent has already been handed, so delta() can say what changed since its last read.
         self.agent_state: Dict[str, Dict[str, Any]] = {}
 
-    MAX_CALLS = 1000
+    MAX_CALLS = 5000
 
     def record_call(self, rec: Dict[str, Any]) -> Dict[str, Any]:
         with self._lock:
