@@ -1,6 +1,6 @@
 import threading
 import time
-from typing import Dict, Any
+from typing import Any, Dict, Optional
 
 
 class MockHelpdeskService:
@@ -15,7 +15,7 @@ class MockHelpdeskService:
         self.executed_actions: Dict[str, Dict[str, Any]] = {}
         self.tombstones: set[str] = set()
 
-    def execute_action(self, idempotency_key: str, action_type: str, payload: Dict[str, Any] = None) -> Dict[str, Any]:
+    def execute_action(self, idempotency_key: str, action_type: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         with self._lock:
             if idempotency_key in self.tombstones:
                 return {

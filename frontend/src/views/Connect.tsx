@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { API_MODE } from '../api/client';
+import { GettingStarted } from '../components/GettingStarted';
 import { Icon } from '../components/Icon';
 import { fmt, pct } from '../context/tokens';
 import { useStore } from '../state/store';
@@ -511,6 +512,7 @@ export function Connect() {
         <h1>Plug any AI into one memory</h1>
         <p>Run one MCP server, paste a snippet into Claude, Cursor, VS Code or anything else that speaks MCP, and every agent reads and writes the same graph.</p>
       </header>
+      <GettingStarted />
       <Status />
       <Setup />
       {API_MODE === 'mock' ? <Feeds /> : <LiveFeed />}

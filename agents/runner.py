@@ -1,7 +1,7 @@
 import os
 import json
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from agents.scout import ScoutAgent
 from agents.analyst import AnalystAgent
 from agents.refunder import RefunderAgent
@@ -40,7 +40,7 @@ class AgentRunner:
         Step names match CONTRACT.md: inject_poison, run_agents, audit, supersede, restore, reset.
         """
         mode = settings.get_effective_mode()
-        results = {
+        results: Dict[str, Any] = {
             "step": step_name,
             "mode": mode,
             "seed": seed,

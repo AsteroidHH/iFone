@@ -45,7 +45,7 @@ def stage_action(
 
     with store._lock:
         # 1. Atomic derivation check: all parents must exist and be HEALTHY
-        parents = [store.nodes.get(pid) for pid in req.parent_ids if store.nodes.get(pid)]
+        parents = [p for p in (store.nodes.get(pid) for pid in req.parent_ids) if p is not None]
         if len(parents) != len(req.parent_ids) or any(p.status != Status.HEALTHY for p in parents):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -73,7 +73,7 @@ def stage_action(
                 procedure_id=req.procedure_id,
             ),
         )
-        if req.idempotency_key:
+        if req.idempotency_key and action_node.action is not None:
             action_node.action.idempotency_key = req.idempotency_key
 
         # Add node and causal edges

@@ -380,6 +380,8 @@ await page.keyboard.press('7');
 await page.locator('.cn').waitFor({ timeout: 3000 }).catch(() => {});
 check('Connect page reports MCP status honestly in sample mode', (await text('.cn-status')).includes('Sample data (simulated)'));
 check('Connect page lists the real MCP tools', (await page.locator('.cn-table tbody tr').count()) === 15);
+check('Connect shows a getting-started checklist that ticks itself from real state', (await page.locator('.gs-steps li').count()) === 4 && (await page.locator('.gs-steps li.done').count()) >= 1 && (await page.locator('.gs-bar[role=progressbar]').count()) === 1);
+check('exactly one step is marked as the next one to do', (await page.locator('.gs-steps li.next').count()) === 1);
 check('Connect page lists the observe tool', (await page.locator('.cn-table tbody th', { hasText: /^observe$/ }).count()) === 1);
 check('Connect page gives a ready-to-paste Claude Code command', (await text('.cn-block .terminal')).includes('claude mcp add'));
 check('the Claude Code command carries the token in a header, not as a tool argument', (await text('.cn-block .terminal')).includes('--header "Authorization: Bearer'));
@@ -392,6 +394,8 @@ check('ChatGPT is told it cannot hide the token', (await text('.cn-li, .cn-steps
 await page.getByRole('radio', { name: 'Claude Code' }).click();
 await page.locator('.cn-row').first().waitFor({ timeout: 8000 }).catch(() => {});
 check('live feed fills with tool calls', (await page.locator('.cn-row').count()) > 0);
+await page.locator('.gs').getByRole('button', { name: 'Dismiss' }).click();
+check('the checklist can be dismissed and stays away', (await page.locator('.gs').count()) === 0);
 await page.getByRole('tab', { name: 'Chats' }).click();
 await wait(600);
 check('chats tab lists members', (await page.locator('.cn-people li').count()) >= 3);

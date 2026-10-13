@@ -147,7 +147,7 @@ def derive(
 
     # Atomic derivation check
     with store._lock:
-        parents = [store.nodes.get(pid) for pid in parent_ids if store.nodes.get(pid) and viewer.can_see(store.nodes.get(pid))]
+        parents = [p for p in (store.nodes.get(pid) for pid in parent_ids) if p is not None and viewer.can_see(p)]
         if len(parents) != len(parent_ids) or any(p.status != Status.HEALTHY for p in parents):
             return {
                 "epoch": store.epoch,
@@ -209,7 +209,7 @@ def stage_action(
 
     # 1. Atomic derivation check
     with store._lock:
-        parents = [store.nodes.get(pid) for pid in parent_ids if store.nodes.get(pid) and viewer.can_see(store.nodes.get(pid))]
+        parents = [p for p in (store.nodes.get(pid) for pid in parent_ids) if p is not None and viewer.can_see(p)]
         if len(parents) != len(parent_ids) or any(p.status != Status.HEALTHY for p in parents):
             return {
                 "epoch": store.epoch,
@@ -251,6 +251,7 @@ def stage_action(
 
         # 2. Evaluate Quorum Gate
         gate_status, reason, handoff = quorum_gate.evaluate(store, action_node, tenant=auth["tenant"])
+        assert action_node.action is not None  # built above with its ActionInfo
 
         return {
             "epoch": store.epoch,
@@ -270,11 +271,12 @@ def execute_action(id: str, token: str = "") -> Dict[str, Any]:
 
     try:
         executed_node = action_executor.execute(store, id, tenant=auth["tenant"])
+        act = executed_node.action
         return {
             "epoch": store.epoch,
             "action_id": executed_node.id,
-            "executed": executed_node.action.executed,
-            "confirmed": executed_node.action.confirmed,
+            "executed": bool(act and act.executed),
+            "confirmed": bool(act and act.confirmed),
             "success": True,
         }
     except Exception as e:
@@ -341,9 +343,10 @@ def review_handoff(id: str, decision: str, token: str = "", note: Optional[str] 
                 action_node = store.nodes.get(target.context_root_id)
                 if action_node and action_node.action:
                     action_node.action.gate = GateStatus.PASSED
-                    if getattr(action_node.action, "correction_notice", None):
-                        action_node.action.correction_notice["status"] = "DISPATCHED"
-                        action_node.correction_notice = action_node.action.correction_notice
+                    notice = action_node.action.correction_notice
+                    if notice:
+                        notice["status"] = "DISPATCHED"
+                        action_node.correction_notice = notice
                 if target.correction_notice:
                     target.correction_notice["status"] = "DISPATCHED"
 

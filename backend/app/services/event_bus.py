@@ -56,7 +56,7 @@ class TenantEventBuffer:
 
     def subscribe(self) -> asyncio.Queue:
         with self._lock:
-            q = asyncio.Queue()
+            q: asyncio.Queue = asyncio.Queue()
             self.subscribers.append(q)
             return q
 

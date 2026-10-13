@@ -74,17 +74,17 @@ class LLMAdapter:
                 client = genai.Client()
                 model_name = self.model or "gemini-2.5-flash"
                 resp = client.models.generate_content(model=model_name, contents=prompt)
-                return resp.text.strip()
+                return (resp.text or "").strip()
             elif self.active_provider == "openai":
                 import openai
-                client = openai.OpenAI()
+                oai = openai.OpenAI()
                 model_name = self.model or "gpt-4o-mini"
-                resp = client.chat.completions.create(
+                oresp = oai.chat.completions.create(
                     model=model_name,
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=100,
                 )
-                return resp.choices[0].message.content.strip()
+                return (oresp.choices[0].message.content or "").strip()
             elif self.active_provider == "anthropic":
                 import anthropic
                 client = anthropic.Anthropic()

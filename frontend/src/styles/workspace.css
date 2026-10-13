@@ -299,3 +299,15 @@
   .au-row time { grid-column: 2; order: 3; }
   .au-tok { grid-column: 2; text-align: left; }
 }
+
+/* ---------- getting started ---------- */
+.gs-bar { height: 8px; border: 1.5px solid var(--text); border-radius: 99px; background: #fff; overflow: hidden; margin: 2px 0 14px; }
+.gs-bar i { display: block; height: 100%; background: var(--mint); transition: width 0.4s; }
+.gs-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.gs-steps li { display: grid; grid-template-columns: 30px 1fr; gap: 12px; align-items: start; padding: 10px 12px; border: 1.5px solid var(--line-2); border-radius: 12px; background: #fff; }
+.gs-steps li.next { border-color: var(--text); box-shadow: 3px 3px 0 var(--text); }
+.gs-steps li.done { background: #eefaf5; border-color: var(--line-2); }
+.gs-steps p { margin: 2px 0 8px; font-size: var(--t13); }
+.gs-steps li.done p { margin-bottom: 0; }
+.gs-mark { width: 26px; height: 26px; border: 1.5px solid var(--text); border-radius: 50%; display: grid; place-items: center; font: 600 12px var(--f-mono, monospace); background: #fff; }
+.gs-steps li.done .gs-mark { background: var(--mint); }

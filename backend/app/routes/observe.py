@@ -1,3 +1,5 @@
+from typing import Any, Dict
+
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -42,7 +44,7 @@ def semantic_check(query: str = Query("how long can shoppers get their money bac
         nodes = [n for n in store.nodes.values() if viewer.can_see(n)]
     cand = [n for n in nodes if n.kind.value in ("fact", "conclusion") and n.status.value == "HEALTHY" and not n.stale]
     ranked = cp.rank(cand, query, cp.idf_weights(cand))[:k]
-    out = {"query": query, "provider": embeddings.provider_name(), "api_top": [{"id": n.id, "score": round(s, 3), "cosine": round(c, 3)} for n, s, c in ranked if s > 0], "falkordb_top": None, "agrees": None}
+    out: Dict[str, Any] = {"query": query, "provider": embeddings.provider_name(), "api_top": [{"id": n.id, "score": round(s, 3), "cosine": round(c, 3)} for n, s, c in ranked if s > 0], "falkordb_top": None, "agrees": None}
     if store.persister is not None and embeddings.provider_name() == "local":
         qv = embeddings.as_list(embeddings.query_vector(query))
         try:

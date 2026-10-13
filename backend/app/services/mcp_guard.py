@@ -5,7 +5,7 @@ import contextvars
 import json
 import os
 import time
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, Optional, Sequence
 
 from app.auth import resolve_token
 from app.config import settings
@@ -16,7 +16,7 @@ from app.services.context_pack import estimate_tokens
 from app.services.event_bus import event_bus
 
 
-def emit(tenant: str, nodes: List[GraphNode] = (), edges: List[GraphEdge] = ()) -> None:
+def emit(tenant: str, nodes: Sequence[GraphNode] = (), edges: Sequence[GraphEdge] = ()) -> None:
     """Tell connected consoles about what an agent just wrote, so MCP writes show up live like scenario writes do."""
     for n in nodes:
         event_bus.publish(tenant, "node_added", {"node": n.model_dump()})

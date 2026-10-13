@@ -106,9 +106,10 @@ def review_handoff(
                 action_node = store.nodes.get(target.context_root_id)
                 if action_node and action_node.action:
                     action_node.action.gate = GateStatus.PASSED
-                    if getattr(action_node.action, "correction_notice", None):
-                        action_node.action.correction_notice["status"] = "DISPATCHED"
-                        action_node.correction_notice = action_node.action.correction_notice
+                    notice = action_node.action.correction_notice
+                    if notice:
+                        notice["status"] = "DISPATCHED"
+                        action_node.correction_notice = notice
                 if target.correction_notice:
                     target.correction_notice["status"] = "DISPATCHED"
 

@@ -22,7 +22,9 @@ jobs:
           cache: pip
       - run: pip install -r backend/requirements.txt ruff pytest-cov hypothesis
       - name: Lint
-        run: ruff check backend bench scripts mcp tests
+        run: ruff check backend bench scripts mcp tests agents conftest.py
+      - name: Types
+        run: pip install mypy && mypy
       - name: Tests with coverage (FalkorDB is a service container)
         run: python -m pytest -q --cov=backend/app --cov-report=term-missing:skip-covered --cov-fail-under=90
       - name: Retrieval benchmark (offline)

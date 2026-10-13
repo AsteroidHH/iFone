@@ -312,7 +312,7 @@ class ScenarioOrchestrator:
             "compensated_actions": compensated_ids,
             "execute_guard_refused_staged": refused,
             "invariants_ok": invariants["ok"],
-            "top_procedure": procedure_registry.get_best_procedure("refund").id,
+            "top_procedure": getattr(procedure_registry.get_best_procedure("refund"), "id", None),
         }
 
     def supersede(self, tenant: str, request_id: Optional[str] = None) -> Dict[str, Any]:

@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { SEEN_ACTIVITY } from '../components/GettingStarted';
 import { useQuery } from '@tanstack/react-query';
 import { API_MODE } from '../api/client';
 import { Icon } from '../components/Icon';
@@ -39,6 +40,13 @@ function useSampleEvents(): AuditEvent[] {
 
 export function Activity() {
   const live = API_MODE === 'live';
+  useEffect(() => {
+    try {
+      localStorage.setItem(SEEN_ACTIVITY, '1');
+    } catch {
+      /* ignore */
+    }
+  }, []);
   const pushToast = useStore((s) => s.pushToast);
   const [sev, setSev] = useState<Sev>('all');
   const [who, setWho] = useState('all');

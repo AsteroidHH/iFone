@@ -1,5 +1,5 @@
 import time
-from typing import List
+from typing import List, Optional
 from app.models.common import (
     Status,
     NodeKind,
@@ -26,7 +26,7 @@ from app.models.agents import AgentItem, ProcedureItem
 from app.config import settings
 
 
-def get_fixture_graph(tenant: str = "acme", as_of: int = None) -> GraphResponse:
+def get_fixture_graph(tenant: str = "acme", as_of: Optional[int] = None) -> GraphResponse:
     now_ms = int(time.time() * 1000)
 
     nodes = [

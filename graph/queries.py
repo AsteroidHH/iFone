@@ -119,7 +119,7 @@ def stage_action(
         })
         RETURN a.id, a.status, a.gate
         """
-        params = {
+        params: Dict[str, Any] = {
             "id": action_id, "type": action_type, "payload": payload_str,
             "gate": gate, "reversibility": reversibility,
             "procedure_id": procedure_id, "idempotency_key": idempotency_key

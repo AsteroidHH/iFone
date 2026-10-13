@@ -32,7 +32,7 @@ class GraphStore:
         # Handoffs belong to the tenant's graph, like everything else.
         self.handoffs: List[Handoff] = []
         self.handoff_lock = threading.RLock()
-        self.persister = None  # set by get_graph_store when persistence is FalkorDB
+        self.persister: Optional[Any] = None  # set by get_graph_store when persistence is FalkorDB
         from app.services.workspace import default_workspace
 
         self.workspace: Dict[str, Any] = default_workspace(tenant)

@@ -91,13 +91,14 @@ def main():
     ap.add_argument("--known", type=int, default=12)
     ap.add_argument("--unknown", type=int, default=6)
     ap.add_argument("--parallel", type=int, default=4)
+    ap.add_argument("--seed", type=int, default=11)
     a = ap.parse_args()
 
-    store, facts, rng = rb.build(seed=11)
+    store, facts, rng = rb.build(seed=a.seed)
     all_q = rb.questions(facts, rng, per_kind=a.known + a.unknown)
     known = [q for q in all_q if q[0] == "para_known"][: a.known]
     unknown = [q for q in all_q if q[0] == "para_unknown"][a.unknown * -1 :]
-    none = [q for q in all_q if q[0] == "none"][:4]
+    none = [q for q in all_q if q[0] == "none"][: max(4, a.known // 3)]
     qs = known + unknown + none
     truth = {fid: store.nodes[fid].value for fid in store.nodes}
 

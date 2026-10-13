@@ -1,7 +1,6 @@
 import logging
 from typing import Dict, Any, List, Optional
 from agents.session import private_memory
-from agents.procedures import procedure_registry
 
 logger = logging.getLogger("quorum.agent")
 
@@ -44,7 +43,7 @@ class BaseAgent:
         if "token" not in arguments:
             arguments["token"] = self.token
 
-        result = func(**arguments)
+        result = func(**arguments)  # type: ignore[operator]  # the tool_map values are the guarded MCP tools
 
         # Epoch check: if epoch bumped, rebuild context!
         returned_epoch = result.get("epoch", self.last_seen_epoch)
