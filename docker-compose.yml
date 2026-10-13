@@ -49,6 +49,9 @@ services:
       - QUORUM_FALKORDB_URL=redis://falkordb:6379
       - QUORUM_EMBED_MCP=1
       - QUORUM_MODE=replay
+      # This file is the local demo, so it runs in development (demo tokens, ad-hoc tokens). A real deployment uses
+      # docker-compose.production.yml on top of it: docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
+      - QUORUM_ENV=${QUORUM_ENV:-development}
       - HELPDESK_URL=http://mock-helpdesk:8002
       # Where other machines reach this hub (shown on the Connect page), e.g. https://quorum.example.com:8443
       - QUORUM_PUBLIC_URL=${QUORUM_PUBLIC_URL:-}

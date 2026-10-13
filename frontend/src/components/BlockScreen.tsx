@@ -12,7 +12,7 @@ const FALLBACK_STEPS = [
 ];
 
 const BACKEND_STEPS = [
-  'Start the backend: QUORUM_EMBED_MCP=1 python -m uvicorn app.main:app --app-dir backend --port 8000',
+  'Start the backend: QUORUM_ENV=development QUORUM_EMBED_MCP=1 python -m uvicorn app.main:app --app-dir backend --port 8000',
   'Or with Docker: docker compose up -d',
   'Check everything: python scripts/doctor.py',
 ];

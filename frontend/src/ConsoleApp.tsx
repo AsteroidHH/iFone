@@ -1,10 +1,11 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { API_MODE } from './api/client';
+import { API_MODE, onUnauthorized, resolveAuth, signedInWithToken, type AuthResult } from './api/client';
 import { onBlocked, type Blocked } from './api/blocked';
 import { fetchHealth, type HealthResult } from './api/health';
 import { BlockScreen } from './components/BlockScreen';
+import { SignIn } from './components/SignIn';
 import { Header } from './components/Header';
 import { Banners, DevConsole, LoadError, Shortcuts, Toasts, VersionBlock } from './components/Overlays';
 import { ContextMenu } from './components/ContextMenu';
@@ -274,14 +275,42 @@ function useBackendGate() {
   return { result, blocked, checking, recheck };
 }
 
+/** Live mode: is there a way to call the hub (demo tokens in development, a signed-in token, a deployed config)? */
+function useAuthGate(ready: boolean) {
+  const [state, setState] = useState<AuthResult | 'checking'>(API_MODE === 'mock' ? 'ok' : 'checking');
+  const [expired, setExpired] = useState(false);
+
+  useEffect(() => {
+    if (API_MODE === 'mock' || !ready) return;
+    let on = true;
+    void resolveAuth().then((r) => on && setState(r));
+    const off = onUnauthorized(() => {
+      if (signedInWithToken()) {
+        setExpired(true);
+        setState('needed');
+      }
+    });
+    return () => {
+      on = false;
+      off();
+    };
+  }, [ready]);
+
+  return { state, expired, done: () => { setExpired(false); setState('ok'); } };
+}
+
 export default function ConsoleApp() {
   const gate = useBackendGate();
-  if (API_MODE === 'mock') return <Shell />;
   const r = gate.result;
+  const healthy = !!r && r.kind === 'ok' && !gate.blocked;
+  const auth = useAuthGate(healthy);
+  if (API_MODE === 'mock') return <Shell />;
   if (!r) return <ViewFallback />;
   if (r.kind !== 'ok' || gate.blocked) {
     return <BlockScreen result={r} blocked={gate.blocked} checking={gate.checking} onRetry={() => void gate.recheck()} />;
   }
+  if (auth.state === 'checking') return <ViewFallback />;
+  if (auth.state === 'needed') return <SignIn expired={auth.expired} onSignedIn={auth.done} />;
   const warnings = r.health.warnings;
   return (
     <>

@@ -43,7 +43,7 @@ async function mcp(method, params, notify = false) {
 await fetch(`${API}/api/scenario/reset`, { method: 'POST', headers: human });
 await sleep(1500);
 
-const browser = await chromium.launch({ channel: 'msedge' });
+const browser = await chromium.launch({ channel: process.env.QUORUM_BROWSER ?? 'msedge' });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 await page.goto(`${BASE}/#/app`);
 await page.locator('.story-btn').first().waitFor({ timeout: 15000 });

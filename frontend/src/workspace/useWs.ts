@@ -19,6 +19,8 @@ export interface WMember {
   /** Mock mode keeps the sample token; live mode never has it after creation. */
   token?: string;
   tokenHint: string;
+  /** unix ms when the token stops working; undefined when it never expires */
+  expiresAt?: number;
   status: Status | 'unknown';
   lastSeen?: number;
   calls: number;
@@ -64,7 +66,7 @@ export interface Ws {
   addTeam: (name: string, seats: number) => Promise<string | null>;
   setSeats: (id: string, seats: number) => Promise<string | null>;
   removeTeam: (id: string) => Promise<string | null>;
-  addMember: (m: { name: string; role: MemberRole; teamId: string; client: ClientId; device: string }) => Promise<string | null>;
+  addMember: (m: { name: string; role: MemberRole; teamId: string; client: ClientId; device: string; expiresInDays?: number }) => Promise<string | null>;
   rotate: (id: string) => Promise<string | null>;
   removeMember: (id: string) => Promise<string | null>;
   link: (a: string, b: string, scope: Scope) => Promise<string | null>;
@@ -164,6 +166,7 @@ export function useWs(): Ws {
       client: m.client,
       device: m.device,
       tokenHint: `${m.token_prefix ?? 'qrm_'}••••••`,
+      expiresAt: typeof m.expires_at === 'number' ? m.expires_at : undefined,
       status: m.status,
       lastSeen: m.last_seen,
       calls: m.calls,
@@ -178,7 +181,7 @@ export function useWs(): Ws {
     addTeam: (n, s) => run(() => srv.addTeam(n, s)),
     setSeats: (id, s) => run(() => srv.setSeats(id, s)),
     removeTeam: (id) => run(() => srv.removeTeam(id)),
-    addMember: (m) => run(() => srv.addMember({ name: m.name, role: m.role, team_id: m.teamId, client: m.client, device: m.device }), true),
+    addMember: (m) => run(() => srv.addMember({ name: m.name, role: m.role, team_id: m.teamId, client: m.client, device: m.device, expires_in_days: m.expiresInDays }), true),
     rotate: (id) => run(() => srv.rotateMember(id), true),
     removeMember: (id) => run(() => srv.removeMember(id)),
     link: (a, b, s) => run(() => srv.addLink(a, b, s)),

@@ -48,7 +48,7 @@ async function tool(name, args) {
 await fetch(`${API}/api/scenario/reset`, { method: 'POST', headers: human });
 await sleep(1200);
 
-const browser = await chromium.launch({ channel: 'msedge' });
+const browser = await chromium.launch({ channel: process.env.QUORUM_BROWSER ?? 'msedge' });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 const problems = [];
 page.on('pageerror', (e) => problems.push(`pageerror ${e}`));

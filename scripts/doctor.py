@@ -89,7 +89,7 @@ def main():
 
     code, health = http_json(f"{API}/api/health")
     if code is None:
-        check("Backend running", False, f"no answer from {API}", "QUORUM_EMBED_MCP=1 python -m uvicorn app.main:app --app-dir backend --port 8000")
+        check("Backend running", False, f"no answer from {API}", "QUORUM_ENV=development QUORUM_EMBED_MCP=1 python -m uvicorn app.main:app --app-dir backend --port 8000")
     else:
         ok = code == 200 and health and health.get("status") == "ok"
         check("Backend sees FalkorDB", ok, "" if ok else (health or {}).get("falkordb", {}).get("error", f"HTTP {code}"), "Restart the backend after FalkorDB is up")

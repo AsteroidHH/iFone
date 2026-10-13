@@ -1,6 +1,6 @@
 /** Landing-page cursor: snaps to the whole target, follows content that moves under a still pointer (keyboard scroll). node scripts/cursor.mjs [BASE] */
 import { chromium } from 'playwright-core';
-const b = await chromium.launch({ channel: 'msedge' });
+const b = await chromium.launch({ channel: process.env.QUORUM_BROWSER ?? 'msedge' });
 const p = await b.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
 await p.goto(process.argv[2] ?? 'http://127.0.0.1:5175/');
 await p.evaluate(() => sessionStorage.setItem('quorum:loaded', '1'));

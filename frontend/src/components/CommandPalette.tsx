@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { signedInWithToken, signOut } from '../api/client';
 import { copy } from '../copy';
 import { tools } from '../copy/tools';
 import { graphBus } from '../graph/bus';
@@ -74,6 +75,7 @@ function PaletteBody() {
       { id: 't-diff', group: 'go', label: 'Prompt diff', icon: 'doc', run: view('console', 'diff') },
       { id: 't-ledger', group: 'go', label: 'Actions and handoffs', icon: 'bolt', run: view('console', 'ledger') },
       { id: 't-insights', group: 'go', label: 'Graph insights', icon: 'chart', run: view('console', 'insights') },
+      ...(signedInWithToken() ? [{ id: 'signout', group: 'go' as const, label: 'Sign out of this hub', icon: 'lock', run: () => { signOut(); window.location.reload(); } }] : []),
       { id: 'landing', group: 'go', label: 'Back to the landing page', icon: 'logo', run: () => go('landing') },
       ...(['inject_poison', 'run_agents', 'audit', 'supersede', 'restore', 'reset'] as const).map((step) => ({
         id: `s-${step}`,

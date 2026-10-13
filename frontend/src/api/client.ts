@@ -26,28 +26,126 @@ const MOCK_CONFIG: RuntimeConfig = {
   tenants: ['acme', 'globex'],
 };
 
-export async function loadConfig(): Promise<RuntimeConfig> {
-  if (API_MODE === 'mock') {
-    config = MOCK_CONFIG;
-  } else {
-    try {
-      const res = await fetch('/config.json', { cache: 'no-store' });
-      if (res.ok) config = (await res.json()) as RuntimeConfig;
-      else devLog('warn', 'No /config.json found. Copy public/config.example.json and add tokens.', true);
-    } catch {
-      devLog('warn', 'Could not read /config.json; no tokens available.', true);
-    }
+const TOKEN_KEY = 'quorum:token';
+
+function readStored(): string | null {
+  try {
+    return sessionStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
   }
+}
+
+function writeStored(token: string | null) {
+  try {
+    if (token) sessionStorage.setItem(TOKEN_KEY, token);
+    else sessionStorage.removeItem(TOKEN_KEY);
+  } catch {
+    /* storage can be unavailable; the sign-in then lasts until reload */
+  }
+}
+
+/** Who a token is, from the hub. null when it is wrong, expired or revoked. */
+async function whoami(token: string): Promise<{ tenant: string; role: Role } | null> {
+  try {
+    const res = await fetch('/api/whoami', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+    if (!res.ok) return null;
+    const j = (await res.json()) as { tenant: string; role: Role };
+    return { tenant: j.tenant, role: j.role };
+  } catch {
+    return null;
+  }
+}
+
+function adopt(next: RuntimeConfig) {
+  config = next;
   if (config.tenants.length === 0) config.tenants = Object.keys(config.tokens);
   const first = config.tenants[0];
   if (first && !(session.tenant in config.tokens)) session.tenant = first;
+}
+
+export type AuthResult = 'ok' | 'needed';
+
+/**
+ * Finds a way to call the hub, in this order: the token this tab signed in with, the built-in demo tokens (the hub
+ * offers them only in development), a config.json an operator deployed. If none works the console asks for a token.
+ */
+export async function resolveAuth(): Promise<AuthResult> {
+  if (API_MODE === 'mock') {
+    adopt(MOCK_CONFIG);
+    return 'ok';
+  }
+  const stored = readStored();
+  if (stored) {
+    const who = await whoami(stored);
+    if (who) {
+      adopt({ tokens: { [who.tenant]: { [who.role]: stored } }, tenants: [who.tenant] });
+      session.tenant = who.tenant;
+      return 'ok';
+    }
+    writeStored(null);
+  }
+  try {
+    const res = await fetch('/api/dev-config', { cache: 'no-store' });
+    if (res.ok) {
+      adopt((await res.json()) as RuntimeConfig);
+      return 'ok';
+    }
+  } catch {
+    /* no hub answer here; the health gate reports it */
+  }
+  try {
+    const res = await fetch('/config.json', { cache: 'no-store' });
+    if (res.ok) {
+      const c = (await res.json()) as RuntimeConfig;
+      if (c.tokens && Object.keys(c.tokens).length) {
+        adopt(c);
+        return 'ok';
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return 'needed';
+}
+
+/** Checks a pasted token with the hub and, if it is good, keeps it for this tab only (sessionStorage). */
+export async function signIn(token: string): Promise<{ ok: true } | { ok: false; message: string }> {
+  const t = token.trim();
+  if (!t) return { ok: false, message: 'Paste a token first.' };
+  const who = await whoami(t);
+  if (!who) return { ok: false, message: 'The hub did not accept that token. It may be wrong, expired or revoked.' };
+  writeStored(t);
+  adopt({ tokens: { [who.tenant]: { [who.role]: t } }, tenants: [who.tenant] });
+  session.tenant = who.tenant;
+  session.role = who.role;
+  return { ok: true };
+}
+
+export function signOut() {
+  writeStored(null);
+  config = { tokens: {}, tenants: [] };
+}
+
+export const signedInWithToken = () => readStored() !== null;
+
+const unauthorized = new EventTarget();
+export const onUnauthorized = (cb: () => void) => {
+  unauthorized.addEventListener('401', cb);
+  return () => unauthorized.removeEventListener('401', cb);
+};
+
+export async function loadConfig(): Promise<RuntimeConfig> {
+  if (Object.keys(config.tokens).length === 0) await resolveAuth();
   return config;
 }
 
 export const tenants = () => config.tenants;
 
 export function tokenFor(role: Role = session.role): string | null {
-  return config.tokens[session.tenant]?.[role] ?? null;
+  const mine = config.tokens[session.tenant];
+  // A person who signed in with one token has that token for every role: the hub decides what it may do.
+  return mine?.[role] ?? Object.values(mine ?? {})[0] ?? null;
 }
 
 export class ApiError extends Error {
@@ -102,6 +200,7 @@ export async function api<T>(
       throw new ApiError('UNREACHABLE', 'unreachable', 0, endpoint);
     }
     status = res.status;
+    if (status === 401 && signedInWithToken()) unauthorized.dispatchEvent(new Event('401'));
     try {
       json = await res.json();
     } catch {

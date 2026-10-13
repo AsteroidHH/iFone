@@ -1,8 +1,0 @@
-{
-  "tokens": {
-    "acme": { "human": "token_human", "auditor": "token_auditor", "agent": "token_agent_scout" },
-    "globex": { "human": "token_globex_human", "auditor": "token_globex_auditor", "agent": "token_globex_agent" }
-  },
-  "tenants": ["acme", "globex"],
-  "note": "Development tokens for the local backend. In production replace this file at deploy time with your own tokens and set QUORUM_ENV=production; these stop working there."
-}

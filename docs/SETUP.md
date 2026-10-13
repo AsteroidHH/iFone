@@ -18,7 +18,7 @@ Open `http://localhost:5173`. The console opens by itself once FalkorDB is ready
 ```bash
 docker compose up -d falkordb
 pip install -r backend/requirements.txt
-QUORUM_EMBED_MCP=1 python -m uvicorn app.main:app --app-dir backend --port 8000
+QUORUM_ENV=development QUORUM_EMBED_MCP=1 python -m uvicorn app.main:app --app-dir backend --port 8000
 cd frontend && npm ci && npm run build && npx vite preview --port 5173
 python scripts/doctor.py
 ```
@@ -60,9 +60,9 @@ Open **Team** in the console (you need a `human` token). Add a team, then add a 
 | --- | --- | --- |
 | `QUORUM_FALKORDB_URL` | `redis://localhost:6379` | Where FalkorDB is. `FALKORDB_HOST` and `FALKORDB_PORT` are also read. |
 | `QUORUM_EMBED_MCP` | off | Serve MCP from the API process at `/mcp` so agents and the console share one graph. Needs `mcp>=2`. |
-| `QUORUM_ENV` | `development` | `production` turns off the built-in demo tokens and ad-hoc tokens. |
+| `QUORUM_ENV` | **`production`** | Secure by default: with nothing set there are no demo tokens, no ad-hoc tokens, `/mcp` needs an Authorization header, and the console asks for a token. `development` turns the demo tokens on for a local demo (`docker-compose.yml` sets it; the commands above do too). |
 | `QUORUM_TOKENS_JSON` | empty | `{"<token>": {"tenant": "acme", "role": "agent", "agent_id": "scout"}}`. With member tokens issued from the Team page, the only tokens accepted in production. |
-| `QUORUM_ALLOW_DYNAMIC_TOKENS` | on outside production | Accept ad-hoc `token_<tenant>_<role>` tokens. Anyone can forge these, so keep it off in production. |
+| `QUORUM_ALLOW_DYNAMIC_TOKENS` | on only in development | Accept ad-hoc `token_<tenant>_<role>` tokens. Anyone can forge these, so keep it off in production. |
 | `QUORUM_CORS_ORIGINS` | localhost only | Comma separated origins allowed to call the API from a browser. |
 | `QUORUM_PUBLIC_URL` | empty | Where other machines reach this hub (for example `https://quorum.example.com:8443`). The Connect page prints it in the snippets. |
 | `QUORUM_MCP_REQUIRE_HEADER` | on in production | Refuse `/mcp` requests that carry no `Authorization` header. A wrong header token is always refused. |
@@ -72,6 +72,20 @@ Open **Team** in the console (you need a `human` token). Add a team, then add a 
 | `QUORUM_EMBED_PROVIDER`, `QUORUM_EMBED_URL`, `QUORUM_EMBED_MODEL`, `QUORUM_EMBED_API_KEY` | `local` | Use any OpenAI-compatible embeddings endpoint (OpenAI, Ollama, LM Studio, vLLM) instead of the built-in vectors. |
 | `QUORUM_OBSERVER_MAX_FACTS` | `12` | Most facts one `observe` call may store. |
 | `QUORUM_PERSISTENCE` | `falkordb` | `memory` exists for unit tests only and shows a warning banner. Never use it for real work. |
+
+## Production in one command
+
+```bash
+python scripts/make_token.py --tenant acme --role human --name ops     # prints the token once and the QUORUM_TOKENS_JSON line
+cp .env.production.example .env.production                              # fill in FALKORDB_PASSWORD, the tokens, your public URL
+docker compose -f docker-compose.yml -f docker-compose.production.yml --env-file .env.production --profile tls up -d --build
+```
+
+This was run end to end: the hub starts with production rules, FalkorDB asks for its password and is not published on the host, only the HTTPS proxy (8443) is reachable, `/api/dev-config` is 404, demo and ad-hoc tokens get 401, `/mcp` without a header gets 401, the console shows a sign-in screen, and a member token works over header auth and the stdio bridge.
+
+**Signing in.** Without demo tokens the console opens a sign-in screen: paste a human token (from `make_token.py`, or a member token). It is checked with the hub (`GET /api/whoami`), kept in that tab's sessionStorage only, and a token the hub later refuses (expired, revoked) sends you back to sign-in. Member tokens expire after `QUORUM_MEMBER_TOKEN_TTL_DAYS` (the Team page lets you choose per member; rotating renews).
+
+**Also in place:** failed sign-ins lock an address out for a minute after `QUORUM_AUTH_FAILURES_PER_MIN` (20), request bodies are capped at `QUORUM_MAX_BODY_BYTES` (1 MB), every response carries `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and API answers are `no-store`. Things people do in the console (team and member changes, handoff reviews, scenario steps) are in the Activity log next to agent calls. Threat model: [`../SECURITY.md`](../SECURITY.md).
 
 ## Production checklist
 

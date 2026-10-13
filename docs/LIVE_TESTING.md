@@ -31,7 +31,7 @@ Or the app on your machine with FalkorDB in Docker:
 
 ```bash
 docker compose up -d falkordb
-QUORUM_EMBED_MCP=1 python -m uvicorn app.main:app --app-dir backend --port 8000
+QUORUM_ENV=development QUORUM_EMBED_MCP=1 python -m uvicorn app.main:app --app-dir backend --port 8000
 cd frontend && npm run build && QUORUM_MCP=http://127.0.0.1:8000 npx vite preview --port 5174 --strictPort
 cd frontend && npm run qa:live
 ```

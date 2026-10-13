@@ -214,7 +214,7 @@ claude mcp add --transport http quorum http://localhost:8000/mcp
 ```bash
 docker compose up -d falkordb
 pip install -r backend/requirements.txt
-QUORUM_EMBED_MCP=1 python -m uvicorn app.main:app --app-dir backend --port 8000
+QUORUM_ENV=development QUORUM_EMBED_MCP=1 python -m uvicorn app.main:app --app-dir backend --port 8000
 cd frontend && npm ci && npm run build && npx vite preview --port 5173
 ```
 

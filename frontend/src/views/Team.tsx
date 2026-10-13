@@ -187,6 +187,8 @@ function Members({ ws }: { ws: Ws }) {
   const [teamId, setTeamId] = useState('');
   const [client, setClient] = useState<ClientId>('claude-code');
   const [device, setDevice] = useState('');
+  const [days, setDays] = useState('90');
+  const [now] = useState(() => Date.now());
   const [err, setErr] = useState<string | null>(null);
   const [shown, setShown] = useState<string | null>(null);
   const team = (id: string) => ws.teams.find((t) => t.id === id)?.name ?? '—';
@@ -239,6 +241,7 @@ function Members({ ws }: { ws: Ws }) {
                   <td className="num">{fmt(m.tokensSaved)}</td>
                   <td>
                     <code className="mono tm-token">{shown === m.id && m.token ? m.token : m.tokenHint}</code>
+                    {ws.live && <small className={m.expiresAt && m.expiresAt < now ? 'bad-text' : 'muted'}>{expiry(m.expiresAt, now)}</small>}
                     {m.token && (
                       <button className="btn quiet" aria-label={`${shown === m.id ? 'Hide' : 'Show'} ${m.name}'s sample token`} onClick={() => setShown(shown === m.id ? null : m.id)}>
                         {shown === m.id ? 'Hide' : 'Show'}
@@ -267,7 +270,7 @@ function Members({ ws }: { ws: Ws }) {
         onSubmit={(e) => {
           e.preventDefault();
           if (!effectiveTeam) return setErr('Add a team first.');
-          void ws.addMember({ name, role, teamId: effectiveTeam, client, device: device.trim() }).then((r) => {
+          void ws.addMember({ name, role, teamId: effectiveTeam, client, device: device.trim(), expiresInDays: Number(days) }).then((r) => {
             setErr(r);
             if (!r) {
               setName('');
@@ -309,6 +312,15 @@ function Members({ ws }: { ws: Ws }) {
                 {c.name}
               </option>
             ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>Token lasts</span>
+          <select value={days} onChange={(e) => setDays(e.target.value)}>
+            <option value="30">30 days</option>
+            <option value="90">90 days</option>
+            <option value="365">1 year</option>
+            <option value="0">Never expires</option>
           </select>
         </label>
         <button className="btn primary">Add member</button>
@@ -470,6 +482,12 @@ function Mesh({ ws }: { ws: Ws }) {
       </div>
     </section>
   );
+}
+
+function expiry(at: number | undefined, now: number): string {
+  if (!at) return 'never expires';
+  const d = Math.ceil((at - now) / 86_400_000);
+  return d < 0 ? 'expired: rotate it' : d === 0 ? 'expires today' : `expires in ${d} day${d === 1 ? '' : 's'}`;
 }
 
 export function Team() {

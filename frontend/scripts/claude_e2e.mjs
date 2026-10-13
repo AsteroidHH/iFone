@@ -155,7 +155,7 @@ const direct = spawnSync('docker', ['exec', 'quorum-falkordb', 'redis-cli', 'GRA
 check('FalkorDB holds it as QUARANTINED (queried with redis-cli, not through the API)', direct.includes('QUARANTINED'), direct.replace(/\s+/g, ' ').slice(0, 80));
 
 /* ---------------- see it in the console ---------------- */
-const browser = await chromium.launch({ channel: 'msedge' });
+const browser = await chromium.launch({ channel: process.env.QUORUM_BROWSER ?? 'msedge' });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 await page.goto(`${BASE}/#/app`);
 await page.locator('.story-btn').first().waitFor({ timeout: 15000 });

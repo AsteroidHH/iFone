@@ -45,8 +45,11 @@ def body(res):
     return json.loads(res.content[0].text)
 
 
+ADMIN = {"token": ""}
+
+
 def human(hub, tenant):
-    return {"Authorization": f"Bearer token_{tenant}_human"}
+    return {"Authorization": f"Bearer {ADMIN['token'] or f'token_{tenant}_human'}"}
 
 
 def issue(hub, tenant, name):
@@ -58,6 +61,8 @@ def issue(hub, tenant, name):
 
 async def main(hub, strict):
     tenant = f"qa{uuid.uuid4().hex[:6]}"
+    if ADMIN["token"]:  # a production hub: tokens are real, and the tenant is whatever the admin token belongs to
+        tenant = httpx.get(f"{hub}/api/whoami", headers=human(hub, "")).json()["tenant"]
     tok = issue(hub, tenant, "Mira")["token"]
     mcp_url = f"{hub}/mcp"
 
@@ -87,12 +92,13 @@ async def main(hub, strict):
     audit = httpx.get(f"{hub}/api/audit", headers=human(hub, tenant)).json()
     check("hub: audit feed reads in plain language", any(e["text"].startswith("captured facts") for e in audit["events"]), audit["events"][0]["text"] if audit["events"] else "")
 
-    # --- stdio: the client launches mcp/server.py ---
-    env = {**os.environ, "QUORUM_MCP_TOKEN": tok, "QUORUM_RATE_LIMIT_TOOLS_PER_MIN": "0"}
-    params = StdioServerParameters(command=sys.executable, args=[str(ROOT / "mcp" / "server.py"), "--stdio"], env=env)
-    async with Client(params, mode="legacy") as s:
-        r = body(await s.call_tool("get_map", {}))
-        check("stdio: server.py with QUORUM_MCP_TOKEN, no token in any argument", "quorum map" in r.get("map", ""), r.get("map", "")[:30])
+    # --- stdio: the client launches mcp/server.py (needs FalkorDB reachable from this machine: not in a production stack) ---
+    if not ADMIN["token"]:
+      env = {**os.environ, "QUORUM_MCP_TOKEN": tok, "QUORUM_RATE_LIMIT_TOOLS_PER_MIN": "0"}
+      params = StdioServerParameters(command=sys.executable, args=[str(ROOT / "mcp" / "server.py"), "--stdio"], env=env)
+      async with Client(params, mode="legacy") as s:
+          r = body(await s.call_tool("get_map", {}))
+          check("stdio: server.py with QUORUM_MCP_TOKEN, no token in any argument", "quorum map" in r.get("map", ""), r.get("map", "")[:30])
 
     # --- stdio through the bridge to the hub ---
     bridge = StdioServerParameters(command=sys.executable, args=[str(ROOT / "mcp" / "bridge.py"), "--url", mcp_url], env={**os.environ, "QUORUM_MCP_TOKEN": tok})
@@ -132,5 +138,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--hub", default="http://127.0.0.1:8010")
     ap.add_argument("--strict-hub", default="")
+    ap.add_argument("--admin-token", default="", help="a human token for a production hub (instead of the development ad-hoc tokens)")
     a = ap.parse_args()
+    ADMIN["token"] = a.admin_token
     sys.exit(asyncio.run(main(a.hub.rstrip("/"), a.strict_hub.rstrip("/"))))
