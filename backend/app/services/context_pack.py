@@ -165,15 +165,13 @@ def _relevance(n: GraphNode, qwords: Set[str], idf: Optional[Dict[str, float]] =
     return float(score)
 
 
-SEM_MIN = 0.30  # cosine a node needs on its own (no shared keyword) to count as a semantic match
-_LEX_W, _SEM_W = 0.5, 0.5
 
 
 def rank(candidates: List[GraphNode], query: str, idf: Dict[str, float]) -> List[Tuple[GraphNode, float, float]]:
     """
     Hybrid ranking, best first: (node, score, cosine). Keyword evidence (IDF-weighted coverage of the question's words)
     still leads; the vector similarity breaks ties and rescues paraphrases that share no keyword with the question.
-    A node with no keyword hit needs a cosine of at least SEM_MIN. Score 0 means no match.
+    A node with no keyword hit needs a cosine of at least RANK_VECTOR_MIN (0.30 by default). Score 0 means no match.
     """
     from app.services import embeddings
 
@@ -188,10 +186,10 @@ def rank(candidates: List[GraphNode], query: str, idf: Dict[str, float]) -> List
     out: List[Tuple[GraphNode, float, float]] = []
     for n in candidates:
         l, c = lex[n.id], cos.get(n.id, 0.0)
-        if l <= 0 and c < SEM_MIN:
+        if l <= 0 and c < settings.RANK_VECTOR_MIN:
             out.append((n, 0.0, c))
             continue
-        out.append((n, _LEX_W * min(1.0, l / lmax) + _SEM_W * c + (0.02 if _kind(n) in ("fact", "conclusion") else 0.0), c))
+        out.append((n, settings.RANK_KEYWORD_WEIGHT * min(1.0, l / lmax) + settings.RANK_VECTOR_WEIGHT * c + (0.02 if _kind(n) in ("fact", "conclusion") else 0.0), c))
     return sorted(out, key=lambda x: -x[1])
 
 

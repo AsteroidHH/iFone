@@ -50,3 +50,50 @@ def _mk(name: str, default: int) -> RateLimiter:
 # Tool calls (one bucket per token) and HTTP requests (one bucket per token or address).
 tool_limiter = _mk("RATE_LIMIT_TOOLS_PER_MIN", 600)
 http_limiter = _mk("RATE_LIMIT_HTTP_PER_MIN", 3000)
+
+
+class FailureTracker:
+    """Counts failed sign-ins per address. After `limit` failures inside a minute the address is locked out until the oldest ages out."""
+
+    def __init__(self, limit: int):
+        self.limit = limit
+        self._hits: Dict[str, list] = {}
+        self._lock = threading.Lock()
+
+    def configure(self, limit: int) -> None:
+        with self._lock:
+            self.limit = limit
+            self._hits.clear()
+
+    def _recent(self, key: str, now: float) -> list:
+        hits = [t for t in self._hits.get(key, []) if now - t < 60]
+        if hits:
+            self._hits[key] = hits
+        else:
+            self._hits.pop(key, None)
+        return hits
+
+    def locked(self, key: str) -> float:
+        """Seconds the address must wait, or 0."""
+        if self.limit <= 0:
+            return 0.0
+        now = time.monotonic()
+        with self._lock:
+            hits = self._recent(key, now)
+            return max(0.0, 60 - (now - hits[0])) if len(hits) >= self.limit else 0.0
+
+    def record(self, key: str) -> None:
+        if self.limit <= 0:
+            return
+        now = time.monotonic()
+        with self._lock:
+            self._recent(key, now)
+            self._hits.setdefault(key, []).append(now)
+            if len(self._hits) > 20000:
+                for k in [k for k in self._hits if not self._recent(k, now)]:
+                    self._hits.pop(k, None)
+
+
+from app.config import settings as _settings  # noqa: E402
+
+auth_failures = FailureTracker(int(_settings.AUTH_FAILURES_PER_MIN))

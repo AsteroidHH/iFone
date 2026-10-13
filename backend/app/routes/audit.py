@@ -25,6 +25,13 @@ _VERBS = {
     "restore": ("restored", "alert"),
     "explain_blast_radius": ("previewed the impact of quarantining", "read"),
     "review_handoff": ("reviewed a handoff", "alert"),
+    "console.stage_action": ("staged in the console:", "write"),
+    "console.execute_action": ("executed in the console:", "write"),
+    "console.approve_correction": ("approved in the console:", "alert"),
+    "console.claim_handoff": ("claimed in the console:", "write"),
+    "console.review_handoff": ("reviewed in the console:", "alert"),
+    "console.scenario": ("ran the scenario step", "write"),
+    "console.workspace": ("changed the workspace:", "alert"),
 }
 
 
@@ -44,6 +51,13 @@ _INFINITIVE = {
     "restored": "restore",
     "previewed the impact of quarantining": "preview the impact of quarantining",
     "reviewed a handoff": "review a handoff",
+    "staged in the console:": "stage in the console:",
+    "executed in the console:": "execute in the console:",
+    "approved in the console:": "approve in the console:",
+    "claimed in the console:": "claim in the console:",
+    "reviewed in the console:": "review in the console:",
+    "ran the scenario step": "run the scenario step",
+    "changed the workspace:": "change the workspace:",
 }
 _QUOTED = ("retrieve_context", "remember_fact", "stage_action", "get_node", "observe")
 

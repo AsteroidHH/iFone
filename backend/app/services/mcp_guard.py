@@ -5,7 +5,7 @@ import contextvars
 import json
 import os
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, Optional, List
 
 from app.auth import resolve_token
 from app.config import settings
@@ -154,3 +154,23 @@ def guarded(fn):
 def viewer_of(auth: Dict[str, Any], store):
     return workspace.viewer_for(store, auth.get("member_id"))
 
+
+
+def record_event(info: Dict[str, Any], tool: str, summary: str, ms: float = 0.0, ok: bool = True, error: Optional[str] = None) -> None:
+    """Log something a person did through the console (or the capture hook) next to what agents did over MCP, so the audit log is complete."""
+    store = get_graph_store(info["tenant"])
+    rec = store.record_call(
+        {
+            "tool": tool,
+            "agent_id": info.get("agent_id"),
+            "member_id": info.get("member_id"),
+            "role": info["role"],
+            "summary": summary if len(summary) <= 70 else summary[:69] + "…",
+            "tokens": 0,
+            "baseline": 0,
+            "ms": round(ms, 1),
+            "ok": ok,
+            "error": error,
+        }
+    )
+    event_bus.publish(info["tenant"], "mcp_call", {"call": rec})

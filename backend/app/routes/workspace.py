@@ -1,7 +1,7 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.auth import AuthContext, get_auth_context, require_role
 from app.graph.queries import get_graph_store
@@ -44,6 +44,7 @@ class MemberIn(BaseModel):
     team_id: str
     client: str = "custom"
     device: str = ""
+    expires_in_days: Optional[int] = Field(None, ge=0, le=3650)  # None: the hub default; 0: never
 
 
 class LinkIn(BaseModel):
@@ -111,7 +112,7 @@ def add_member(body: MemberIn, auth: AuthContext = Depends(require_role(["human"
     """Creates a member and returns their token. It is shown once and only its hash is kept."""
     store = get_graph_store(auth.tenant)
     try:
-        member, token = ws.add_member(store, body.name, body.role, body.team_id, body.client, body.device)
+        member, token = ws.add_member(store, body.name, body.role, body.team_id, body.client, body.device, body.expires_in_days)
     except ws.WorkspaceError as e:
         raise _fail(e)
     return _done(auth, store, {"issued": {"member": member, "token": token}})

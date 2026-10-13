@@ -11,6 +11,7 @@ if _backend_dir not in sys.path:
 
 import os
 import threading
+import time
 import uuid
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
@@ -25,7 +26,9 @@ from app import db
 from app.db import FalkorUnavailable
 from app.auth import resolve_token
 from app.graph.queries import sync_all
-from app.ratelimit import http_limiter
+from app.ratelimit import auth_failures, http_limiter
+from app.services import console_audit
+from app.services.mcp_guard import record_event
 from app.models.common import ErrorCode
 from app.routes import (
     meta,
@@ -46,6 +49,7 @@ from app.routes import (
     catalog,
     observe,
     audit,
+    session as session_routes,
 )
 
 _mcp_app = None
@@ -142,24 +146,67 @@ def _problem(status_code: int, code: str, message: str, headers: dict | None = N
 
 
 @app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Headers every response carries: no sniffing, no framing, no referrer, and API answers are never cached."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    if request.url.path.startswith(("/api/", "/mcp")):
+        response.headers.setdefault("Cache-Control", "no-store")
+    return response
+
+
+def _client_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+@app.middleware("http")
 async def edge_guard(request: Request, call_next):
-    """Rate limit every API and MCP caller, and check the Authorization header on /mcp before a request reaches a tool."""
+    """
+    Everything between the network and a route: body size cap, failed-sign-in lockout, rate limits, the Authorization
+    header check on /mcp, and a record of what people do through the console.
+    """
     path = request.url.path
     is_mcp = path == "/mcp" or path.startswith("/mcp/")
     if request.method == "OPTIONS" or not (is_mcp or path.startswith("/api/")) or path.startswith(_OPEN_PATHS):
         return await call_next(request)
+    if int(request.headers.get("content-length") or 0) > settings.MAX_BODY_BYTES:
+        return _problem(413, "PAYLOAD_TOO_LARGE", f"Requests are limited to {settings.MAX_BODY_BYTES} bytes.")
+    ip = _client_ip(request)
+    wait = auth_failures.locked(ip)
+    if wait:
+        return _problem(429, "LOCKED_OUT", f"Too many failed sign-ins. Try again in {int(wait) + 1}s.", {"Retry-After": str(int(wait) + 1)})
     token = _bearer(request)
     if path != "/api/events":
-        ok, wait = http_limiter.allow(token or (request.client.host if request.client else "unknown"))
+        ok, wait = http_limiter.allow(token or ip)
         if not ok:
             return _problem(429, "RATE_LIMITED", f"Too many requests. Retry in {wait:.1f}s.", {"Retry-After": str(max(1, int(wait + 0.999)))})
     if is_mcp:
         if token:
             if not resolve_token(token):
+                auth_failures.record(ip)
                 return _problem(401, ErrorCode.UNAUTHENTICATED.value, "Invalid token in the Authorization header.", {"WWW-Authenticate": "Bearer"})
         elif settings.mcp_header_required():
             return _problem(401, ErrorCode.UNAUTHENTICATED.value, "This hub requires Authorization: Bearer <token> on /mcp.", {"WWW-Authenticate": "Bearer"})
-    return await call_next(request)
+    t0 = time.time()
+    response = await call_next(request)
+    if response.status_code == 401:
+        auth_failures.record(ip)
+    elif request.method != "GET" and response.status_code < 400 and token:
+        _audit_console_action(request, token, (time.time() - t0) * 1000)
+    return response
+
+
+def _audit_console_action(request: Request, token: str, ms: float) -> None:
+    """Writes by people (or the console) go into the same log as agent tool calls. Never lets a logging problem fail the request."""
+    try:
+        hit = console_audit.describe(request.method, request.url.path)
+        info = resolve_token(token) if hit else None
+        if hit and info:
+            record_event(info, hit[0], hit[1], ms)
+    except Exception:
+        pass
 
 
 @app.middleware("http")
@@ -228,6 +275,7 @@ app.include_router(mcp_info.router, prefix=api_prefix, tags=["MCP"])
 app.include_router(catalog.router, prefix=api_prefix, tags=["MCP"])
 app.include_router(observe.router, prefix=api_prefix, tags=["MCP"])
 app.include_router(audit.router, prefix=api_prefix, tags=["MCP"])
+app.include_router(session_routes.router, prefix=api_prefix, tags=["Session"])
 app.include_router(meta.router, prefix=api_prefix, tags=["Meta"])
 app.include_router(graph.router, prefix=api_prefix, tags=["Graph"])
 app.include_router(events.router, prefix=api_prefix, tags=["Events"])

@@ -42,17 +42,18 @@ def test_cors_is_not_wildcard():
     assert "*" not in settings.cors_origin_list()
 
 
-def test_demo_tokens_are_not_valid_in_production_when_tokens_are_configured(monkeypatch):
-    import importlib
-    import app.config as cfg
+def test_demo_tokens_are_not_valid_in_production_when_tokens_are_configured():
+    """Config is read at import, so this runs in a fresh interpreter instead of reloading the module the rest of the suite shares."""
+    import json
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
 
-    monkeypatch.setenv("QUORUM_ENV", "production")
-    monkeypatch.setenv("QUORUM_TOKENS_JSON", '{"real-token-1": {"tenant": "acme", "role": "human", "agent_id": "ops"}}')
-    fresh = importlib.reload(cfg)
-    try:
-        assert fresh.settings.DEMO_TOKENS == {"real-token-1": {"tenant": "acme", "role": "human", "agent_id": "ops"}}
-        assert "token_human" not in fresh.settings.DEMO_TOKENS
-    finally:
-        monkeypatch.delenv("QUORUM_ENV")
-        monkeypatch.delenv("QUORUM_TOKENS_JSON")
-        importlib.reload(cfg)
+    code = "import json; from app.config import settings; print(json.dumps(settings.DEMO_TOKENS))"
+    env = {**os.environ, "QUORUM_ENV": "production", "QUORUM_TOKENS_JSON": json.dumps({"real-token-1": {"tenant": "acme", "role": "human", "agent_id": "ops"}})}
+    out = subprocess.run([sys.executable, "-c", code], cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0, out.stderr
+    tokens = json.loads(out.stdout.strip().splitlines()[-1])
+    assert tokens == {"real-token-1": {"tenant": "acme", "role": "human", "agent_id": "ops"}}
+    assert "token_human" not in tokens

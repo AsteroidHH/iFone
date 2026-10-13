@@ -120,6 +120,9 @@ def find_member_by_token(store, token: str) -> Optional[Dict[str, Any]]:
     with store._lock:
         for m in _ws(store)["members"]:
             if secrets.compare_digest(m["token_hash"], h):
+                exp = m.get("expires_at")
+                if exp and exp < int(time.time() * 1000):
+                    return None  # an expired token is as good as a wrong one: the caller gets 401 and rotates it
                 return dict(m)
     return None
 
@@ -212,7 +215,20 @@ def remove_team(store, team_id: str) -> None:
         # Facts private to a removed team become unreadable by scoped members but stay in the graph for audit.
 
 
-def add_member(store, name: str, role: str, team_id: str, client: str, device: str) -> Tuple[Dict[str, Any], str]:
+def settings_ttl(days: Optional[int]) -> int:
+    from app.config import settings
+
+    return settings.MEMBER_TOKEN_TTL_DAYS if days is None else days
+
+
+def _expiry(days: Optional[int]) -> Optional[int]:
+    from app.config import settings
+
+    d = settings.MEMBER_TOKEN_TTL_DAYS if days is None else days
+    return int(time.time() * 1000) + d * 86_400_000 if d and d > 0 else None
+
+
+def add_member(store, name: str, role: str, team_id: str, client: str, device: str, expires_in_days: Optional[int] = None) -> Tuple[Dict[str, Any], str]:
     n = _clean_name(name, "member")
     if role not in ROLES:
         raise WorkspaceError("VALIDATION", f"Role must be one of {', '.join(ROLES)}.")
@@ -239,6 +255,8 @@ def add_member(store, name: str, role: str, team_id: str, client: str, device: s
             "token_hash": hash_token(token),
             "token_prefix": token[: len(f"qrm_{store.tenant}_") + 4],
             "created_at": int(time.time() * 1000),
+            "ttl_days": settings_ttl(expires_in_days),
+            "expires_at": _expiry(expires_in_days),
         }
         ws["members"].append(m)
         return {k: v for k, v in m.items() if k != "token_hash"}, token
@@ -250,6 +268,7 @@ def rotate_token(store, member_id: str) -> Tuple[Dict[str, Any], str]:
         token = f"qrm_{store.tenant}_{secrets.token_hex(16)}"
         m["token_hash"] = hash_token(token)
         m["token_prefix"] = token[: len(f"qrm_{store.tenant}_") + 4]
+        m["expires_at"] = _expiry(m.get("ttl_days", 0))  # a rotated token gets a fresh lifetime of the same length
         return {k: v for k, v in m.items() if k != "token_hash"}, token
 
 

@@ -6,6 +6,7 @@ from app.auth import AuthContext, get_auth_context
 from app.graph.queries import get_graph_store
 from app.services import context_pack as cp, embeddings, mcp_tools
 from app.services import workspace as ws
+from app.services.mcp_guard import record_event
 
 router = APIRouter()
 
@@ -23,7 +24,11 @@ def observe_route(body: ObserveIn, auth: AuthContext = Depends(get_auth_context)
     if auth.role == "auditor":
         raise HTTPException(status_code=403, detail={"error": {"code": "FORBIDDEN_ROLE", "message": "Auditors do not write facts."}})
     info = {"tenant": auth.tenant, "role": auth.role, "agent_id": auth.agent_id, "member_id": auth.member_id, "team_id": auth.team_id}
-    return mcp_tools.observe_text(info, body.text, body.source, body.dry_run, body.scope)
+    out = mcp_tools.observe_text(info, body.text, body.source, body.dry_run, body.scope)
+    if out.get("success") and not body.dry_run:
+        first = (out.get("facts") or [{}])[0].get("text") or f"text from {body.source}"
+        record_event(info, "observe", first)
+    return out
 
 
 @router.get("/context/semantic-check")

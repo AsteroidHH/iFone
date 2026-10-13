@@ -19,7 +19,9 @@ class Settings(BaseSettings):
     FALKORDB_URL: str = "redis://localhost:6379"
     # "falkordb" is the only mode for real use. "memory" exists for unit tests and says so loudly in /api/health.
     PERSISTENCE: Literal["falkordb", "memory"] = "falkordb"
-    ENV: Literal["development", "production"] = "development"
+    # Secure by default: with nothing set the hub behaves as production (no demo tokens, no ad-hoc tokens, header auth
+    # required). Set QUORUM_ENV=development for a local demo; docker-compose.yml does so explicitly.
+    ENV: Literal["development", "production"] = "production"
     # Accept ad-hoc tokens shaped like token_<tenant>_<role>. Convenient in development, a forgery hole in production.
     ALLOW_DYNAMIC_TOKENS: bool | None = None
     # Comma separated browser origins allowed to call the API. Empty means localhost only.
@@ -33,6 +35,16 @@ class Settings(BaseSettings):
     RATE_LIMIT_HTTP_PER_MIN: int = 3000
     # Passive fact extraction from transcripts (POST /api/observe and the observe tool).
     OBSERVER_MAX_FACTS: int = 12
+    # Ranking blend and the cosine a vector-only match needs (see services/context_pack.rank).
+    RANK_KEYWORD_WEIGHT: float = 0.5
+    RANK_VECTOR_WEIGHT: float = 0.5
+    RANK_VECTOR_MIN: float = 0.30
+    # Largest request body the API accepts, in bytes.
+    MAX_BODY_BYTES: int = 1_000_000
+    # Failed sign-ins from one address per minute before it is locked out for a minute. 0 turns it off.
+    AUTH_FAILURES_PER_MIN: int = 20
+    # New member tokens expire after this many days. 0 means they do not expire.
+    MEMBER_TOKEN_TTL_DAYS: int = 0
     # "hybrid" ranks by keywords plus vectors (default). "keyword" turns the vectors off, for comparison runs.
     RANKING: Literal["hybrid", "keyword"] = "hybrid"
     # Optional neural embeddings. "local" is built in; "openai" means any OpenAI-compatible /v1/embeddings endpoint
