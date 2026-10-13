@@ -34,7 +34,7 @@ async def sse_events(
         if effective_last_id is not None:
             missed = buf.get_events_since(effective_last_id)
             if missed is None:
-                yield f"event: resync_required\ndata: {{}}\n\n"
+                yield "event: resync_required\ndata: {}\n\n"
             else:
                 for ev in missed:
                     if not event_visible(store, viewer, ev):

@@ -1,6 +1,5 @@
 import time
-import threading
-from typing import List, Optional
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.auth import get_auth_context, AuthContext, require_role
 from app.models.handoffs import Handoff, ReviewRequest, ReviewDecision

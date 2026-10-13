@@ -1,5 +1,4 @@
 import time
-import uuid
 import threading
 from typing import Dict, Any, Optional
 from app.graph.queries import get_graph_store
@@ -11,7 +10,6 @@ from app.models.common import (
     SourceKind,
     Reversibility,
     GateStatus,
-    CompensationStatus,
 )
 from app.models.graph import (
     GraphNode,
@@ -19,10 +17,8 @@ from app.models.graph import (
     SourceInfo,
     AssertedBy,
     ActionInfo,
-    CompensationInfo,
 )
 from app.services.event_bus import event_bus
-from app.services.gate import quorum_gate
 from app.services.executor import action_executor
 from app.services.auditor import auditor_service
 from app.services.saga import saga_worker

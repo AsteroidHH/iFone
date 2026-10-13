@@ -10,15 +10,11 @@ if root_path not in sys.path:
 from app.services.mcp_tools import (
     remember_fact,
     derive,
-    stage_action,
-    execute_action,
     claim_handoff,
     quarantine,
-    retrieve_context,
 )
 from agents.runner import runner
 from agents.procedures import procedure_registry
-from agents.session import private_memory
 from app.graph.queries import get_graph_store
 from app.services.helpdesk import helpdesk_service
 
@@ -56,7 +52,7 @@ def test_mcp_derive_with_atomic_guard():
     assert "Atomic derivation check failed" in res_fail["error"]
 
     # Now create valid healthy parent
-    f_res = remember_fact(
+    remember_fact(
         id="fact_valid",
         key="refund_window",
         value="30",

@@ -62,7 +62,7 @@ def ask(hub: str, tenant: str, model: str, q: str, work: str):
         "Answer using ONLY the quorum MCP server's memory: call retrieve_context with format compact (you may rephrase the query). "
         f"Question: {q}\nReply with one short sentence that includes the exact number from the memory. If the memory does not contain the answer, reply exactly: NOT FOUND."
     )
-    for attempt in range(2):
+    for _attempt in range(2):
         r = subprocess.run(
             ["claude", "-p", prompt, "--model", model, "--mcp-config", str(cfg), "--strict-mcp-config", "--allowedTools", "mcp__quorum", "--no-session-persistence", "--max-turns", "8", "--output-format", "json"],
             cwd=work, capture_output=True, text=True, timeout=300, encoding="utf8",

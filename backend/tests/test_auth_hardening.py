@@ -1,5 +1,4 @@
 """Tokens: configured ones work, forged ones do not (in production), and garbage never becomes a human."""
-import pytest
 from fastapi.testclient import TestClient
 
 from app.auth import resolve_token

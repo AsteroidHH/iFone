@@ -1,9 +1,9 @@
 import uuid
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, status
-from app.auth import get_auth_context, AuthContext, require_role
+from app.auth import AuthContext, require_role
 from app.models.scenario import ScenarioResponse
-from app.models.common import ErrorCode, Status
+from app.models.common import ErrorCode
 from app.services.event_bus import event_bus
 
 from app.services.scenario_orchestrator import scenario_orchestrator

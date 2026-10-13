@@ -16,11 +16,9 @@ Generates:
 3. Precomputed 384-dim normalized embeddings so 'docker compose up' requires zero external downloads!
 """
 
-import json
-import time
 import hashlib
 import numpy as np
-from typing import List, Dict, Any
+from typing import List
 from graph import queries
 
 

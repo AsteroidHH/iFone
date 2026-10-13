@@ -2,7 +2,7 @@ import time
 import uuid
 import pytest
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from app.graph.queries import GraphStore, get_graph_store
+from app.graph.queries import get_graph_store
 from app.models.common import (
     Status,
     NodeKind,
@@ -405,7 +405,7 @@ def test_concurrent_event_bus_monotonic_seq():
     3. Sequence numbers form a strictly contiguous monotonically increasing range.
     """
     tenant = f"stress_bus_{uuid.uuid4().hex[:6]}"
-    buf = event_bus.get_tenant_buffer(tenant)
+    event_bus.get_tenant_buffer(tenant)
 
     def publish_worker(idx: int):
         return event_bus.publish(

@@ -79,7 +79,6 @@ def who_knows(
     auth: AuthContext = Depends(get_auth_context),
 ):
     store = get_graph_store(auth.tenant)
-    t = (topic or "").lower()
 
     # Aggregate expertise from graph
     with store._lock:

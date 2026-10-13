@@ -16,7 +16,6 @@ Vectors are cached per node and stored in FalkorDB (property `embedding` on the 
 does not recompute them and FalkorDB can answer nearest-neighbour queries (see /api/context/semantic-check).
 """
 import hashlib
-import math
 import re
 import threading
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
@@ -159,7 +158,7 @@ def local_vector(text: str) -> np.ndarray:
         i, sgn = _hash(feat)
         v[i] += sgn * weight
 
-    for w, s in zip(kept, stems):
+    for w, s in zip(kept, stems, strict=True):
         add("w:" + s, 1.0)
         concept = _LEX.get(w) or _LEX.get(s)
         if concept:
@@ -168,7 +167,7 @@ def local_vector(text: str) -> np.ndarray:
             padded = f"^{w}$"
             for j in range(len(padded) - 2):
                 add("t:" + padded[j : j + 3], 0.12)
-    for a, b in zip(stems, stems[1:]):
+    for a, b in zip(stems, stems[1:], strict=False):
         add(f"b:{a}_{b}", 0.5)
     low = " ".join(words)
     for phrase, canon in _PHRASES:
@@ -257,7 +256,7 @@ def vectors_for(nodes: Iterable) -> Dict[str, np.ndarray]:
         else:
             vecs = [local_vector(t) for t in texts]
         with _lock:
-            for (nid, _, d), v in zip(missing, vecs):
+            for (nid, _, d), v in zip(missing, vecs, strict=True):
                 # Never cache a fallback vector under the neural provider's digest.
                 if provider_name() == "local" or v.shape[0] != DIM or time.time() - _provider_failed_at > 30:
                     _cache[nid] = (d, v)

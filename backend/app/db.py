@@ -6,7 +6,7 @@ code FALKORDB_UNAVAILABLE) and says exactly what to do about it. Nothing quietly
 """
 import threading
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 from urllib.parse import urlparse
 
 from app.config import settings

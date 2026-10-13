@@ -1,6 +1,6 @@
 import threading
 import time
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 
 class MockHelpdeskService:

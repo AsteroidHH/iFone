@@ -12,7 +12,6 @@ if _backend_dir not in sys.path:
 import os
 import threading
 import uuid
-import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
@@ -27,7 +26,7 @@ from app.db import FalkorUnavailable
 from app.auth import resolve_token
 from app.graph.queries import sync_all
 from app.ratelimit import http_limiter
-from app.models.common import ErrorCode, ErrorResponse, ErrorDetail
+from app.models.common import ErrorCode
 from app.routes import (
     meta,
     graph,
@@ -44,6 +43,9 @@ from app.routes import (
     health,
     workspace as workspace_routes,
     mcp_info,
+    catalog,
+    observe,
+    audit,
 )
 
 _mcp_app = None
@@ -223,6 +225,9 @@ api_prefix = settings.API_PREFIX
 app.include_router(health.router, prefix=api_prefix, tags=["Health"])
 app.include_router(workspace_routes.router, prefix=api_prefix, tags=["Workspace"])
 app.include_router(mcp_info.router, prefix=api_prefix, tags=["MCP"])
+app.include_router(catalog.router, prefix=api_prefix, tags=["MCP"])
+app.include_router(observe.router, prefix=api_prefix, tags=["MCP"])
+app.include_router(audit.router, prefix=api_prefix, tags=["MCP"])
 app.include_router(meta.router, prefix=api_prefix, tags=["Meta"])
 app.include_router(graph.router, prefix=api_prefix, tags=["Graph"])
 app.include_router(events.router, prefix=api_prefix, tags=["Events"])

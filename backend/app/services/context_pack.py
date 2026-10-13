@@ -19,7 +19,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
-from app.models.common import NodeKind, Status
+from app.models.common import Status
 from app.models.graph import GraphNode
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9À-ɏ]+|\s+|[^\sA-Za-z0-9À-ɏ]")
@@ -232,7 +232,6 @@ def pack(
     inn, _ = _adjacency(scoped, edges)
     ids = short_ids(scoped.values())
 
-    qw = set(_words(query))
     idf = idf_weights(live.values())
     ranked = [(n, sc) for n, sc, _ in rank(list(live.values()), query, idf)]
     picked: List[str] = []

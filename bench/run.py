@@ -34,12 +34,10 @@ BACKEND_DIR = os.path.join(REPO_ROOT, "backend")
 if BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
 
-from app.graph.queries import get_graph_store, GraphStore
+from app.graph.queries import get_graph_store
 from app.models.common import Status, NodeKind, EdgeType, Tier, Reversibility, GateStatus, HandoffKind, HandoffStatus
 from app.models.graph import GraphNode, GraphEdge, ActionInfo, AssertedBy
 from app.models.handoffs import Handoff
-from app.services.executor import action_executor
-from app.services.gate import quorum_gate
 
 TENANT = "benchmark_tenant"
 
@@ -407,16 +405,16 @@ def run_poison_benchmark() -> Dict[str, Any]:
                 {"id": root_id, "key": f"key_d{d}", "vec": vec}
             )
             if d == 1:
-                falkor_queries.derive(TENANT, f"c_d1", [root_id], "Depth 1 conclusion")
+                falkor_queries.derive(TENANT, "c_d1", [root_id], "Depth 1 conclusion")
             elif d == 2:
-                falkor_queries.derive(TENANT, f"c_d2", [root_id], "Depth 2 conclusion")
-                falkor_queries.stage_action(TENANT, f"a_d2", [f"c_d2"], "EMAIL", {}, "REVERSIBLE", gate="PASSED")
+                falkor_queries.derive(TENANT, "c_d2", [root_id], "Depth 2 conclusion")
+                falkor_queries.stage_action(TENANT, "a_d2", ["c_d2"], "EMAIL", {}, "REVERSIBLE", gate="PASSED")
             elif d == 3:
-                falkor_queries.derive(TENANT, f"c_d3_1", [root_id], "Depth 3 intermediate")
-                falkor_queries.derive(TENANT, f"c_d3_2", [f"c_d3_1"], "Depth 3 conclusion")
-                falkor_queries.stage_action(TENANT, f"a_d3", [f"c_d3_2"], "REFUND", {}, "COMPENSABLE", gate="PASSED")
+                falkor_queries.derive(TENANT, "c_d3_1", [root_id], "Depth 3 intermediate")
+                falkor_queries.derive(TENANT, "c_d3_2", ["c_d3_1"], "Depth 3 conclusion")
+                falkor_queries.stage_action(TENANT, "a_d3", ["c_d3_2"], "REFUND", {}, "COMPENSABLE", gate="PASSED")
 
-            descendant_ids = [f"c_d{d}"] if d == 1 else ([f"c_d2", f"a_d2"] if d == 2 else [f"c_d3_1", f"c_d3_2", f"a_d3"])
+            descendant_ids = [f"c_d{d}"] if d == 1 else (["c_d2", "a_d2"] if d == 2 else ["c_d3_1", "c_d3_2", "a_d3"])
             t0 = time.time()
             cascade_out = falkor_queries.cascade(TENANT, root_id)
             containment_ms = (time.time() - t0) * 1000

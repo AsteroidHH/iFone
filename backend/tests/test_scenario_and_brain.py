@@ -2,7 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 from app.main import app
 from app.graph.queries import get_graph_store
-from app.models.common import Status, GateStatus, CompensationStatus, Reversibility
+from app.models.common import Status, CompensationStatus, Reversibility
 
 
 @pytest.fixture

@@ -1,8 +1,8 @@
 import uuid
-from typing import Dict, Any, Optional
+from typing import Optional
 from app.graph.queries import GraphStore
-from app.models.common import NodeKind, Status, SourceKind, Tier
-from app.models.graph import GraphNode, SourceInfo, AssertedBy
+from app.models.common import NodeKind, Status, SourceKind
+from app.models.graph import GraphNode, SourceInfo
 from app.services.event_bus import event_bus
 
 

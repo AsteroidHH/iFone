@@ -3,7 +3,7 @@ from typing import Optional, List
 from fastapi import Header, HTTPException, status, Depends
 from pydantic import BaseModel
 from app.config import settings
-from app.models.common import ErrorCode, ErrorDetail, ErrorResponse
+from app.models.common import ErrorCode
 
 
 class AuthContext(BaseModel):

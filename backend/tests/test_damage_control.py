@@ -27,7 +27,6 @@ def test_quarantine_executed_irreversible_action_creates_correction_notice(clien
     Quorum automatically generates a structured CorrectionNotice payload attached to an ESCALATION handoff,
     stores an :Alert memory node in the graph, and exposes the approve-correction endpoint.
     """
-    headers = {"Authorization": "Bearer token_auditor"}
     human_headers = {"Authorization": "Bearer token_human"}
 
     store = get_graph_store("acme")

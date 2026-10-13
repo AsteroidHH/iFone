@@ -1,6 +1,5 @@
-import time
 import uuid
-from typing import List, Optional, Dict, Any
+from typing import List, Dict, Any
 from app.graph.queries import GraphStore
 from app.models.common import (
     NodeKind,
@@ -88,7 +87,6 @@ class OutboxSagaWorker:
 
     def process_pending(self, store: GraphStore, tenant: str = "acme") -> List[GraphNode]:
         processed = []
-        now_ms = int(time.time() * 1000)
 
         for node in list(store.nodes.values()):
             if node.kind != NodeKind.ACTION or not node.action or not node.action.compensation:

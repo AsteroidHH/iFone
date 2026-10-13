@@ -149,7 +149,7 @@ def tokens(store, qs):
     nodes = [n for n in store.nodes.values()]
     idf = cp.idf_weights(nodes)
     full = compact = n = 0
-    for kind, q, truth in qs:
+    for kind, q, _truth in qs:
         if kind == "none":
             continue
         top = [x for x, s, _ in cp.rank(nodes, q, idf) if s > 0][:5]

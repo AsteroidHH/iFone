@@ -3,7 +3,7 @@ from collections import defaultdict
 from fastapi import APIRouter, Depends
 from app.auth import get_auth_context, AuthContext
 from app.graph.queries import get_graph_store
-from app.models.common import NodeKind, Reversibility, Status
+from app.models.common import NodeKind, Reversibility
 from app.models.scenario import BlastPreviewResponse, BlastReportResponse, BlastActionsBreakdown
 
 router = APIRouter()

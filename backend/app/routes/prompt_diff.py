@@ -5,7 +5,7 @@ from app.models.agents import PromptDiffResponse, PromptDiffNode
 from app.models.common import Status
 
 from app.graph.queries import get_graph_store
-from app.models.common import Status, NodeKind
+from app.models.common import NodeKind
 
 router = APIRouter()
 

@@ -2,7 +2,6 @@
 import json
 from pathlib import Path
 
-import pytest
 
 from app.graph.queries import GraphStore
 from app.models.common import EdgeType, NodeKind, Status
