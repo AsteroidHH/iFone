@@ -249,6 +249,7 @@ function useBackendGate() {
   }, [poll]);
 
   useEffect(() => {
+    if (API_MODE === 'mock') return; // the sample build has no backend to ask
     alive.current = true;
     // The first poll is a network request; state is set when it answers, not during the effect.
     // eslint-disable-next-line react-hooks/set-state-in-effect

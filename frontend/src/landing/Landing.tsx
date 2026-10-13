@@ -7,7 +7,6 @@ import { Loader, useLoaderNeeded } from './Loader';
 import { prefetchConsole, prefetchOnIdle } from './prefetch';
 import { LazyMount, ScrollChrome, useMagnetic } from './fx/Chrome';
 import { CursorRing } from './fx/CursorRing';
-import { LiquidCursor } from './fx/LiquidCursor';
 import { NetworkCanvas } from './fx/NetworkCanvas';
 import { Parallax } from './fx/Parallax';
 import { SplitText } from './fx/SplitText';
@@ -267,7 +266,6 @@ export function Landing({ onEnter }: { onEnter?: () => void }) {
         <i className="crop bl" />
         <i className="crop br" />
       </div>
-      <LiquidCursor />
       <CursorRing />
       <ScrollChrome sections={L.nav.links as [string, string][]} />
       <Nav />
