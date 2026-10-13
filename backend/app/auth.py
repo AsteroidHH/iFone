@@ -3,6 +3,7 @@ from typing import Optional, List
 from fastapi import Header, HTTPException, status, Depends
 from pydantic import BaseModel
 from app.config import settings
+from app.services import roles
 from app.models.common import ErrorCode
 
 
@@ -94,7 +95,7 @@ def require_role(allowed_roles: List[str]):
                 detail={
                     "error": {
                         "code": ErrorCode.FORBIDDEN_ROLE.value,
-                        "message": f"Role '{auth.role}' is not permitted to perform this action. Required: {allowed_roles}",
+                        "message": roles.refusal(auth.agent_id or "This token", auth.role, "do this", *allowed_roles),
                     }
                 },
             )

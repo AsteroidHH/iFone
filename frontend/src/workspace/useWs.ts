@@ -68,6 +68,8 @@ export interface Ws {
   removeTeam: (id: string) => Promise<string | null>;
   addMember: (m: { name: string; role: MemberRole; teamId: string; client: ClientId; device: string; expiresInDays?: number }) => Promise<string | null>;
   rotate: (id: string) => Promise<string | null>;
+  /** Change a member's permission level. Takes effect on their next call. */
+  setLevel: (id: string, role: MemberRole) => Promise<string | null>;
   removeMember: (id: string) => Promise<string | null>;
   link: (a: string, b: string, scope: Scope) => Promise<string | null>;
   unlink: (id: string) => Promise<string | null>;
@@ -140,6 +142,7 @@ export function useWs(): Ws {
       removeTeam: (id) => { act.removeTeam(id); return sync(null); },
       addMember: (m) => sync(act.addMember(m)),
       rotate: (id) => { act.rotateToken(id); return sync(null); },
+      setLevel: (id, role) => { act.setMemberRole(id, role); return sync(null); },
       removeMember: (id) => { act.removeMember(id); return sync(null); },
       link: (a, b, s) => sync(act.link(a, b, s)),
       unlink: (id) => { act.unlink(id); return sync(null); },
@@ -183,6 +186,7 @@ export function useWs(): Ws {
     removeTeam: (id) => run(() => srv.removeTeam(id)),
     addMember: (m) => run(() => srv.addMember({ name: m.name, role: m.role, team_id: m.teamId, client: m.client, device: m.device, expires_in_days: m.expiresInDays }), true),
     rotate: (id) => run(() => srv.rotateMember(id), true),
+    setLevel: (id, role) => run(() => srv.updateMember(id, { role })),
     removeMember: (id) => run(() => srv.removeMember(id)),
     link: (a, b, s) => run(() => srv.addLink(a, b, s)),
     unlink: (id) => run(() => srv.removeLink(id)),

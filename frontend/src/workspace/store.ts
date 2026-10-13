@@ -111,6 +111,7 @@ interface Actions {
   addMember: (m: { name: string; role: MemberRole; teamId: string; client: ClientId; device: string }) => string | null;
   removeMember: (id: string) => void;
   rotateToken: (id: string) => void;
+  setMemberRole: (id: string, role: MemberRole) => void;
   link: (a: string, b: string, scope: Scope) => string | null;
   unlink: (id: string) => void;
   pauseLink: (id: string) => void;
@@ -159,6 +160,7 @@ export const useWorkspace = create<{ w: Workspace } & Actions>((set, get) => {
       return null;
     },
     removeMember: (id) => commit((w) => ({ ...w, members: w.members.filter((m) => m.id !== id), links: w.links.filter((l) => l.a !== id && l.b !== id) })),
+    setMemberRole: (id, role) => commit((w) => ({ ...w, members: w.members.map((m) => (m.id === id ? { ...m, role } : m)) })),
     rotateToken: (id) => commit((w) => ({ ...w, members: w.members.map((m) => (m.id === id ? { ...m, token: newToken() } : m)) })),
     link: (a, b, scope) => {
       const w = get().w;

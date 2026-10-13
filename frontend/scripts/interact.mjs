@@ -402,6 +402,13 @@ check('chats tab lists members', (await page.locator('.cn-people li').count()) >
 await page.keyboard.press('8');
 await page.locator('.tm').waitFor({ timeout: 3000 }).catch(() => {});
 check('Team page shows seat usage', /\d+ \/ \d+/.test(await text('.tm-seats')));
+check('Team page explains each permission level with a table', (await page.locator('.lv-table tbody tr').count()) === 7 && (await page.locator('.lv-head', { hasText: 'Contributor' }).count()) === 1 && (await page.locator('.lv-head', { hasText: 'Reviewer' }).count()) === 1 && (await page.locator('.lv-head', { hasText: 'Admin' }).count()) === 1);
+const lvl = page.locator('.lv-select').first();
+const lvBefore = await lvl.inputValue();
+await lvl.selectOption(lvBefore === 'auditor' ? 'agent' : 'auditor');
+await wait(300);
+check('an admin can change the permission level of a member from the table', (await page.locator('.lv-select').first().inputValue()) !== lvBefore);
+check('the level column uses plain names, not role codes', (await page.locator('.lv-select option', { hasText: 'Reviewer' }).count()) > 0);
 await page.keyboard.press('9');
 await page.locator('.au').waitFor({ timeout: 3000 }).catch(() => {});
 await page.locator('.au-row').first().waitFor({ timeout: 8000 }).catch(() => {});
