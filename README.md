@@ -5,8 +5,8 @@
 **Git revert for AI agent beliefs.**  
 *Quorum rolls back a poisoned fact and everything built on it, and no later retrieval can return it.*
 
-[![Backend Tests](https://img.shields.io/badge/pytest-195%20passed%20%C2%B7%2092%25%20coverage-brightgreen?style=flat-square)](backend/tests)
-[![Frontend Tests](https://img.shields.io/badge/vitest-99%20passed-brightgreen?style=flat-square)](frontend)
+[![Backend Tests](https://img.shields.io/badge/pytest-223%20passed%20%C2%B7%2092%25%20coverage-brightgreen?style=flat-square)](backend/tests)
+[![Frontend Tests](https://img.shields.io/badge/vitest-103%20passed-brightgreen?style=flat-square)](frontend)
 [![Accessibility](https://img.shields.io/badge/axe--core-0%20violations%20(20%20screens)-brightgreen?style=flat-square)](frontend/scripts/a11y.mjs)
 [![Types](https://img.shields.io/badge/mypy%20%2B%20ruff-clean-brightgreen?style=flat-square)](mypy.ini)
 [![Benchmark](https://img.shields.io/badge/throughput%20on%20FalkorDB-757.6%20ops%2Fsec-blue?style=flat-square)](bench/results.json)
@@ -149,7 +149,7 @@ Measured on FalkorDB 8.10.2, on one developer laptop, by the harness above. The 
 |---|---|---|---|
 | **Frontend Console & Landing** | `3000` / `5173` | HTTP (React + Vite + Cytoscape) | Dual interface: Landing page (`#/`) and Incident Command Room (`#/app`) |
 | **Backend REST & SSE** | `8000` | HTTP / Server-Sent Events | FastAPI core causal API, event streaming, scenario driver |
-| **MCP Server** (embedded in the backend; standalone only with `--profile standalone-mcp`) | `8000` (`/mcp`) / `8001` standalone | Streamable HTTP (`/mcp`) & Stdio | Model Context Protocol server exposing 10 agent and auditor tools |
+| **MCP Server** (embedded in the backend; standalone only with `--profile standalone-mcp`) | `8000` (`/mcp`) / `8001` standalone | Streamable HTTP (`/mcp`) & Stdio | Model Context Protocol server exposing 15 agent, token-saving, and auditor tools |
 | **Mock Helpdesk API** | `8002` | HTTP / JSON | External ticketing and refund API with atomic Tombstone protection |
 | **FalkorDB Graph Engine** | `6379` | Redis / Cypher | Graph database engine with vector indexing and per-tenant Redis ACLs |
 | **FalkorDB Web Browser** | `8080` | HTTP | Interactive FalkorDB graph visualizer |
