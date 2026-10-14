@@ -476,7 +476,7 @@ def find_path(store, a: str, b: str, viewer: Optional[Viewer] = None) -> Dict[st
 
     if not path:
         text = f"no chain between {ids[na.id]} and {ids[nb.id]}"
-        return {"text": text, "path": [], "tokens": estimate_tokens(text), "tokens_baseline": estimate_tokens(json.dumps([_raw(na), _raw(nb)], indent=2)), "success": True}
+        return {"text": text, "path": [], "hops": 0, "tokens": estimate_tokens(text), "tokens_baseline": estimate_tokens(json.dumps([_raw(na), _raw(nb)], indent=2)), "success": True}
 
     text = " → ".join(f"{ids[i]} {_clip(scoped[i].label, 36)}" for i in path)
     base = estimate_tokens(json.dumps([_raw(scoped[i]) for i in path], indent=2))

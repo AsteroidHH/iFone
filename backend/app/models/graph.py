@@ -35,6 +35,7 @@ class ActionInfo(BaseModel):
     reversibility: Reversibility
     executed: bool = False
     confirmed: bool = False
+    executed_at: Optional[int] = None
     gate: GateStatus
     procedure_id: Optional[str] = None
     idempotency_key: Optional[str] = None
@@ -46,7 +47,7 @@ class GraphNode(BaseModel):
     id: str
     kind: NodeKind
     is_decision: Optional[bool] = None
-    label: str = Field(..., max_length=60)
+    label: str = Field(..., max_length=120)
     text: Optional[str] = None
     key: Optional[str] = None
     value: Optional[str] = None

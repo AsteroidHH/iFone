@@ -94,7 +94,7 @@ def audit(
         teams = {t["id"]: t["name"] for t in store.workspace["teams"]}
     events = []
     for c in reversed(visible_calls(store, auth)):
-        if since and c["ts"] <= since:
+        if since is not None and c["ts"] <= since:
             break
         m = members.get(c.get("member_id") or "")
         s = _sentence(c)
@@ -125,10 +125,28 @@ def audit(
         w.writerow(["time_utc", "who", "team", "client", "tool", "what", "severity", "ok", "tokens", "tokens_saved"])
         import datetime as _dt
 
+        def _clean_cell(v: Any) -> Any:
+            if not isinstance(v, str):
+                return v
+            s = str(v)
+            if not s.strip():
+                return s
+            lines = s.splitlines(keepends=True)
+            return "".join("'" + line_item if line_item.lstrip() and line_item.lstrip()[0] in "=+-@\t\r\n|%" else line_item for line_item in lines)
+
         for e in events:
-            # a leading = + - @ \t \r \n (even with leading whitespace) would make a spreadsheet run the cell as a formula
-            cell = lambda v: ("'" + str(v)) if isinstance(v, str) and bool(v.strip()) and v.lstrip()[:1] in "=+-@\t\r\n" else v  # noqa: E731
-            w.writerow([_dt.datetime.fromtimestamp(e["ts"] / 1000, _dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S"), cell(e["who"]), cell(e["team"] or ""), cell(e["client"] or ""), cell(e["tool"]), cell(e["text"]), cell(e["severity"]), e["ok"], e["tokens"], e["saved"]])
+            w.writerow([
+                _dt.datetime.fromtimestamp(e["ts"] / 1000, _dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+                _clean_cell(e["who"]),
+                _clean_cell(e["team"] or ""),
+                _clean_cell(e["client"] or ""),
+                _clean_cell(e["tool"]),
+                _clean_cell(e["text"]),
+                _clean_cell(e["severity"]),
+                e["ok"],
+                e["tokens"],
+                e["saved"],
+            ])
         return Response(buf.getvalue(), media_type="text/csv", headers={"Content-Disposition": 'attachment; filename="quorum-audit.csv"'})
     by_sev: Dict[str, int] = {}
     agents = set()

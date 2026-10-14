@@ -56,6 +56,7 @@ class ScenarioOrchestrator:
             store.epoch = 1
 
         helpdesk_service.reset()
+        procedure_registry.reset()
         with store.handoff_lock:
             store.handoffs.clear()
 

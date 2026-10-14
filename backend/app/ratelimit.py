@@ -110,7 +110,8 @@ class FailureTracker:
             self._recent(key, now)
             self._hits.setdefault(key, []).append(now)
             if len(self._hits) > self.max_entries:
-                oldest = min(self._hits.keys(), key=lambda k: self._hits[k][-1] if self._hits[k] else 0)
+                # Prioritize unlocked keys first (so attacker dummy traffic cannot evict locked IPs), then oldest
+                oldest = min(self._hits.keys(), key=lambda k: (len(self._hits[k]) >= self.limit, self._hits[k][-1] if self._hits[k] else 0))
                 self._hits.pop(oldest, None)
 
 

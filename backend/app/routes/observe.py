@@ -22,7 +22,6 @@ class ObserveIn(BaseModel):
 
 @router.post("/observe")
 def observe_route(body: ObserveIn, auth: AuthContext = Depends(get_auth_context)):
-    """Passive capture: send a chat transcript or tool output; durable facts in it are stored with their source sentence."""
     if auth.role == "auditor":
         raise HTTPException(status_code=403, detail={"error": {"code": "FORBIDDEN_ROLE", "message": "Auditors do not write facts."}})
     info = {"tenant": auth.tenant, "role": auth.role, "agent_id": auth.agent_id, "member_id": auth.member_id, "team_id": auth.team_id}

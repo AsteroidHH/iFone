@@ -32,7 +32,7 @@ def remember_fact(
     store = get_graph_store(auth["tenant"])
     fact_id = id or f"fact_{uuid.uuid4().hex[:6]}"
 
-    tier_val = Tier.ROOT if auth.get("agent_id") in ("agent_root", "root") or auth.get("role") in ("admin", "human") else Tier.NEW
+    tier_val = Tier.ROOT if (auth.get("member_id") is None and auth.get("agent_id") in ("agent_root", "root")) or auth.get("role") in ("admin", "human") else Tier.NEW
     scope_team = None
     if scope == "team":
         if not auth.get("team_id"):
@@ -70,6 +70,7 @@ def remember_fact(
         "fact_id": fact.id,
         "status": fact.status.value,
         "verdict": verdict,
+        "success": True,
     }
 
 
@@ -163,10 +164,17 @@ def derive(
 
     viewer = _viewer(auth, store)
 
+    if not isinstance(parent_ids, (list, tuple)) or not parent_ids:
+        return {
+            "epoch": store.epoch,
+            "error": "Atomic derivation check failed: parent_ids must be a non-empty list.",
+            "success": False,
+        }
+
     # Atomic derivation check
     with store._lock:
         parents = [p for p in (resolve_ref(store.nodes, pid) for pid in parent_ids) if p is not None and viewer.can_see(p)]
-        if not parent_ids or len(parents) != len(parent_ids) or any(p.status != Status.HEALTHY for p in parents) or any(getattr(p, "stale", False) for p in parents):
+        if len(parents) != len(parent_ids) or any(p.status != Status.HEALTHY for p in parents) or any(getattr(p, "stale", False) for p in parents):
             return {
                 "epoch": store.epoch,
                 "error": "Atomic derivation check failed: one or more parents do not exist or are not HEALTHY.",
@@ -221,14 +229,22 @@ def stage_action(
     auth = _get_auth(token)
     store = get_graph_store(auth["tenant"])
 
-    rev_enum = getattr(Reversibility, reversibility.upper(), Reversibility.COMPENSABLE)
+    rev_str = str(reversibility or "").strip().upper()
+    rev_enum = getattr(Reversibility, rev_str, Reversibility.IRREVERSIBLE)
 
     viewer = _viewer(auth, store)
+
+    if not isinstance(parent_ids, (list, tuple)) or not parent_ids:
+        return {
+            "epoch": store.epoch,
+            "error": "Atomic derivation check failed: parent_ids must be a non-empty list.",
+            "success": False,
+        }
 
     # 1. Atomic derivation check
     with store._lock:
         parents = [p for p in (resolve_ref(store.nodes, pid) for pid in parent_ids) if p is not None and viewer.can_see(p)]
-        if not parent_ids or len(parents) != len(parent_ids) or any(p.status != Status.HEALTHY for p in parents) or any(getattr(p, "stale", False) for p in parents):
+        if len(parents) != len(parent_ids) or any(p.status != Status.HEALTHY for p in parents) or any(getattr(p, "stale", False) for p in parents):
             return {
                 "epoch": store.epoch,
                 "error": "Atomic derivation check failed: one or more parents do not exist or are not HEALTHY.",

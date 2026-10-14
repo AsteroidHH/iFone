@@ -49,7 +49,8 @@ def claim_handoff(
         # Allowed if PENDING or if IN_PROGRESS with expired lease
         is_claimable = (
             target.status == HandoffStatus.PENDING
-            or (target.status == HandoffStatus.IN_PROGRESS and target.lease_until and target.lease_until < now_ms)
+            or target.status == HandoffStatus.TIMED_OUT
+            or (target.status == HandoffStatus.IN_PROGRESS and target.lease_until is not None and target.lease_until < now_ms)
         )
 
         if not is_claimable:
@@ -79,6 +80,11 @@ def claim_handoff(
                 "lease_until": target.lease_until,
             },
         )
+        event_bus.publish(
+            auth.tenant,
+            "handoff_updated",
+            {"handoff": target.model_dump()},
+        )
 
         return target
 
@@ -90,19 +96,19 @@ def review_handoff(
     auth: AuthContext = Depends(require_role(["human"])),
 ):
     store = get_graph_store(auth.tenant)
-    with store.handoff_lock:
-        target = next((h for h in store.handoffs if h.id == handoff_id), None)
-        if not target:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={"error": {"code": ErrorCode.NOT_FOUND.value, "message": f"Handoff '{handoff_id}' not found."}},
-            )
+    with store._lock:
+        with store.handoff_lock:
+            target = next((h for h in store.handoffs if h.id == handoff_id), None)
+            if not target:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"error": {"code": ErrorCode.NOT_FOUND.value, "message": f"Handoff '{handoff_id}' not found."}},
+                )
 
-        target.status = HandoffStatus.COMPLETED
+            target.status = HandoffStatus.COMPLETED
 
-        if body.decision in [ReviewDecision.APPROVE, "approve", "APPROVE"] and target.context_root_id:
-            from app.models.common import GateStatus
-            with store._lock:
+            if body.decision in [ReviewDecision.APPROVE, "approve", "APPROVE"] and target.context_root_id:
+                from app.models.common import GateStatus
                 action_node = store.nodes.get(target.context_root_id)
                 if action_node and action_node.action:
                     action_node.action.gate = GateStatus.PASSED

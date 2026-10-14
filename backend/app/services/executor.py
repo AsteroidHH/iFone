@@ -1,3 +1,4 @@
+import time
 from typing import Optional
 from fastapi import HTTPException, status
 from app.graph.queries import GraphStore
@@ -42,7 +43,7 @@ class ActionExecutorService:
             )
 
         # 2. Call external API (Helpdesk) with idempotency key
-        idempotency_key = getattr(action.action, "idempotency_key", f"key_{action_id}")
+        idempotency_key = getattr(action.action, "idempotency_key", None) or f"key_{action_id}"
         resp = helpdesk_service.execute_action(
             idempotency_key=idempotency_key,
             action_type=action.action.type,
@@ -51,6 +52,7 @@ class ActionExecutorService:
 
         if resp.get("status") == 200:
             action.action.confirmed = True
+            action.action.executed_at = int(time.time() * 1000)
             event_bus.publish(
                 tenant,
                 "action_executed",

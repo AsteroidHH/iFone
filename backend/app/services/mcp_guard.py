@@ -50,7 +50,8 @@ def _summary(tool: str, bound: Dict[str, Any]) -> str:
         v = bound.get(key)
         if isinstance(v, str) and v:
             if tool == "find_path":
-                return f"{bound.get('from_id')} to {bound.get('to_id')}"
+                s = f"{bound.get('from_id')} to {bound.get('to_id')}"
+                return s if len(s) <= 70 else s[:69] + "…"
             return v if len(v) <= 70 else v[:69] + "…"
     return ""
 

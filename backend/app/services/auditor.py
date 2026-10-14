@@ -38,7 +38,7 @@ class AuditorService:
         # Find existing healthy facts with same key
         conflicting_facts = [
             f for f in store.nodes.values()
-            if f.kind == NodeKind.FACT and f.status == Status.HEALTHY and f.id != new_fact.id and f.key == new_fact.key and f.value != new_fact.value
+            if f.kind == NodeKind.FACT and f.status == Status.HEALTHY and f.id != new_fact.id and f.key == new_fact.key and f.value is not None and new_fact.value is not None and f.value != new_fact.value
         ]
 
         if not conflicting_facts:
@@ -50,12 +50,12 @@ class AuditorService:
         old_tier = old_fact.asserted_by.tier if old_fact.asserted_by else Tier.NEW
         new_tier = new_fact.asserted_by.tier if new_fact.asserted_by else Tier.NEW
 
-        # Rule 1: Contradicting a root fact auto-quarantines the CHALLENGER
-        if old_tier == Tier.ROOT:
+        # Rule 1: Contradicting a root fact auto-quarantines the CHALLENGER (unless both are ROOT)
+        if old_tier == Tier.ROOT and new_tier != Tier.ROOT:
             self.quarantine(store, new_fact.id, reason="Contradicts root-tier policy fact", tenant=tenant, request_id=request_id)
             return {"verdict": "CHALLENGER_QUARANTINED", "quarantined_id": new_fact.id}
 
-        if new_tier == Tier.ROOT:
+        if new_tier == Tier.ROOT and old_tier != Tier.ROOT:
             self.quarantine(store, old_fact.id, reason="Contradicted by root-tier assertion", tenant=tenant, request_id=request_id)
             return {"verdict": "OLD_FACT_QUARANTINED", "quarantined_id": old_fact.id}
 

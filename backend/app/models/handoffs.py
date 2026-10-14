@@ -15,6 +15,7 @@ class Handoff(BaseModel):
     lease_until: Optional[int] = None
     context_root_id: Optional[str] = None
     correction_notice: Optional[Dict[str, Any]] = None
+    note: Optional[str] = None
 
 
 class ReviewDecision(str, Enum):

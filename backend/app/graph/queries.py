@@ -190,7 +190,7 @@ class GraphStore:
         """Finds all leaf ancestor Facts (ancestor Facts that have no incoming LEADS_TO edges)."""
         with self._lock:
             start = time.time()
-            ancestors = self.get_ancestors(node_id, edge_types=["LEADS_TO"])
+            ancestors = self.get_ancestors(node_id, edge_types=["LEADS_TO", "SUPPORTS"])
             facts = [n for n in ancestors if n.kind == NodeKind.FACT]
 
             leaf_facts = []
@@ -286,7 +286,7 @@ class GraphStore:
                     visited = {root_id}
                     while queue:
                         curr_id, curr_depth = queue.pop(0)
-                        outgoing = [e for e in self.edges if e.source == curr_id and e.type.value in ["LEADS_TO", "SUPPORTS"]]
+                        outgoing = [e for e in self.edges if e.source == curr_id and e.type.value in ["LEADS_TO", "SUPPORTS", "FROM_SOURCE"]]
                         for edge in outgoing:
                             child_id = edge.target
                             if child_id not in visited:
@@ -331,7 +331,7 @@ class GraphStore:
 
             while queue:
                 curr_id, curr_depth = queue.pop(0)
-                outgoing = [e for e in self.edges if e.source == curr_id and e.type.value in ["LEADS_TO", "SUPPORTS"]]
+                outgoing = [e for e in self.edges if e.source == curr_id and e.type.value in ["LEADS_TO", "SUPPORTS", "FROM_SOURCE"]]
                 for edge in outgoing:
                     child_id = edge.target
                     if child_id not in visited:
@@ -437,28 +437,36 @@ class GraphStore:
                     if src and tgt and src.status == Status.QUARANTINED and tgt.status == Status.HEALTHY:
                         healthy_under_quarantined += 1
 
-            # 2. DAG acyclicity (cycle detection over LEADS_TO / SUPPORTS)
+            # 2. DAG acyclicity (cycle detection over LEADS_TO / SUPPORTS / FROM_SOURCE)
             adj: Dict[str, List[str]] = {}
             for edge in self.edges:
-                if edge.type.value in ["LEADS_TO", "SUPPORTS"]:
+                if edge.type.value in ["LEADS_TO", "SUPPORTS", "FROM_SOURCE"]:
                     adj.setdefault(edge.source, []).append(edge.target)
 
             visited: Dict[str, int] = {}  # 0: unvisited, 1: visiting, 2: visited
             has_cycle = False
 
-            def dfs(node_id: str):
-                nonlocal has_cycle
-                visited[node_id] = 1
-                for neighbor in adj.get(node_id, []):
-                    if visited.get(neighbor) == 1:
-                        has_cycle = True
-                    elif visited.get(neighbor, 0) == 0:
-                        dfs(neighbor)
-                visited[node_id] = 2
-
             for nid in list(self.nodes.keys()):
                 if visited.get(nid, 0) == 0:
-                    dfs(nid)
+                    stack = [(nid, 0)]
+                    while stack:
+                        curr, idx = stack[-1]
+                        if visited.get(curr, 0) == 0:
+                            visited[curr] = 1
+                        neighbors = adj.get(curr, [])
+                        if idx < len(neighbors):
+                            nxt = neighbors[idx]
+                            stack[-1] = (curr, idx + 1)
+                            if visited.get(nxt) == 1:
+                                has_cycle = True
+                                break
+                            elif visited.get(nxt, 0) == 0:
+                                stack.append((nxt, 0))
+                        else:
+                            visited[curr] = 2
+                            stack.pop()
+                    if has_cycle:
+                        break
 
             # 3. Executed actions have healthy ancestors
             bad_ancestors_count = 0
@@ -528,6 +536,10 @@ def tenant_exists(tenant: str) -> bool:
                 cutoff = now - 60.0
                 for k in [k for k, t in _missing_tenants.items() if t < cutoff]:
                     del _missing_tenants[k]
+                if len(_missing_tenants) > 5000:
+                    sorted_keys = sorted(_missing_tenants.keys(), key=lambda k: _missing_tenants[k])
+                    for k in sorted_keys[:2500]:
+                        _missing_tenants.pop(k, None)
         else:
             _missing_tenants.pop(tenant, None)
     return exists

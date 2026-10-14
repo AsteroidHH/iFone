@@ -76,7 +76,8 @@ def retrieve_context(
         for f, score in ranked
         if score > 0
     ]
-    out = {"epoch": store.epoch, "count": len(matched), "context": matched[: max(1, k)]}
+    k_val = max(1, int(k or 5)) if not isinstance(k, int) else max(1, k)
+    out = {"epoch": store.epoch, "count": len(matched), "context": matched[:k_val]}
     _remember_delivery(store, auth, [m["id"] for m in out["context"]], query)
     out["tokens"] = estimate_tokens(json.dumps(out))
     out["tokens_baseline"] = cp.baseline_tokens(nodes, query)
@@ -125,7 +126,7 @@ def delta(token: str = "") -> Dict[str, Any]:
         return {"epoch": store.epoch, "text": text, "invalidated": [], "tokens": estimate_tokens(text), "tokens_baseline": 0}
     with store._lock:
         nodes = {n.id: n for n in store.nodes.values()}
-    ids = cp.short_ids(nodes.values())
+    ids = cp.short_ids([n for n in nodes.values() if viewer.can_see(n)])
     gone: List[str] = []
     for i in sorted(delivered):
         n = nodes.get(i)

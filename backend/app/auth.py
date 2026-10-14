@@ -65,7 +65,7 @@ def resolve_token(token: str) -> Optional[dict]:
 
 
 def get_auth_context(authorization: Optional[str] = Header(None)) -> AuthContext:
-    if not authorization or not authorization.startswith("Bearer "):
+    if not authorization or authorization[:7].lower() != "bearer ":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
@@ -76,7 +76,7 @@ def get_auth_context(authorization: Optional[str] = Header(None)) -> AuthContext
             },
         )
 
-    token = authorization.split("Bearer ", 1)[1].strip()
+    token = authorization[7:].strip()
     info = resolve_token(token)
     if info:
         return AuthContext(tenant=info["tenant"], role=info["role"], agent_id=info.get("agent_id"), token=token, member_id=info.get("member_id"), team_id=info.get("team_id"))

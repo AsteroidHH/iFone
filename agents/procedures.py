@@ -25,35 +25,39 @@ class ProcedureRegistry:
     """
     def __init__(self):
         self._lock = threading.RLock()
-        self._procedures: Dict[str, Procedure] = {
-            "proc_refund_standard": Procedure(
-                id="proc_refund_standard",
-                task_type="refund",
-                steps=["verify_policy", "check_order_receipt", "stage_refund", "execute_refund"],
-                uses=42,
-                successes=39,
-                failures=3,
-                seeded=True,
-            ),
-            "proc_refund_strict": Procedure(
-                id="proc_refund_strict",
-                task_type="refund",
-                steps=["verify_policy_root_only", "check_receipt", "verify_gate", "stage_refund", "execute_refund"],
-                uses=15,
-                successes=14,
-                failures=1,
-                seeded=True,
-            ),
-            "proc_notify_customer": Procedure(
-                id="proc_notify_customer",
-                task_type="notify",
-                steps=["draft_template", "verify_gate", "send_email"],
-                uses=18,
-                successes=17,
-                failures=1,
-                seeded=True,
-            ),
-        }
+        self.reset()
+
+    def reset(self):
+        with self._lock:
+            self._procedures: Dict[str, Procedure] = {
+                "proc_refund_standard": Procedure(
+                    id="proc_refund_standard",
+                    task_type="refund",
+                    steps=["verify_policy", "check_order_receipt", "stage_refund", "execute_refund"],
+                    uses=25,
+                    successes=23,
+                    failures=2,
+                    seeded=True,
+                ),
+                "proc_refund_strict": Procedure(
+                    id="proc_refund_strict",
+                    task_type="refund",
+                    steps=["verify_policy_root_only", "check_receipt", "verify_gate", "stage_refund", "execute_refund"],
+                    uses=15,
+                    successes=14,
+                    failures=1,
+                    seeded=True,
+                ),
+                "proc_notify_customer": Procedure(
+                    id="proc_notify_customer",
+                    task_type="notify",
+                    steps=["draft_template", "verify_gate", "send_email"],
+                    uses=18,
+                    successes=17,
+                    failures=1,
+                    seeded=True,
+                ),
+            }
 
     def get_best_procedure(self, task_type: str) -> Optional[Procedure]:
         with self._lock:

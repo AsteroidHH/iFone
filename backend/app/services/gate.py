@@ -43,12 +43,12 @@ class QuorumGateService:
             action.action.gate = GateStatus.PASSED
             return GateStatus.PASSED, None, None
 
-        # 1. Stale ancestor check
+        # 1. Stale or non-healthy ancestor check
         ancestors = store.get_ancestors(action.id, edge_types=["LEADS_TO", "SUPPORTS"])
-        stale_ancestors = [a for a in ancestors if a.stale]
-        if stale_ancestors:
+        unhealthy_ancestors = [a for a in ancestors if a.stale or a.status != Status.HEALTHY]
+        if unhealthy_ancestors:
             action.action.gate = GateStatus.BLOCKED
-            reason = f"Blocked: Action has stale ancestor '{stale_ancestors[0].id}'."
+            reason = f"Blocked: Action has non-healthy or stale ancestor '{unhealthy_ancestors[0].id}'."
             handoff = self._create_review_handoff(store, action, reason, tenant)
             return GateStatus.BLOCKED, reason, handoff
 
@@ -64,8 +64,8 @@ class QuorumGateService:
         corroborating_edges_to_add = []
 
         for leaf in leaf_facts:
-            # Condition A: Root-backed
-            if leaf.asserted_by and leaf.asserted_by.tier == Tier.ROOT:
+            # Condition A: Root-backed and healthy
+            if leaf.asserted_by and leaf.asserted_by.tier == Tier.ROOT and leaf.status == Status.HEALTHY and not leaf.stale:
                 continue
 
             # Condition B: Corroborated

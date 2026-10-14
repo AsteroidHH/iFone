@@ -30,22 +30,26 @@ async def sse_events(
         # Flush the response headers right away so clients can tell the stream is open before the first real event.
         yield f"event: heartbeat\ndata: {{\"ts\": {int(time.time() * 1000)}}}\n\n"
 
-        # Check re-sync
-        if effective_last_id is not None:
-            missed = buf.get_events_since(effective_last_id)
-            if missed is None:
-                yield "event: resync_required\ndata: {}\n\n"
-            else:
+        queue = buf.subscribe()
+        last_replayed_seq = effective_last_id or 0
+        try:
+            # Check re-sync
+            if effective_last_id is not None:
+                missed = buf.get_events_since(effective_last_id)
+                if missed is None:
+                    yield "event: resync_required\ndata: {}\n\n"
+                    return
                 for ev in missed:
                     if not event_visible(store, viewer, ev):
                         continue
+                    last_replayed_seq = max(last_replayed_seq, ev.seq)
                     yield f"id: {ev.seq}\nevent: {ev.type}\ndata: {json.dumps(ev.model_dump())}\n\n"
 
-        queue = buf.subscribe()
-        try:
             while True:
                 try:
                     ev = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    if ev.seq <= last_replayed_seq:
+                        continue
                     if not event_visible(store, viewer, ev):
                         continue
                     yield f"id: {ev.seq}\nevent: {ev.type}\ndata: {json.dumps(ev.model_dump())}\n\n"
