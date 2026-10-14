@@ -12,7 +12,11 @@ def test_tenant_isolation():
     host = os.getenv("QUORUM_FALKORDB_HOST", os.getenv("FALKORDB_HOST", "localhost"))
     port = int(os.getenv("QUORUM_FALKORDB_PORT", os.getenv("FALKORDB_PORT", "6379")))
     # 1. Admin setup
-    r_admin = redis.Redis(host=host, port=port, decode_responses=True)
+    try:
+        r_admin = redis.Redis(host=host, port=port, decode_responses=True, socket_connect_timeout=1)
+        r_admin.ping()
+    except Exception:
+        pytest.skip("FalkorDB/Redis is not running on localhost:6379. Start it with: docker compose up -d falkordb")
     r_admin.execute_command("ACL", "SETUSER", "tenant_acme", "on", ">acme_pass", "~tenant_acme:*", "&*", "+@all")
     r_admin.execute_command("ACL", "SETUSER", "tenant_globex", "on", ">globex_pass", "~tenant_globex:*", "&*", "+@all")
 

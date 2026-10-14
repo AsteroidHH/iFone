@@ -9,6 +9,11 @@ TENANT = "test_unit"
 
 @pytest.fixture(autouse=True)
 def setup_test_graph():
+    try:
+        db = queries.get_db()
+        db.select_graph("probe_test_queries").query("RETURN 1")
+    except Exception:
+        pytest.skip("FalkorDB is not running on localhost:6379. Start it with: docker compose up -d falkordb")
     g = queries.get_graph(TENANT, "commons")
     try:
         g.delete()
