@@ -34,6 +34,7 @@ const TABS: Tab[] = ['graph', 'mindmap', 'diff', 'ledger', 'insights'];
 const TAB_ICON: Record<Tab, string> = { graph: 'graph', mindmap: 'map', diff: 'doc', ledger: 'bolt', insights: 'chart' };
 
 export function Console({ visible }: { visible: boolean }) {
+  const story = useStore((s) => s.story);
   const tab = useStore((s) => s.tab);
   const presentation = useStore((s) => s.presentation);
   const set = useStore((s) => s.set);
@@ -43,7 +44,7 @@ export function Console({ visible }: { visible: boolean }) {
     <div className={`console${presentation ? ' presenting' : ''}`}>
       {!presentation && (
         <aside className="col left" aria-label="Scenario and history">
-          <ScenarioControls />
+          {story && <ScenarioControls />}
           <HistoryFeed />
         </aside>
       )}

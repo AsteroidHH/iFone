@@ -8,6 +8,7 @@ from app.graph.queries import get_graph_store
 from app.models.common import EdgeType, GateStatus, HandoffKind, HandoffStatus, NodeKind, Reversibility, Status, Tier
 from app.models.graph import ActionInfo, AssertedBy, GraphEdge, GraphNode
 from app.services import observer
+from app.services import roles
 from app.services.auditor import auditor_service
 from app.services.executor import action_executor
 from app.services.gate import quorum_gate
@@ -316,7 +317,7 @@ def claim_handoff(id: str, token: str = "") -> Dict[str, Any]:
         if auth["role"] == "agent" and target.kind != HandoffKind.TASK:
             return {
                 "epoch": store.epoch,
-                "error": f"Agent tokens are forbidden from claiming '{target.kind.value}' handoffs.",
+                "error": roles.refusal(auth.get("agent_id") or "This token", auth["role"], f"claim {target.kind.value.lower()} handoffs (Contributors can claim tasks only)", "auditor", "human"),
                 "success": False,
             }
 
@@ -342,7 +343,7 @@ def review_handoff(id: str, decision: str, token: str = "", note: Optional[str] 
     """Human-only tool: Approves or rejects a gate-blocked review handoff."""
     auth = _get_auth(token)
     if auth["role"] != "human":
-        return {"error": "Only human reviewers may complete REVIEW handoffs.", "success": False}
+        return {"error": roles.refusal(auth.get("agent_id") or "This token", auth["role"], "approve or reject reviews", "human"), "success": False}
 
     store = get_graph_store(auth["tenant"])
     with store.handoff_lock:

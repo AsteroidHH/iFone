@@ -43,6 +43,7 @@ export const addTeam = (name: string, seats: number) => api(WsView, 'POST', 'wor
 export const setSeats = (id: string, seats: number) => api(WsView, 'PATCH', `workspace/teams/${encodeURIComponent(id)}`, { ...human, body: { seats } });
 export const removeTeam = (id: string) => api(WsView, 'DELETE', `workspace/teams/${encodeURIComponent(id)}`, human);
 export const addMember = (m: { name: string; role: string; team_id: string; client: string; device: string; expires_in_days?: number }) => api(WsView, 'POST', 'workspace/members', { ...human, body: m });
+export const updateMember = (id: string, patch: { role?: string; team_id?: string; client?: string }) => api(WsView, 'PATCH', `workspace/members/${encodeURIComponent(id)}`, { ...human, body: patch });
 export const rotateMember = (id: string) => api(WsView, 'POST', `workspace/members/${encodeURIComponent(id)}/rotate`, human);
 export const removeMember = (id: string) => api(WsView, 'DELETE', `workspace/members/${encodeURIComponent(id)}`, human);
 export const addLink = (a: string, b: string, scope: string) => api(WsView, 'POST', 'workspace/links', { ...human, body: { a, b, scope } });

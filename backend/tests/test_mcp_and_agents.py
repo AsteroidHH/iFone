@@ -79,7 +79,7 @@ def test_mcp_claim_handoff_role_restriction():
     # Agent token cannot claim REVIEW handoff
     res_agent = claim_handoff("h_review_test", token="token_agent_refunder")
     assert res_agent["success"] is False
-    assert "forbidden" in res_agent["error"].lower()
+    assert "cannot claim" in res_agent["error"] and "Contributor" in res_agent["error"] and "Team page" in res_agent["error"]
 
     # Human token can claim it
     res_human = claim_handoff("h_review_test", token="token_human")

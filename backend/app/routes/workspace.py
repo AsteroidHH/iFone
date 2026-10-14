@@ -5,7 +5,9 @@ from pydantic import BaseModel, Field
 
 from app.auth import AuthContext, get_auth_context, require_role
 from app.graph.queries import get_graph_store
+from app.services import roles
 from app.services import workspace as ws
+from app.services.mcp_guard import record_event
 from app.services.event_bus import event_bus
 
 router = APIRouter()
@@ -45,6 +47,12 @@ class MemberIn(BaseModel):
     client: str = "custom"
     device: str = ""
     expires_in_days: Optional[int] = Field(None, ge=0, le=3650)  # None: the hub default; 0: never
+
+
+class MemberPatch(BaseModel):
+    role: Optional[str] = None
+    team_id: Optional[str] = None
+    client: Optional[str] = None
 
 
 class LinkIn(BaseModel):
@@ -116,6 +124,20 @@ def add_member(body: MemberIn, auth: AuthContext = Depends(require_role(["human"
     except ws.WorkspaceError as e:
         raise _fail(e)
     return _done(auth, store, {"issued": {"member": member, "token": token}})
+
+
+@router.patch("/workspace/members/{member_id}")
+def update_member(member_id: str, body: MemberPatch, auth: AuthContext = Depends(require_role(["human"]))):
+    """Change a member's permission level (agent = Contributor, auditor = Reviewer, human = Admin), team or AI client."""
+    store = get_graph_store(auth.tenant)
+    try:
+        member, before = ws.update_member(store, member_id, body.role, body.team_id, body.client)
+    except ws.WorkspaceError as e:
+        raise _fail(e)
+    if body.role is not None and body.role != before["role"]:
+        info = {"tenant": auth.tenant, "role": auth.role, "agent_id": auth.agent_id, "member_id": auth.member_id, "team_id": auth.team_id}
+        record_event(info, "console.workspace", f"changed {member['name']} from {roles.level_name(before['role'])} to {roles.level_name(member['role'])}")
+    return _done(auth, store)
 
 
 @router.post("/workspace/members/{member_id}/rotate")

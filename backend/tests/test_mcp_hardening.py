@@ -423,4 +423,4 @@ def test_audit_sentences_read_naturally(tenant):
     t.guarded(t.quarantine)("nope", tok, "x")
     texts = [e["text"] for e in client.get("/api/audit", headers=H(tenant)).json()["events"]]
     assert any(x.startswith("captured facts from text \u201cThe refund window in Chile") for x in texts)
-    assert any(x.startswith("tried to quarantine nope and was refused: Role forbidden") for x in texts)
+    assert any(x.startswith("tried to quarantine nope and was refused: ") and "cannot quarantine facts" in x for x in texts)

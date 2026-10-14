@@ -48,6 +48,7 @@ export function Activity() {
     }
   }, []);
   const pushToast = useStore((s) => s.pushToast);
+  const setView = useStore((s) => s.set);
   const [sev, setSev] = useState<Sev>('all');
   const [who, setWho] = useState('all');
   const q = useQuery({ queryKey: ['audit'], queryFn: () => getAudit({}), enabled: live, refetchInterval: 6000 });
@@ -156,6 +157,11 @@ export function Activity() {
                     </span>
                     <p>
                       <b>{e.who}</b> {e.text}
+                      {e.severity === 'failed' && e.text.includes('Team page') && (
+                        <button className="btn quiet au-fix" onClick={() => setView({ view: 'team' })}>
+                          Change permissions
+                        </button>
+                      )}
                       {(e.team || e.client) && (
                         <small className="muted">
                           {[e.team, e.client].filter(Boolean).join(' · ')}

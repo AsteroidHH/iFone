@@ -13,6 +13,7 @@ def health():
     payload = db.health_payload()
     payload["contract_version"] = settings.CONTRACT_VERSION
     payload["env"] = settings.ENV
+    payload["demo"] = settings.DEMO
     payload["warnings"] = []
     if settings.PERSISTENCE == "memory":
         payload["warnings"].append("PERSISTENCE=memory: data is lost on restart. For tests only.")

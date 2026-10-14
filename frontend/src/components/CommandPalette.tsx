@@ -7,6 +7,7 @@ import { go } from '../landing/hooks';
 import { startAutopilot, stopAutopilot } from '../state/autopilot';
 import { runStep } from '../state/endpoints';
 import { navMove, useStore, type Tab, type View } from '../state/store';
+import { viewKey, visibleViews } from '../state/views';
 import { goToTime } from '../state/timetravel';
 import { restoreFocus } from './focus';
 import { Icon } from './Icon';
@@ -42,6 +43,9 @@ export function fuzzy(query: string, text: string): number {
 
 const KIND_ICON: Record<string, string> = { source: 'doc', fact: 'fact', conclusion: 'conclusion', action: 'bolt' };
 
+const VIEW_LABEL: Record<View, string> = { overview: 'Overview', console: 'Graph console', memory: 'Memory', brain: 'Company brain', tenants: 'Tenants', benchmark: 'Benchmark', context: 'Context and token savings', connect: 'Connect an AI (MCP)', team: 'Team and workspace', activity: 'Activity log (what agents did)' };
+const VIEW_ICON: Record<View, string> = { overview: 'chart', console: 'console', memory: 'memory', brain: 'brain', tenants: 'tenants', benchmark: 'bench', context: 'sparkle', connect: 'link', team: 'user', activity: 'list' };
+
 export function CommandPalette() {
   const open = useStore((s) => s.paletteOpen);
   return open ? <PaletteBody /> : null;
@@ -50,6 +54,7 @@ export function CommandPalette() {
 function PaletteBody() {
   const nodes = useStore((s) => s.nodes);
   const autopilot = useStore((s) => s.autopilot);
+  const story = useStore((s) => s.story);
   const asOf = useStore((s) => s.asOf);
   const selected = useStore((s) => s.selectedId);
   const set = useStore((s) => s.set);
@@ -62,15 +67,14 @@ function PaletteBody() {
     const st = useStore.getState;
     const view = (v: View, tab?: Tab) => () => st().set({ view: v, ...(tab ? { tab } : {}) });
     const list: Item[] = [
-      { id: 'v-console', group: 'go', label: 'Console', hint: '1', icon: 'console', run: view('console', 'graph') },
-      { id: 'v-memory', group: 'go', label: 'Memory', hint: '2', icon: 'memory', run: view('memory') },
-      { id: 'v-brain', group: 'go', label: 'Company brain', hint: '3', icon: 'brain', run: view('brain') },
-      { id: 'v-tenants', group: 'go', label: 'Tenants', hint: '4', icon: 'tenants', run: view('tenants') },
-      { id: 'v-bench', group: 'go', label: 'Benchmark', hint: '5', icon: 'bench', run: view('benchmark') },
-      { id: 'v-context', group: 'go', label: 'Context and token savings', hint: '6', icon: 'sparkle', run: view('context') },
-      { id: 'v-connect', group: 'go', label: 'Connect an AI (MCP)', hint: '7', icon: 'link', run: view('connect') },
-      { id: 'v-team', group: 'go', label: 'Team and workspace', hint: '8', icon: 'user', run: view('team') },
-      { id: 'v-activity', group: 'go', label: 'Activity log (what agents did)', hint: '9', icon: 'list', run: view('activity') },
+      ...visibleViews(story).map((v) => ({
+        id: `v-${v}`,
+        group: 'go' as const,
+        label: VIEW_LABEL[v],
+        hint: viewKey(v, story),
+        icon: VIEW_ICON[v],
+        run: view(v, v === 'console' ? 'graph' : undefined),
+      })),
       { id: 't-mind', group: 'go', label: 'Mind map', icon: 'map', run: view('console', 'mindmap') },
       { id: 't-diff', group: 'go', label: 'Prompt diff', icon: 'doc', run: view('console', 'diff') },
       { id: 't-ledger', group: 'go', label: 'Actions and handoffs', icon: 'bolt', run: view('console', 'ledger') },
@@ -137,8 +141,8 @@ function PaletteBody() {
         },
       })),
     ];
-    return list;
-  }, [nodes, autopilot, asOf, selected]);
+    return story ? list : list.filter((i) => i.group !== 'story');
+  }, [nodes, autopilot, asOf, selected, story]);
 
   const results = useMemo(() => {
     const scored = items

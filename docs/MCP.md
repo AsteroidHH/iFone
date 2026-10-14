@@ -25,6 +25,18 @@ The Connect page in the console prints these with your hub's address and a membe
 - A wrong header token is refused with 401 even when headers are optional. Set `QUORUM_MCP_REQUIRE_HEADER=true` (the default under `QUORUM_ENV=production`) to refuse requests with no header at all.
 - A stdio server reads the token from `QUORUM_MCP_TOKEN`, so it is not in any command line or argument.
 
+## Permission levels
+
+Three levels, shown with plain names on the Team page (the stored role names are in brackets):
+
+| Level | Can do | Cannot |
+| --- | --- | --- |
+| **Contributor** (`agent`) | Look things up, save facts and conclusions, stage and run actions, claim tasks | Quarantine or restore, approve reviews, claim reviews, manage people |
+| **Reviewer** (`auditor`) | Everything a Contributor can, plus quarantine and restore, and claim any handoff | Approve reviews, manage people |
+| **Admin** (`human`) | Everything, including approving reviews and managing people, teams, links, plan and tokens | |
+
+An admin changes a person's level on the **Team** page (the Permission level column) or with `PATCH /api/workspace/members/{id}` `{"role": "auditor"}`. It applies on that token's next call; no new token is needed. A refused call now says who was refused, why, what level is needed and where to change it (Activity shows a "Change permissions" button on those rows). The table on the Team page is the hub's own (`GET /api/roles`, `backend/app/services/roles.py`); a test checks every row against what is enforced. When the levels change, regenerate `backend/tests/fixtures/roles.json` (`python -c "import json; from app.services import roles; open('backend/tests/fixtures/roles.json','w').write(json.dumps(roles.catalog(), indent=2)+chr(10))"` with `backend` on the path).
+
 ## Rate limits
 
 A token bucket per caller: `QUORUM_RATE_LIMIT_TOOLS_PER_MIN` (default 600, burst 100) for tool calls per token, and `QUORUM_RATE_LIMIT_HTTP_PER_MIN` (default 3000, burst 500) for HTTP requests per token or address. `/api/health` and the event stream are exempt. A throttled HTTP request gets `429` and `Retry-After`; a throttled tool call returns `{"rate_limited": true, "retry_after": …}` and writes nothing. `0` turns a limit off. **A bulk import (hundreds of `remember_fact` calls in a burst) will be throttled: raise the limit or set it to `0` for the import**, and check the count afterwards. The limiter is in memory in one process; it protects the hub from a runaway loop, it is not a billing quota.

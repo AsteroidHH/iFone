@@ -5,6 +5,7 @@ export interface Health {
   steps: string[];
   warnings: string[];
   env?: string;
+  demo?: boolean;
 }
 
 export type HealthResult = { kind: 'ok'; health: Health } | { kind: 'blocked'; health: Health } | { kind: 'unreachable'; reason: string };

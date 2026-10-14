@@ -402,6 +402,13 @@ check('chats tab lists members', (await page.locator('.cn-people li').count()) >
 await page.keyboard.press('8');
 await page.locator('.tm').waitFor({ timeout: 3000 }).catch(() => {});
 check('Team page shows seat usage', /\d+ \/ \d+/.test(await text('.tm-seats')));
+check('Team page explains each permission level with a table', (await page.locator('.lv-table tbody tr').count()) === 7 && (await page.locator('.lv-head', { hasText: 'Contributor' }).count()) === 1 && (await page.locator('.lv-head', { hasText: 'Reviewer' }).count()) === 1 && (await page.locator('.lv-head', { hasText: 'Admin' }).count()) === 1);
+const lvl = page.locator('.lv-select').first();
+const lvBefore = await lvl.inputValue();
+await lvl.selectOption(lvBefore === 'auditor' ? 'agent' : 'auditor');
+await wait(300);
+check('an admin can change the permission level of a member from the table', (await page.locator('.lv-select').first().inputValue()) !== lvBefore);
+check('the level column uses plain names, not role codes', (await page.locator('.lv-select option', { hasText: 'Reviewer' }).count()) > 0);
 await page.keyboard.press('9');
 await page.locator('.au').waitFor({ timeout: 3000 }).catch(() => {});
 await page.locator('.au-row').first().waitFor({ timeout: 8000 }).catch(() => {});
@@ -449,6 +456,14 @@ await wait(9000);
 check('autopilot finishes and re-enables controls', !(await btn('Inject poisoned webhook').isDisabled()));
 
 
+// ---- the overview ----
+await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
+await page.keyboard.press('0');
+await page.locator('.ov').waitFor({ timeout: 4000 }).catch(() => {});
+check('Overview opens with 0 and shows four graphical cards', (await page.locator('.ov-card').count()) === 4 && (await page.locator('.ov svg').count()) >= 2);
+check('Overview has a 24-hour activity chart with a text alternative', (await page.locator('.ch-bars svg[role=img]').getAttribute('aria-label'))?.includes('Tool calls per hour') === true);
+check('Overview needs-attention card links to the log', (await page.locator('.ov-card.attn, .ov-card', { hasText: 'Needs attention' }).getByRole('button', { name: 'Read the log' }).count()) === 1);
+
 // ---- the console on a phone ----
 {
   const ph = await browser.newPage({ viewport: { width: 390, height: 844 } });
@@ -456,7 +471,7 @@ check('autopilot finishes and re-enables controls', !(await btn('Inject poisoned
   await ph.goto(base + '#/app');
   await ph.locator('.header').waitFor({ timeout: 15000 });
   await ph.waitForTimeout(1500);
-  const views = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
+  const views = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
   let wide = [];
   for (const k of views) {
     await ph.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
@@ -464,9 +479,9 @@ check('autopilot finishes and re-enables controls', !(await btn('Inject poisoned
     await ph.waitForTimeout(900);
     if (await ph.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)) wide.push(k);
   }
-  check('phone: no horizontal scroll on any of the nine views', wide.length === 0, wide.length ? `wide on ${wide.join(',')}` : '');
+  check('phone: no horizontal scroll on any of the ten views', wide.length === 0, wide.length ? `wide on ${wide.join(',')}` : '');
   const bar = await ph.evaluate(() => { const n = document.querySelector('.header .nav'); const r = n.getBoundingClientRect(); return { bottom: Math.round(innerHeight - r.bottom), fixed: getComputedStyle(n).position, tabs: n.querySelectorAll('.navbtn').length, visible: [...n.querySelectorAll('.navbtn')].every((b) => { const q = b.getBoundingClientRect(); return q.left >= 0 && q.right <= innerWidth + 1; }) }; });
-  check('phone: the navigation is a fixed bottom tab bar with all nine tabs on screen', bar.fixed === 'fixed' && bar.bottom === 0 && bar.tabs === 9 && bar.visible, JSON.stringify(bar));
+  check('phone: the navigation is a fixed bottom tab bar with every tab on screen', bar.fixed === 'fixed' && bar.bottom === 0 && bar.tabs === 10 && bar.visible, JSON.stringify(bar));
   await ph.keyboard.press('1');
   await ph.waitForTimeout(800);
   const order = await ph.evaluate(() => { const g = document.querySelector('.col.center').getBoundingClientRect().top; const r = document.querySelector('.col.right').getBoundingClientRect().top; const l = document.querySelector('.col.left').getBoundingClientRect().top; return g < r && r < l; });

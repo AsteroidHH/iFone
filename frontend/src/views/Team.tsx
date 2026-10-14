@@ -2,16 +2,13 @@ import { useMemo, useState } from 'react';
 import { Icon } from '../components/Icon';
 import { fmt } from '../context/tokens';
 import { useStore } from '../state/store';
+import { CAPABILITIES, LEVELS, levelName, levelSummary } from '../workspace/roles';
 import { copyText } from '../workspace/clipboard';
 import { CLIENTS, type ClientId } from '../workspace/mcp';
 import { PLANS, type MemberRole, type Plan, type Scope } from '../workspace/store';
 import { useWs, type Ws } from '../workspace/useWs';
 
-const ROLE_HELP: Record<MemberRole, string> = {
-  agent: 'Reads and writes memory, stages actions',
-  auditor: 'Can quarantine and restore facts',
-  human: 'Approves gate-blocked reviews, manages the workspace',
-};
+const ROLE_HELP: Record<MemberRole, string> = { agent: 'reads, saves facts, runs actions', auditor: 'also quarantines and restores', human: 'also approves reviews and manages people' };
 
 function ago(ts?: number): string {
   if (!ts) return 'never';
@@ -209,6 +206,7 @@ function Members({ ws }: { ws: Ws }) {
               <tr>
                 <th scope="col">Member</th>
                 <th scope="col">Team</th>
+                <th scope="col">Permission level</th>
                 <th scope="col">AI client</th>
                 <th scope="col">Status</th>
                 <th scope="col">Calls</th>
@@ -227,11 +225,33 @@ function Members({ ws }: { ws: Ws }) {
                       <span className="avatar">{m.name.slice(0, 1)}</span>
                       <span>{m.name}</span>
                       <small className="muted">
-                        {m.role} · {m.device}
+                        {levelName(m.role)} · {m.device}
                       </small>
                     </div>
                   </th>
                   <td>{team(m.teamId)}</td>
+                  <td>
+                    <select
+                      className={`lv-select ${m.role}`}
+                      aria-label={`Permission level for ${m.name}`}
+                      value={m.role}
+                      title={levelSummary(m.role)}
+                      onChange={(e) => {
+                        const next = e.target.value as MemberRole;
+                        if (next === 'human' && !window.confirm(`Make ${m.name} an Admin? Admins can manage people, tokens and approvals.`)) return;
+                        void ws.setLevel(m.id, next).then((r) => {
+                          setErr(r);
+                          if (!r) pushToast(`${m.name} is now a ${levelName(next)}. It applies on their next call.`);
+                        });
+                      }}
+                    >
+                      {LEVELS.map((l) => (
+                        <option key={l.role} value={l.role}>
+                          {l.name}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
                   <td>{CLIENTS.find((c) => c.id === m.client)?.name ?? m.client}</td>
                   <td>
                     <span className={`pres ${m.status === 'unknown' ? 'offline' : m.status}`} aria-hidden="true" /> {m.status}
@@ -299,7 +319,7 @@ function Members({ ws }: { ws: Ws }) {
           <select value={role} onChange={(e) => setRole(e.target.value as MemberRole)}>
             {(Object.keys(ROLE_HELP) as MemberRole[]).map((r) => (
               <option key={r} value={r}>
-                {r}: {ROLE_HELP[r]}
+                {levelName(r)}: {ROLE_HELP[r]}
               </option>
             ))}
           </select>
@@ -328,6 +348,70 @@ function Members({ ws }: { ws: Ws }) {
       <p className="tm-err" role="alert">
         {err}
       </p>
+    </section>
+  );
+}
+
+const MARK: Record<string, { cls: string; text: string; icon: string }> = {
+  true: { cls: 'yes', text: 'Yes', icon: 'check' },
+  false: { cls: 'no', text: 'No', icon: 'x' },
+  limited: { cls: 'part', text: 'Limited', icon: 'check' },
+};
+
+/** What each level can do, as a table you can read at a glance. It is the hub's own table, so it cannot overpromise. */
+function LevelGuide({ ws }: { ws: Ws }) {
+  return (
+    <section className="card wide" aria-label="Permission levels">
+      <header className="card-h">
+        <h2>Permission levels</h2>
+        <span className="card-sub">Pick one per person below. A change applies on their next call.</span>
+      </header>
+      <div className="cn-table-wrap" tabIndex={0} role="region" aria-label="What each permission level can do (scrolls sideways on a narrow screen)">
+        <table className="lv-table">
+          <thead>
+            <tr>
+              <th scope="col">
+                <span className="sr-only">What it can do</span>
+              </th>
+              {LEVELS.map((l) => (
+                <th scope="col" key={l.role} className={`lv-head ${l.role}`}>
+                  <b>{l.name}</b>
+                  <small>{ws.members.filter((m) => m.role === l.role).length} {ws.members.filter((m) => m.role === l.role).length === 1 ? 'person' : 'people'}</small>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {CAPABILITIES.map((c) => (
+              <tr key={c.key}>
+                <th scope="row">
+                  {c.label}
+                  <small className="muted">{c.detail}</small>
+                </th>
+                {LEVELS.map((l) => {
+                  const v = String(c[l.role]);
+                  const mk = MARK[v]!;
+                  return (
+                    <td key={l.role} className={`lv-cell ${mk.cls}`} title={v === 'limited' ? c.note : undefined}>
+                      <span className="lv-mark" role="img" aria-label={`${l.name}: ${mk.text}${v === 'limited' && c.note ? `. ${c.note}` : ''}`}>
+                        <Icon name={mk.icon} size={13} />
+                      </span>
+                      {v === 'limited' && <small className="muted">{c.note?.replace(/^Contributors can /, '').replace(/, not.*$/, '')}</small>}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <ul className="lv-sum">
+        {LEVELS.map((l) => (
+          <li key={l.role} className={l.role}>
+            <b>{l.name}</b> {l.summary}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -504,6 +588,7 @@ export function Team() {
       <Issued ws={ws} />
       <Org ws={ws} />
       <Teams ws={ws} />
+      <LevelGuide ws={ws} />
       <Members ws={ws} />
       <Mesh ws={ws} />
     </div>

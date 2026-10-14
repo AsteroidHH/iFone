@@ -272,6 +272,28 @@ def rotate_token(store, member_id: str) -> Tuple[Dict[str, Any], str]:
         return {k: v for k, v in m.items() if k != "token_hash"}, token
 
 
+def update_member(store, member_id: str, role: Optional[str] = None, team_id: Optional[str] = None, client: Optional[str] = None) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """Change a member's permission level, team or AI client. Takes effect on their very next call: tokens are resolved from this record every time."""
+    with store._lock:
+        m = _member(store, member_id)
+        before = {"role": m["role"], "team_id": m["team_id"], "client": m["client"]}
+        if role is not None:
+            if role not in ROLES:
+                raise WorkspaceError("VALIDATION", f"Level must be one of {', '.join(ROLES)}.")
+            m["role"] = role
+        if team_id is not None:
+            _team(store, team_id)
+            ws = _ws(store)
+            if team_id != m["team_id"] and sum(1 for x in ws["members"] if x["team_id"] == team_id) >= _team(store, team_id)["seats"]:
+                raise WorkspaceError("CONFLICT", "That team has no free seats. Raise its seat count first.", 409)
+            m["team_id"] = team_id
+        if client is not None:
+            if client not in CLIENTS:
+                raise WorkspaceError("VALIDATION", "Unknown AI client.")
+            m["client"] = client
+        return {k: v for k, v in m.items() if k != "token_hash"}, before
+
+
 def remove_member(store, member_id: str) -> None:
     with store._lock:
         ws = _ws(store)

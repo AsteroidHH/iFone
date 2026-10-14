@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     ENV: Literal["development", "production"] = "production"
     # Accept ad-hoc tokens shaped like token_<tenant>_<role>. Convenient in development, a forgery hole in production.
     ALLOW_DYNAMIC_TOKENS: bool | None = None
+    # The guided "poisoned webhook" story (scenario steps, sample agents, the demo-only screens). Off by default: a fresh install
+    # is an empty workspace. Set QUORUM_DEMO=1 to turn the story back on for a presentation.
+    DEMO: bool = False
     # Comma separated browser origins allowed to call the API. Empty means localhost only.
     CORS_ORIGINS: str = ""
     # Comma-separated list of IP addresses or CIDR networks trusted as reverse proxies.

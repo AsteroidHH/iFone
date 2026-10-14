@@ -21,6 +21,8 @@ Everything below runs against a real FalkorDB. Nothing here uses the in-browser 
 | `python scripts/qa_mcp_clients.py --hub URL --admin-token T` | The client protocol checks against a production hub (real tokens, TLS with `SSL_CERT_FILE`) | a production stack |
 | `python bench/scale_bench.py` | Latency at 1,000 / 5,000 / 20,000 facts and a modelled 60-turn session | nothing running |
 
+Note: the live QA drives the guided scenario and presses the original number keys, so start the stack with the story on: `QUORUM_DEMO=1 docker compose up -d`. A normal start (demo off) is an empty workspace with six screens, and `GET /api/scenario/*` answers 404.
+
 ## The stack
 
 Everything in Docker (this is what a deployment looks like):

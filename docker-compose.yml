@@ -52,6 +52,8 @@ services:
       # This file is the local demo, so it runs in development (demo tokens, ad-hoc tokens). A real deployment uses
       # docker-compose.production.yml on top of it: docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
       - QUORUM_ENV=${QUORUM_ENV:-development}
+      # A fresh install is an empty workspace. QUORUM_DEMO=1 turns on the guided poisoned-webhook story and its sample agents.
+      - QUORUM_DEMO=${QUORUM_DEMO:-0}
       - HELPDESK_URL=http://mock-helpdesk:8002
       # Where other machines reach this hub (shown on the Connect page), e.g. https://quorum.example.com:8443
       - QUORUM_PUBLIC_URL=${QUORUM_PUBLIC_URL:-}

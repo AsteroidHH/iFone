@@ -12,6 +12,14 @@ def whoami(auth: AuthContext = Depends(get_auth_context)):
     return {"tenant": auth.tenant, "role": auth.role, "agent_id": auth.agent_id, "member_id": auth.member_id, "team_id": auth.team_id}
 
 
+@router.get("/roles")
+def role_guide(auth: AuthContext = Depends(get_auth_context)):
+    """What each permission level can do, in plain words. The Team page shows this and lets an admin change a member's level."""
+    from app.services import roles
+
+    return roles.catalog()
+
+
 @router.get("/dev-config")
 def dev_config():
     """The built-in demo tokens, for the console in a local demo. It exists only when QUORUM_ENV=development."""
