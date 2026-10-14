@@ -113,6 +113,18 @@ class GraphStore:
     def get_ancestors(self, node_id: str, edge_types: List[str] = ["LEADS_TO", "SUPPORTS"]) -> List[GraphNode]:
         """Traverses backwards from node_id along incoming edges of given types."""
         with self._lock:
+            if self.persister is not None:
+                try:
+                    self.persister.sync()
+                    from app.persistence import _label
+                    rel_pattern = "|".join(_label(t) for t in edge_types)
+                    cypher = f"MATCH (d:QNode {{id: $node_id}})<-[:{rel_pattern}*1..]-(root:QNode) RETURN DISTINCT root.id AS id"
+                    res = self.persister._q("get_ancestors", cypher, {"node_id": node_id})
+                    ids = [row[0] for row in (res.result_set or [])]
+                    return [self.nodes[i] for i in ids if i in self.nodes]
+                except Exception:
+                    pass
+
             visited = set()
             queue = [node_id]
             ancestors = []
@@ -134,6 +146,18 @@ class GraphStore:
     def get_descendants(self, node_id: str, edge_types: List[str] = ["LEADS_TO", "SUPPORTS"]) -> List[GraphNode]:
         """Traverses forwards from node_id along outgoing edges of given types."""
         with self._lock:
+            if self.persister is not None:
+                try:
+                    self.persister.sync()
+                    from app.persistence import _label
+                    rel_pattern = "|".join(_label(t) for t in edge_types)
+                    cypher = f"MATCH (root:QNode {{id: $node_id}})-[:{rel_pattern}*1..]->(d:QNode) RETURN DISTINCT d.id AS id"
+                    res = self.persister._q("get_descendants", cypher, {"node_id": node_id})
+                    ids = [row[0] for row in (res.result_set or [])]
+                    return [self.nodes[i] for i in ids if i in self.nodes]
+                except Exception:
+                    pass
+
             visited = set()
             queue = [node_id]
             descendants = []
@@ -220,6 +244,64 @@ class GraphStore:
         """
         with self._lock:
             start = time.time()
+            root = self.nodes.get(root_id)
+            if not root:
+                return []
+
+            now_ms = int(time.time() * 1000)
+
+            # If FalkorDB is attached, execute the cascade traversal & state mutation directly via Cypher
+            if self.persister is not None:
+                self.persister.sync(request_id)
+                cypher = (
+                    "MATCH (root:QNode {id: $root_id}) "
+                    "SET root.status = 'QUARANTINED', root.quarantined_at = $now_ms, root.quarantine_root = $root_id, root.depth = 0 "
+                    "WITH root "
+                    "OPTIONAL MATCH (root)-[:LEADS_TO|SUPPORTS*1..]->(descendant:QNode) "
+                    "WHERE descendant IS NOT NULL "
+                    "SET descendant.status = 'QUARANTINED', descendant.quarantined_at = $now_ms, descendant.quarantine_root = $root_id "
+                    "RETURN DISTINCT descendant.id AS id"
+                )
+                try:
+                    res = self.persister._q("cascade_quarantine", cypher, {"root_id": root_id, "now_ms": now_ms}, request_id)
+                    root.status = Status.QUARANTINED
+                    root.quarantined_at = now_ms
+                    root.quarantine_root = root_id
+                    root.depth = 0
+
+                    affected = [{"id": root.id, "status": Status.QUARANTINED, "depth": 0, "root_id": root_id}]
+
+                    descendant_ids = {str(row[0]) for row in (res.result_set or [])}
+                    queue = [(root_id, 0)]
+                    visited = {root_id}
+                    while queue:
+                        curr_id, curr_depth = queue.pop(0)
+                        outgoing = [e for e in self.edges if e.source == curr_id and e.type.value in ["LEADS_TO", "SUPPORTS"]]
+                        for edge in outgoing:
+                            child_id = edge.target
+                            if child_id not in visited:
+                                visited.add(child_id)
+                                child = self.nodes.get(child_id)
+                                if child:
+                                    child.status = Status.QUARANTINED
+                                    child.quarantined_at = now_ms
+                                    child.quarantine_root = root_id
+                                    child.depth = curr_depth + 1
+                                if child_id in descendant_ids:
+                                    affected.append({
+                                        "id": child_id,
+                                        "status": Status.QUARANTINED,
+                                        "depth": curr_depth + 1,
+                                        "root_id": root_id,
+                                    })
+                                queue.append((child_id, curr_depth + 1))
+
+                    self.bump_epoch(request_id)
+                    return affected
+                except Exception:
+                    pass
+
+            # In-memory BFS fallback (PERSISTENCE=memory or offline testing)
             cypher = (
                 "MATCH (root:Fact {id:$root_id}) "
                 "OPTIONAL MATCH (root)-[:LEADS_TO|SUPPORTS*]->(descendant) "
@@ -227,11 +309,6 @@ class GraphStore:
                 "RETURN descendant, depth"
             )
 
-            root = self.nodes.get(root_id)
-            if not root:
-                return []
-
-            now_ms = int(time.time() * 1000)
             root.status = Status.QUARANTINED
             root.quarantined_at = now_ms
             root.quarantine_root = root_id

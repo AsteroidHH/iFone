@@ -430,27 +430,56 @@ def find_path(store, a: str, b: str, viewer: Optional[Viewer] = None) -> Dict[st
     na, nb = resolve_ref(scoped, a), resolve_ref(scoped, b)
     if not na or not nb:
         return {"error": "One of the nodes was not found (or is not visible to you).", "success": False}
-    inn, out = _adjacency(scoped, edges)
-    prev: Dict[str, Optional[str]] = {na.id: None}
-    q = deque([na.id])
-    while q:
-        cur = q.popleft()
-        if cur == nb.id:
-            break
-        for nxt in inn.get(cur, []) + out.get(cur, []):
-            if nxt not in prev:
-                prev[nxt] = cur
-                q.append(nxt)
     ids = short_ids(scoped.values())
-    if nb.id not in prev:
+
+    path: Optional[List[str]] = None
+
+    # FalkorDB native shortestPath algorithm when connected
+    if getattr(store, "persister", None) is not None:
+        try:
+            store.persister.sync()
+            cypher = (
+                "MATCH (a:QNode {id: $a}), (b:QNode {id: $b}) "
+                "MATCH p = shortestPath((a)-[:LEADS_TO|SUPPORTS*]-(b)) "
+                "RETURN [n IN nodes(p) | n.id] AS path"
+            )
+            res = store.persister._q("shortest_path", cypher, {"a": na.id, "b": nb.id})
+            if res.result_set and res.result_set[0] and res.result_set[0][0]:
+                raw_path = [str(x) for x in res.result_set[0][0]]
+                if all(nid in scoped for nid in raw_path):
+                    path = raw_path
+            elif res.result_set is not None:
+                path = []
+        except Exception:
+            path = None
+
+    # In-memory BFS fallback
+    if path is None:
+        inn, out = _adjacency(scoped, edges)
+        prev: Dict[str, Optional[str]] = {na.id: None}
+        q = deque([na.id])
+        while q:
+            cur = q.popleft()
+            if cur == nb.id:
+                break
+            for nxt in inn.get(cur, []) + out.get(cur, []):
+                if nxt not in prev:
+                    prev[nxt] = cur
+                    q.append(nxt)
+        if nb.id not in prev:
+            path = []
+        else:
+            path = []
+            step: Optional[str] = nb.id
+            while step is not None:
+                path.append(step)
+                step = prev[step]
+            path.reverse()
+
+    if not path:
         text = f"no chain between {ids[na.id]} and {ids[nb.id]}"
         return {"text": text, "path": [], "tokens": estimate_tokens(text), "tokens_baseline": estimate_tokens(json.dumps([_raw(na), _raw(nb)], indent=2)), "success": True}
-    path: List[str] = []
-    step: Optional[str] = nb.id
-    while step is not None:
-        path.append(step)
-        step = prev[step]
-    path.reverse()
+
     text = " → ".join(f"{ids[i]} {_clip(scoped[i].label, 36)}" for i in path)
     base = estimate_tokens(json.dumps([_raw(scoped[i]) for i in path], indent=2))
     return {"text": text, "path": path, "hops": len(path) - 1, "tokens": estimate_tokens(text), "tokens_baseline": base, "success": True}

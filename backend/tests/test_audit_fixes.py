@@ -241,3 +241,79 @@ def test_item_10_vector_batch_and_cache_cap():
     scores = embeddings.cosine_scores("content text", nodes)
     assert len(scores) == 30
     assert all(0.0 <= s <= 1.0 for s in scores.values())
+
+
+def test_falkordb_cypher_cascade_and_path_finding():
+    from unittest.mock import MagicMock
+    from app.graph.queries import GraphStore
+    from app.models.graph import GraphNode, GraphEdge
+    from app.models.common import Status, NodeKind, EdgeType
+    from app.services import context_pack as cp
+
+    store = GraphStore("test_cypher_tenant")
+    n1 = GraphNode(id="root1", kind=NodeKind.FACT, label="Root fact", status=Status.HEALTHY)
+    n2 = GraphNode(id="child1", kind=NodeKind.CONCLUSION, label="Child conclusion", status=Status.HEALTHY)
+    store.add_node(n1)
+    store.add_node(n2)
+    store.add_edge(GraphEdge(id="e1", source="root1", target="child1", type=EdgeType.LEADS_TO))
+
+    # Mock persister to verify Cypher dispatch
+    mock_persister = MagicMock()
+    mock_res_cascade = MagicMock()
+    mock_res_cascade.result_set = [["child1"]]
+    mock_res_cascade.nodes_created = 0
+    mock_res_cascade.properties_set = 2
+    mock_res_cascade.relationships_created = 0
+    mock_res_cascade.nodes_deleted = 0
+
+    executed_queries = []
+
+    def fake_q(name, cypher, params=None, request_id=None):
+        executed_queries.append((name, cypher, params))
+        store.log_query(name, cypher, 1.5, 1, request_id, real=True)
+        if name == "cascade_quarantine":
+            return mock_res_cascade
+        if name == "shortest_path":
+            res = MagicMock()
+            res.result_set = [[["root1", "child1"]]]
+            return res
+        if name == "get_descendants":
+            res = MagicMock()
+            res.result_set = [["child1"]]
+            return res
+        if name == "get_ancestors":
+            res = MagicMock()
+            res.result_set = [["root1"]]
+            return res
+        res = MagicMock()
+        res.result_set = []
+        return res
+
+    mock_persister._q = fake_q
+    mock_persister.sync = MagicMock()
+    store.persister = mock_persister
+
+    # 1. Test Cypher cascade_quarantine
+    affected = store.cascade_quarantine("root1")
+    assert any(q[0] == "cascade_quarantine" for q in executed_queries)
+    assert any("MATCH (root:QNode {id: $root_id})" in q[1] for q in executed_queries)
+    assert store.nodes["root1"].status == Status.QUARANTINED
+    assert store.nodes["child1"].status == Status.QUARANTINED
+    assert len(affected) == 2
+    assert any(e.name == "cascade_quarantine" for e in store.query_log)
+
+    # 2. Test Cypher shortestPath via find_path
+    res_path = cp.find_path(store, "root1", "child1")
+    assert res_path["path"] == ["root1", "child1"]
+    assert any(q[0] == "shortest_path" for q in executed_queries)
+    assert any("shortestPath" in q[1] for q in executed_queries)
+
+    # 3. Test Cypher get_descendants & get_ancestors
+    descs = store.get_descendants("root1")
+    assert [d.id for d in descs] == ["child1"]
+    assert any(q[0] == "get_descendants" for q in executed_queries)
+
+    ancs = store.get_ancestors("child1")
+    assert [a.id for a in ancs] == ["root1"]
+    assert any(q[0] == "get_ancestors" for q in executed_queries)
+
