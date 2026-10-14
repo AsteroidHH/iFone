@@ -79,8 +79,14 @@ async def lifespan(_app):
         t.start()
     try:
         if _mcp_app is not None:
-            async with _mcp_app.router.lifespan_context(_mcp_app):
-                yield
+            try:
+                async with _mcp_app.router.lifespan_context(_mcp_app):
+                    yield
+            except RuntimeError as exc:
+                if "can only be called once" in str(exc):
+                    yield
+                else:
+                    raise
         else:
             yield
     finally:
