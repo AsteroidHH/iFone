@@ -18,7 +18,15 @@ const btn = (name) => page.getByRole('button', { name, exact: false }).first();
 const text = (sel) => page.locator(sel).first().innerText();
 
 // ---- landing page ----
-await page.goto(base);
+for (let attempt = 1; attempt <= 15; attempt++) {
+  try {
+    await page.goto(base);
+    break;
+  } catch (err) {
+    if (attempt === 15) throw err;
+    await wait(1000);
+  }
+}
 await page.waitForSelector('.lp-hero h1', { timeout: 15000 });
 await wait(300);
 check('landing loads with the product headline', (await text('.lp-h1')).replace(/\s+/g, ' ').includes('revert'));

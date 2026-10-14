@@ -50,7 +50,7 @@ jobs:
         run: |
           npx playwright-core install chromium --with-deps
           npm run preview:mock &
-          sleep 5
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:5173/ && break; sleep 1; done
           QUORUM_BROWSER=chromium node scripts/interact.mjs http://127.0.0.1:5173/
           QUORUM_BROWSER=chromium node scripts/a11y.mjs http://127.0.0.1:5173/
 

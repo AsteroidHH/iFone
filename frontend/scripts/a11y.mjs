@@ -30,7 +30,15 @@ for (const [w, h, label] of [[1440, 900, 'desktop'], [390, 844, 'phone']]) {
   // reveal animations fade text in; a reader who asked for reduced motion (and axe) sees the final state
   await page.emulateMedia({ reducedMotion: 'reduce' });
   for (const s of SCREENS) {
-    await page.goto(base + s.url);
+    for (let attempt = 1; attempt <= 15; attempt++) {
+      try {
+        await page.goto(base + s.url);
+        break;
+      } catch (err) {
+        if (attempt === 15) throw err;
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    }
     await page.waitForTimeout(s.name === 'landing' ? 2500 : 3000);
     if (s.key) {
       await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview",
+    "preview": "vite preview --host 0.0.0.0",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
@@ -18,7 +18,7 @@
     "landing": "node scripts/landing-shots.mjs http://127.0.0.1:5173/ ../docs/screens/landing 1440",
     "verify": "npm run typecheck && npm run lint && npm test && npm run contrast && npm run contract:check && npm run build && npm run build:mock",
     "build:mock": "tsc --noEmit && vite build --mode mock --outDir dist-mock --emptyOutDir",
-    "preview:mock": "vite preview --outDir dist-mock --port 5173 --strictPort",
+    "preview:mock": "vite preview --host 0.0.0.0 --outDir dist-mock --port 5173 --strictPort",
     "qa:cursor": "node scripts/cursor.mjs",
     "coverage": "vitest run --coverage",
     "qa:a11y": "node scripts/a11y.mjs"
