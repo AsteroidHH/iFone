@@ -3,17 +3,20 @@ Test Suite: Per-Tenant Memory & Redis ACL Isolation
 Verifies Track 02 Focus #5: One graph namespace per tenant enforced by Redis ACL.
 """
 
+import os
 import pytest
 import redis
 from falkordb import FalkorDB
 
 def test_tenant_isolation():
+    host = os.getenv("QUORUM_FALKORDB_HOST", os.getenv("FALKORDB_HOST", "localhost"))
+    port = int(os.getenv("QUORUM_FALKORDB_PORT", os.getenv("FALKORDB_PORT", "6379")))
     # 1. Admin setup
-    r_admin = redis.Redis(host="localhost", port=6379, decode_responses=True)
+    r_admin = redis.Redis(host=host, port=port, decode_responses=True)
     r_admin.execute_command("ACL", "SETUSER", "tenant_acme", "on", ">acme_pass", "~tenant_acme:*", "&*", "+@all")
     r_admin.execute_command("ACL", "SETUSER", "tenant_globex", "on", ">globex_pass", "~tenant_globex:*", "&*", "+@all")
 
-    f_admin = FalkorDB(host="localhost", port=6379)
+    f_admin = FalkorDB(host=host, port=port)
     g_acme = f_admin.select_graph("tenant_acme:commons")
     g_acme.query("CREATE (:Fact {id: 'acme_fact_secret', text: 'Acme Secret Intellectual Property'})")
 
@@ -21,7 +24,7 @@ def test_tenant_isolation():
     g_globex.query("CREATE (:Fact {id: 'globex_fact_1', text: 'Globex Public Fact'})")
 
     # 2. Globex client reading its own tenant graph -> SUCCESS
-    f_globex = FalkorDB(host="localhost", port=6379, username="tenant_globex", password="globex_pass")
+    f_globex = FalkorDB(host=host, port=port, username="tenant_globex", password="globex_pass")
     g_globex_client = f_globex.select_graph("tenant_globex:commons")
     res_own = g_globex_client.query("MATCH (f:Fact) RETURN f.id").result_set
     assert len(res_own) > 0
@@ -34,7 +37,7 @@ def test_tenant_isolation():
     assert "No permissions" in str(excinfo.value)
 
     # 4. Gateway-level tenant filtering fallback on GRAPH.LIST
-    r_globex = redis.Redis(host="localhost", port=6379, username="tenant_globex", password="globex_pass", decode_responses=True)
+    r_globex = redis.Redis(host=host, port=port, username="tenant_globex", password="globex_pass", decode_responses=True)
     raw_graph_list = r_globex.execute_command("GRAPH.LIST")
     # Gateway filtering logic:
     filtered_list = [name for name in raw_graph_list if name.startswith("tenant_globex:")]

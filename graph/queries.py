@@ -6,6 +6,7 @@ Delivers tested Cypher statements returning plain Python dicts.
 Logs every query execution to an in-memory query log for the UI 'Show Cypher' drawer.
 """
 
+import os
 import time
 import json
 import logging
@@ -21,10 +22,34 @@ MAX_QUERY_LOG_SIZE = 500
 _db_client: Optional[FalkorDB] = None
 
 
-def get_db(host: str = "localhost", port: int = 6379) -> FalkorDB:
+def get_db(host: Optional[str] = None, port: Optional[int] = None) -> FalkorDB:
     global _db_client
     if _db_client is None:
-        _db_client = FalkorDB(host=host, port=port)
+        h = host or os.getenv("QUORUM_FALKORDB_HOST", os.getenv("FALKORDB_HOST"))
+        p = port
+        if not h and os.getenv("QUORUM_FALKORDB_URL"):
+            url = os.getenv("QUORUM_FALKORDB_URL", "")
+            if "//" in url:
+                netloc = url.split("//", 1)[1].split("/", 1)[0]
+                if "@" in netloc:
+                    netloc = netloc.split("@", 1)[1]
+                if ":" in netloc:
+                    h, port_str = netloc.split(":", 1)
+                    if p is None:
+                        try:
+                            p = int(port_str)
+                        except ValueError:
+                            pass
+                else:
+                    h = netloc
+        if not h:
+            h = "localhost"
+        if not p:
+            try:
+                p = int(os.getenv("QUORUM_FALKORDB_PORT", os.getenv("FALKORDB_PORT", "6379")))
+            except ValueError:
+                p = 6379
+        _db_client = FalkorDB(host=h, port=p)
     return _db_client
 
 
