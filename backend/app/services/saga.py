@@ -108,7 +108,7 @@ class OutboxSagaWorker:
 
             # In-flight check: if unconfirmed and older than 60s, dispatch compensation anyway
             # The helpdesk tombstone guarantees safety
-            idempotency_key = getattr(node.action, "idempotency_key", f"key_{node.id}")
+            idempotency_key = getattr(node.action, "idempotency_key", None) or f"key_{node.id}"
             resp = helpdesk_service.compensate_action(
                 idempotency_key=idempotency_key,
                 action_id=node.id,

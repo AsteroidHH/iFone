@@ -323,7 +323,7 @@ def falkor(monkeypatch):
     db.reset_client()
     db._health["checked_at"] = 0.0
     if not db.check_health(force=True)["up"]:
-        pytest.fail("FalkorDB is not running. Start it with: docker compose up -d falkordb")
+        pytest.skip("FalkorDB is not running. Start it with: docker compose up -d falkordb")
     name = f"hr{uuid.uuid4().hex[:8]}"
     queries.forget_stores()
     yield name

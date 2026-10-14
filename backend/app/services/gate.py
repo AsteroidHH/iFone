@@ -106,7 +106,7 @@ class QuorumGateService:
         target_tier = target_fact.asserted_by.tier if target_fact.asserted_by else Tier.NEW
 
         for node in store.nodes.values():
-            if node.id == target_fact.id or node.kind != NodeKind.FACT or node.status != Status.HEALTHY:
+            if node.id == target_fact.id or node.kind != NodeKind.FACT or node.status != Status.HEALTHY or getattr(node, "stale", False):
                 continue
 
             if node.key == target_fact.key and node.value == target_fact.value:

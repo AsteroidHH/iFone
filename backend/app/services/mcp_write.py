@@ -10,6 +10,8 @@ from app.models.graph import ActionInfo, AssertedBy, GraphEdge, GraphNode
 from app.services import observer
 from app.services import roles
 from app.services.auditor import auditor_service
+from app.services.context_pack import resolve_ref
+from app.services.event_bus import event_bus
 from app.services.executor import action_executor
 from app.services.gate import quorum_gate
 from app.services.mcp_guard import AuthError, _get_auth, effective_token, emit as _emit, guarded, viewer_of as _viewer  # noqa: F401
@@ -30,7 +32,7 @@ def remember_fact(
     store = get_graph_store(auth["tenant"])
     fact_id = id or f"fact_{uuid.uuid4().hex[:6]}"
 
-    tier_val = Tier.ROOT if "root" in auth.get("agent_id", "") else Tier.NEW
+    tier_val = Tier.ROOT if auth.get("agent_id") in ("agent_root", "root") or auth.get("role") in ("admin", "human") else Tier.NEW
     scope_team = None
     if scope == "team":
         if not auth.get("team_id"):
@@ -163,8 +165,8 @@ def derive(
 
     # Atomic derivation check
     with store._lock:
-        parents = [p for p in (store.nodes.get(pid) for pid in parent_ids) if p is not None and viewer.can_see(p)]
-        if len(parents) != len(parent_ids) or any(p.status != Status.HEALTHY for p in parents):
+        parents = [p for p in (resolve_ref(store.nodes, pid) for pid in parent_ids) if p is not None and viewer.can_see(p)]
+        if not parent_ids or len(parents) != len(parent_ids) or any(p.status != Status.HEALTHY for p in parents) or any(getattr(p, "stale", False) for p in parents):
             return {
                 "epoch": store.epoch,
                 "error": "Atomic derivation check failed: one or more parents do not exist or are not HEALTHY.",
@@ -225,8 +227,8 @@ def stage_action(
 
     # 1. Atomic derivation check
     with store._lock:
-        parents = [p for p in (store.nodes.get(pid) for pid in parent_ids) if p is not None and viewer.can_see(p)]
-        if len(parents) != len(parent_ids) or any(p.status != Status.HEALTHY for p in parents):
+        parents = [p for p in (resolve_ref(store.nodes, pid) for pid in parent_ids) if p is not None and viewer.can_see(p)]
+        if not parent_ids or len(parents) != len(parent_ids) or any(p.status != Status.HEALTHY for p in parents) or any(getattr(p, "stale", False) for p in parents):
             return {
                 "epoch": store.epoch,
                 "error": "Atomic derivation check failed: one or more parents do not exist or are not HEALTHY.",
@@ -333,11 +335,28 @@ def claim_handoff(id: str, token: str = "") -> Dict[str, Any]:
                 "success": False,
             }
 
+        claimer = auth.get("agent_id", "agent")
         target.status = HandoffStatus.IN_PROGRESS
-        target.claimed_by = auth.get("agent_id", "agent")
+        target.claimed_by = claimer
         target.claimed_at = now_ms
         target.lease_until = now_ms + 60000
+
+        event_bus.publish(
+            auth["tenant"],
+            "handoff_claimed",
+            {
+                "handoff_id": target.id,
+                "winner": claimer,
+                "lease_until": target.lease_until,
+            },
+        )
+        event_bus.publish(
+            auth["tenant"],
+            "handoff_updated",
+            {"handoff": target.model_dump()},
+        )
         return {"epoch": store.epoch, "handoff_id": id, "status": target.status.value, "success": True}
+
 
 def review_handoff(id: str, decision: str, token: str = "", note: Optional[str] = None) -> Dict[str, Any]:
     """Human-only tool: Approves or rejects a gate-blocked review handoff."""
@@ -351,10 +370,11 @@ def review_handoff(id: str, decision: str, token: str = "", note: Optional[str] 
         if not target:
             return {"error": f"Handoff '{id}' not found.", "success": False}
 
+        if note and hasattr(target, "note"):
+            target.note = note
         target.status = HandoffStatus.COMPLETED
-        store = get_graph_store(auth["tenant"])
 
-        if decision.lower() == "approve" and target.context_root_id:
+        if decision.lower() in ("approve", "passed") and target.context_root_id:
             with store._lock:
                 action_node = store.nodes.get(target.context_root_id)
                 if action_node and action_node.action:
@@ -369,6 +389,13 @@ def review_handoff(id: str, decision: str, token: str = "", note: Optional[str] 
                 alert_node = store.nodes.get(f"alert_retraction_{target.context_root_id}")
                 if alert_node:
                     alert_node.label = f"✅ Retraction Dispatched for {target.context_root_id}"
+                    event_bus.publish(auth["tenant"], "node_updated", {"node": alert_node.model_dump()})
+
+        event_bus.publish(
+            auth["tenant"],
+            "handoff_updated",
+            {"handoff": target.model_dump()},
+        )
 
         return {
             "epoch": store.epoch,

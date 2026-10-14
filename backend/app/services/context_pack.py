@@ -440,7 +440,7 @@ def find_path(store, a: str, b: str, viewer: Optional[Viewer] = None) -> Dict[st
             store.persister.sync()
             cypher = (
                 "MATCH (a:QNode {id: $a}), (b:QNode {id: $b}) "
-                "MATCH p = shortestPath((a)-[:LEADS_TO|SUPPORTS*]-(b)) "
+                "MATCH p = shortestPath((a)-[:LEADS_TO|SUPPORTS|FROM_SOURCE*]-(b)) "
                 "RETURN [n IN nodes(p) | n.id] AS path"
             )
             res = store.persister._q("shortest_path", cypher, {"a": na.id, "b": nb.id})
@@ -448,8 +448,6 @@ def find_path(store, a: str, b: str, viewer: Optional[Viewer] = None) -> Dict[st
                 raw_path = [str(x) for x in res.result_set[0][0]]
                 if all(nid in scoped for nid in raw_path):
                     path = raw_path
-            elif res.result_set is not None:
-                path = []
         except Exception:
             path = None
 

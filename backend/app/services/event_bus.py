@@ -18,8 +18,13 @@ class TenantEventBuffer:
     def publish(self, event_type: str, data: Dict[str, Any], request_id: Optional[str] = None, epoch: Optional[int] = None) -> SSEEventEnvelope:
         with self._lock:
             self.current_seq += 1
+            if epoch is None and isinstance(data, dict):
+                epoch = data.get("epoch")
             if epoch is not None:
-                self.current_epoch = epoch
+                try:
+                    self.current_epoch = max(self.current_epoch, int(epoch))
+                except (ValueError, TypeError):
+                    pass
 
             envelope = SSEEventEnvelope(
                 seq=self.current_seq,

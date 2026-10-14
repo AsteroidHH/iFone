@@ -2,7 +2,7 @@ import uuid
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from app.auth import get_auth_context, AuthContext
+from app.auth import get_auth_context, AuthContext, require_role
 from app.graph.queries import get_graph_store
 from app.models.graph import GraphNode, ActionInfo, GraphEdge
 from app.models.common import (
@@ -104,27 +104,34 @@ def execute_action_endpoint(
 @router.post("/actions/{action_id}/approve-correction")
 def approve_correction(
     action_id: str,
-    auth: AuthContext = Depends(get_auth_context),
+    auth: AuthContext = Depends(require_role(["human"])),
 ):
     store = get_graph_store(tenant=auth.tenant)
-    action_node = store.nodes.get(action_id)
-    if not action_node or not action_node.action:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"error": {"code": ErrorCode.NOT_FOUND.value, "message": f"Action '{action_id}' not found."}},
-        )
-
-    notice = getattr(action_node.action, "correction_notice", None)
-    if not notice:
-        from app.services.saga import generate_correction_notice
-        notice = generate_correction_notice(action_node, store, tenant=auth.tenant)
-
-    notice["status"] = "DISPATCHED"
-    action_node.action.correction_notice = notice
-    action_node.correction_notice = notice
-
     from app.models.common import HandoffStatus
     from app.services.event_bus import event_bus
+
+    with store._lock:
+        action_node = store.nodes.get(action_id)
+        if not action_node or not action_node.action:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"error": {"code": ErrorCode.NOT_FOUND.value, "message": f"Action '{action_id}' not found."}},
+            )
+
+        notice = getattr(action_node.action, "correction_notice", None)
+        if not notice:
+            from app.services.saga import generate_correction_notice
+            notice = generate_correction_notice(action_node, store, tenant=auth.tenant)
+
+        notice["status"] = "DISPATCHED"
+        action_node.action.correction_notice = notice
+        action_node.correction_notice = notice
+
+        # Update alert memory node if present
+        alert_node = store.nodes.get(f"alert_retraction_{action_id}")
+        if alert_node:
+            alert_node.label = f"✅ Retraction Dispatched for {action_id}"
+            event_bus.publish(auth.tenant, "node_updated", {"node": alert_node.model_dump()})
 
     with store.handoff_lock:
         for h in store.handoffs:
@@ -133,12 +140,6 @@ def approve_correction(
                 if h.correction_notice:
                     h.correction_notice["status"] = "DISPATCHED"
                 event_bus.publish(auth.tenant, "handoff_updated", {"handoff": h.model_dump()})
-
-    # Update alert memory node if present
-    alert_node = store.nodes.get(f"alert_retraction_{action_id}")
-    if alert_node:
-        alert_node.label = f"✅ Retraction Dispatched for {action_id}"
-        event_bus.publish(auth.tenant, "node_updated", {"node": alert_node.model_dump()})
 
     try:
         import graph.queries as falkor_queries

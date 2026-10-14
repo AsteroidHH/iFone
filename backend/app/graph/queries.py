@@ -1,6 +1,6 @@
 import time
 import threading
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Sequence
 from pydantic import BaseModel
 from app.models.common import Status, NodeKind, EdgeType, Tier, Reversibility, GateStatus, CompensationStatus
 from app.models.graph import GraphNode, GraphEdge, GraphResponse
@@ -76,9 +76,10 @@ class GraphStore:
             ms=ms,
             rows=rows,
         )
-        self.query_log.append(entry)
-        if len(self.query_log) > 200:
-            self.query_log.pop(0)
+        with self._lock:
+            self.query_log.append(entry)
+            if len(self.query_log) > 200:
+                self.query_log.pop(0)
 
     def bump_epoch(self, request_id: Optional[str] = None) -> int:
         with self._lock:
@@ -99,10 +100,13 @@ class GraphStore:
             self.edges.append(edge)
             self.log_query("add_edge", f"MATCH (a), (b) CREATE (a)-[:{edge.type.value}]->(b)", (time.time() - start) * 1000, 1, request_id)
 
-    def get_parents(self, node_id: str, edge_types: List[str] = ["LEADS_TO", "SUPPORTS"]) -> List[GraphNode]:
+    def get_parents(self, node_id: str, edge_types: Optional[Sequence[str]] = None) -> List[GraphNode]:
         """Returns direct parents of node_id along incoming edges."""
+        types = list(edge_types) if edge_types is not None else ["LEADS_TO", "SUPPORTS"]
+        if not types:
+            return []
         with self._lock:
-            incoming = [e for e in self.edges if e.target == node_id and e.type.value in edge_types]
+            incoming = [e for e in self.edges if e.target == node_id and e.type.value in types]
             parents = []
             for e in incoming:
                 p = self.nodes.get(e.source)
@@ -110,14 +114,17 @@ class GraphStore:
                     parents.append(p)
             return parents
 
-    def get_ancestors(self, node_id: str, edge_types: List[str] = ["LEADS_TO", "SUPPORTS"]) -> List[GraphNode]:
+    def get_ancestors(self, node_id: str, edge_types: Optional[Sequence[str]] = None) -> List[GraphNode]:
         """Traverses backwards from node_id along incoming edges of given types."""
+        types = list(edge_types) if edge_types is not None else ["LEADS_TO", "SUPPORTS"]
+        if not types:
+            return []
         with self._lock:
             if self.persister is not None:
                 try:
                     self.persister.sync()
                     from app.persistence import _label
-                    rel_pattern = "|".join(_label(t) for t in edge_types)
+                    rel_pattern = "|".join(_label(t) for t in types)
                     cypher = f"MATCH (d:QNode {{id: $node_id}})<-[:{rel_pattern}*1..]-(root:QNode) RETURN DISTINCT root.id AS id"
                     res = self.persister._q("get_ancestors", cypher, {"node_id": node_id})
                     ids = [row[0] for row in (res.result_set or [])]
@@ -131,7 +138,7 @@ class GraphStore:
 
             while queue:
                 curr = queue.pop(0)
-                incoming = [e for e in self.edges if e.target == curr and e.type.value in edge_types]
+                incoming = [e for e in self.edges if e.target == curr and e.type.value in types]
                 for edge in incoming:
                     parent_id = edge.source
                     if parent_id not in visited and parent_id != node_id:
@@ -143,14 +150,17 @@ class GraphStore:
 
             return ancestors
 
-    def get_descendants(self, node_id: str, edge_types: List[str] = ["LEADS_TO", "SUPPORTS"]) -> List[GraphNode]:
+    def get_descendants(self, node_id: str, edge_types: Optional[Sequence[str]] = None) -> List[GraphNode]:
         """Traverses forwards from node_id along outgoing edges of given types."""
+        types = list(edge_types) if edge_types is not None else ["LEADS_TO", "SUPPORTS"]
+        if not types:
+            return []
         with self._lock:
             if self.persister is not None:
                 try:
                     self.persister.sync()
                     from app.persistence import _label
-                    rel_pattern = "|".join(_label(t) for t in edge_types)
+                    rel_pattern = "|".join(_label(t) for t in types)
                     cypher = f"MATCH (root:QNode {{id: $node_id}})-[:{rel_pattern}*1..]->(d:QNode) RETURN DISTINCT d.id AS id"
                     res = self.persister._q("get_descendants", cypher, {"node_id": node_id})
                     ids = [row[0] for row in (res.result_set or [])]
@@ -164,7 +174,7 @@ class GraphStore:
 
             while queue:
                 curr = queue.pop(0)
-                outgoing = [e for e in self.edges if e.source == curr and e.type.value in edge_types]
+                outgoing = [e for e in self.edges if e.source == curr and e.type.value in types]
                 for edge in outgoing:
                     child_id = edge.target
                     if child_id not in visited and child_id != node_id:
@@ -225,7 +235,7 @@ class GraphStore:
                 return False
 
             ancestors = self.get_ancestors(action_id, edge_types=["LEADS_TO", "SUPPORTS"])
-            bad_ancestors = [x for x in ancestors if x.status != Status.HEALTHY]
+            bad_ancestors = [x for x in ancestors if x.status != Status.HEALTHY or getattr(x, "stale", False)]
 
             if bad_ancestors:
                 self.log_query("execute_guard", cypher, (time.time() - start) * 1000, 0, request_id)
@@ -287,7 +297,6 @@ class GraphStore:
                                     child.quarantined_at = now_ms
                                     child.quarantine_root = root_id
                                     child.depth = curr_depth + 1
-                                if child_id in descendant_ids:
                                     affected.append({
                                         "id": child_id,
                                         "status": Status.QUARANTINED,
@@ -419,13 +428,14 @@ class GraphStore:
         3. executed_has_healthy_ancestors: No healthy executed action may have quarantined ancestors.
         """
         with self._lock:
-            # 1. Zero healthy under quarantined
+            # 1. Zero healthy under quarantined (causal derivation edges only)
             healthy_under_quarantined = 0
             for edge in self.edges:
-                src = self.nodes.get(edge.source)
-                tgt = self.nodes.get(edge.target)
-                if src and tgt and src.status == Status.QUARANTINED and tgt.status == Status.HEALTHY:
-                    healthy_under_quarantined += 1
+                if edge.type.value in ["LEADS_TO", "SUPPORTS", "FROM_SOURCE"]:
+                    src = self.nodes.get(edge.source)
+                    tgt = self.nodes.get(edge.target)
+                    if src and tgt and src.status == Status.QUARANTINED and tgt.status == Status.HEALTHY:
+                        healthy_under_quarantined += 1
 
             # 2. DAG acyclicity (cycle detection over LEADS_TO / SUPPORTS)
             adj: Dict[str, List[str]] = {}
