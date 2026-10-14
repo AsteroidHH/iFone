@@ -1153,6 +1153,7 @@ button,
   border-bottom: 1px solid var(--line);
   text-align: left;
   border-radius: 8px;
+  overflow: hidden;
 }
 .list-row:hover {
   background: rgb(11 18 24 / 4%);

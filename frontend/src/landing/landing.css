@@ -1125,7 +1125,9 @@
   padding: 0;
   margin: 26px 0 0;
   display: grid;
+  gap: 2px;
   border-top: 1px solid var(--lp-line);
+  padding-top: 4px;
 }
 .lp-thumbs button {
   width: 100%;
@@ -1136,12 +1138,16 @@
   background: none;
   border: 0;
   border-bottom: 1px solid var(--lp-line);
-  padding: 11px 2px;
+  padding: 10px 14px;
   cursor: pointer;
   font-size: 16px;
   color: var(--lp-ink2);
+  position: relative;
+  border-radius: 999px;
+  overflow: hidden;
   transition:
     color 0.2s,
+    background 0.2s,
     padding 0.2s;
 }
 .lp-thumbs button .mono {
@@ -1150,12 +1156,26 @@
 }
 .lp-thumbs button:hover {
   color: var(--lp-ink);
+  background: rgba(11, 18, 24, 0.04);
 }
 .lp-thumbs button.on {
   color: var(--lp-ink);
   font-weight: 600;
-  padding-left: 10px;
-  box-shadow: inset 3px 0 0 var(--lp-teal);
+  padding-left: 20px;
+  background: rgba(61, 219, 176, 0.15);
+  border-bottom-color: transparent;
+  box-shadow: none;
+}
+.lp-thumbs button.on::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 8px;
+  bottom: 8px;
+  width: 3.5px;
+  background: var(--lp-teal);
+  border-radius: 3px;
+  pointer-events: none;
 }
 
 /* proof */

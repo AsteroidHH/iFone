@@ -105,6 +105,7 @@
 .mm-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; min-width: 0; }
 .mm-sub { font-size: 10.5px; color: var(--text-3); flex: none; }
 .root > .mm-sub, .ctx-big .mm-sub { color: #b4c0ca; } /* on the dark root bubble */
+.bad > .mm-sub { color: #7a1f12; } /* accessible contrast on quarantined bubble */
 .page:focus-visible, .cn-list:focus-visible, pre.terminal:focus-visible { outline: 2px solid var(--person); outline-offset: 2px; }
 .mm-caret { width: 0; height: 0; border-left: 5px solid currentColor; border-top: 4px solid transparent; border-bottom: 4px solid transparent; transition: transform 0.15s; flex: none; }
 .mm-caret.open { transform: rotate(90deg); }

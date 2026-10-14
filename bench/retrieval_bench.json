@@ -31,7 +31,7 @@
       "answered_anyway": 1,
       "clean_rate": 0.9
     },
-    "_ms_per_question": 2.84
+    "_ms_per_question": 0.4
   },
   "hybrid": {
     "direct": {
@@ -60,7 +60,7 @@
       "answered_anyway": 1,
       "clean_rate": 0.9
     },
-    "_ms_per_question": 4.78
+    "_ms_per_question": 2.49
   },
   "tokens_per_answer": {
     "full_json_top5": 320,

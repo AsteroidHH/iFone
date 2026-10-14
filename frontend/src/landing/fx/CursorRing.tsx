@@ -73,7 +73,32 @@ export function CursorRing() {
           const pad = t instanceof SVGElement ? 30 : 12;
           gw = b.width + pad;
           gh = b.height + pad;
-          grad = Math.min(gh / 2, 24);
+
+          // Dynamically match the hovered element's computed border-radius
+          let targetRad = gh / 2;
+          if (t instanceof HTMLElement) {
+            const cs = window.getComputedStyle(t);
+            const rawTl = parseFloat(cs.borderTopLeftRadius) || 0;
+            const rawTr = parseFloat(cs.borderTopRightRadius) || 0;
+            const rawBr = parseFloat(cs.borderBottomRightRadius) || 0;
+            const rawBl = parseFloat(cs.borderBottomLeftRadius) || 0;
+            const maxR = Math.max(rawTl, rawTr, rawBr, rawBl);
+
+            const isPill =
+              maxR >= b.height / 2 - 4 ||
+              cs.borderRadius.includes('999') ||
+              t.classList.contains('lp-pill') ||
+              t.classList.contains('pill');
+
+            if (isPill) {
+              targetRad = gh / 2;
+            } else if (maxR > 0) {
+              targetRad = maxR + pad / 2;
+            } else {
+              targetRad = 0;
+            }
+          }
+          grad = targetRad;
         } else {
           gw = gh = 64;
           grad = 32;

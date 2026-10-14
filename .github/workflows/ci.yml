@@ -28,7 +28,8 @@ jobs:
       - name: Tests with coverage (FalkorDB is a service container)
         run: python -m pytest -q --cov=backend/app --cov-report=term-missing:skip-covered --cov-fail-under=90
       - name: Retrieval benchmark (offline)
-        run: python bench/retrieval_bench.py && git diff --exit-code bench/retrieval_bench.json || echo "benchmark numbers changed: review bench/retrieval_bench.json"
+        run: |
+          python bench/retrieval_bench.py && git diff --exit-code bench/retrieval_bench.json || echo "benchmark numbers changed: review bench/retrieval_bench.json"
 
   frontend:
     runs-on: ubuntu-latest
@@ -72,11 +73,14 @@ jobs:
 
   audit:
     runs-on: ubuntu-latest
-    continue-on-error: true  # advisory: new advisories should be read, not block a merge
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install pip-audit && pip-audit -r backend/requirements.txt
-      - run: cd frontend && npm audit --omit=dev --audit-level=high
+      - name: Audit backend dependencies (advisory)
+        run: pip install pip-audit && pip-audit -r backend/requirements.txt
+        continue-on-error: true
+      - name: Audit frontend dependencies (advisory)
+        run: cd frontend && npm audit --omit=dev --audit-level=high
+        continue-on-error: true
