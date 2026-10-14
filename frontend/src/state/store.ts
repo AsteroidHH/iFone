@@ -106,7 +106,7 @@ function readMini(): boolean {
 export const useStore = create<Store>((set, get) => ({
   ...emptyCore(),
   view: 'console',
-  story: import.meta.env.VITE_API_MODE === 'mock',
+  story: import.meta.env.VITE_API_MODE === 'mock' || import.meta.env.MODE === 'mock',
   tab: 'graph',
   inspectorTab: 'path',
   feedFilter: 'all',
