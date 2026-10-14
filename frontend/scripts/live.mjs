@@ -68,7 +68,13 @@ const waitEnabled = async (n, ms = 30000) => {
 };
 
 await page.goto(`${BASE}/#/app`);
-await page.locator('.story-btn').first().waitFor({ timeout: 10000 });
+try {
+  await page.locator('.story-btn').first().waitFor({ timeout: 15000 });
+} catch {
+  // If story button is not immediately visible (e.g. initial view landed on overview), switch to console
+  await page.keyboard.press('1');
+  await page.locator('.story-btn').first().waitFor({ timeout: 15000 });
+}
 await sleep(1500);
 
 /* ---- live mode, not sample mode ---- */

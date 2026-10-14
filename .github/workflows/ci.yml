@@ -57,10 +57,14 @@ jobs:
   stack:
     runs-on: ubuntu-latest
     needs: [backend, frontend]
+    env:
+      QUORUM_DEMO: "1"
     steps:
       - uses: actions/checkout@v4
       - name: Build and start the whole stack
         run: docker compose up -d --build
+        env:
+          QUORUM_DEMO: "1"
       - name: Wait for the hub and run the doctor
         run: |
           for i in $(seq 1 40); do curl -sf localhost:8000/api/health && break; sleep 3; done
