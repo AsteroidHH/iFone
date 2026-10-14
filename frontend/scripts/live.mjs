@@ -221,7 +221,7 @@ await page.keyboard.press('8');
 await sleep(1500);
 const row = page.locator('.tm-table tbody tr', { hasText: miraName });
 check('presence comes from real calls', /online|idle/.test(await row.innerText()), (await row.innerText()).replace(/\s+/g, ' ').slice(0, 90));
-check('per-member call counts are real', Number((await row.locator('td').nth(3).innerText()).replace(/[^0-9]/g, '')) >= 2);
+check('per-member call counts are real', Number((await row.locator('td.num').first().innerText()).replace(/[^0-9]/g, '')) >= 2);
 await page.keyboard.press('7');
 await sleep(1500);
 check('the Connect feed lists real tool calls with their tokens', (await page.locator('.cn-row').count()) >= 3 && /tokens|tok/.test(await text('.cn-list')));
