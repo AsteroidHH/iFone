@@ -9,7 +9,7 @@ try {
     const page = await browser.newPage({ viewport: { width, height: 900 } });
     page.on('pageerror', (error) => problems.push(error.message));
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    await page.goto('http://127.0.0.1:15173/#/app');
+    await page.goto((process.argv[2] ?? 'http://127.0.0.1:15173') + '/#/app');
     await page.locator('.navbtn').first().waitFor();
     const tabs = page.locator('.navbtn');
     assert.ok(await tabs.count() >= 9);
@@ -26,7 +26,7 @@ try {
     await page.close();
   }
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-  await page.goto('http://127.0.0.1:15173/');
+  await page.goto((process.argv[2] ?? 'http://127.0.0.1:15173') + '/');
   await page.evaluate(() => sessionStorage.setItem('quorum:loaded', '1'));
   await page.reload();
   await page.waitForTimeout(1800);
@@ -50,7 +50,7 @@ try {
       ? { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true }
       : { viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
     const native = await context.newPage();
-    await native.goto('http://127.0.0.1:15173/');
+    await native.goto((process.argv[2] ?? 'http://127.0.0.1:15173') + '/');
     await native.evaluate(() => sessionStorage.setItem('quorum:loaded', '1'));
     await native.reload();
     const target = native.locator('.lp-hero .lp-pill.dark');

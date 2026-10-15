@@ -16,9 +16,9 @@ ignore = [
 [lint.per-file-ignores]
 "backend/app/main.py" = ["E402"]
 "backend/tests/*" = ["E402", "E741"]
-"tests/*" = ["E402", "E741"]
-"bench/*" = ["E402"]
-"scripts/*" = ["E402"]
+"tests/*" = ["E402", "E741", "B023", "B007", "F841"]  # stress harnesses: closures run inside the loop that defines them
+"bench/*" = ["E402", "B023", "B007", "F841", "E741"]
+"scripts/*" = ["E402", "B023", "B007", "F841", "E741"]
 "mcp/*" = ["E402"]
 "backend/app/services/context_pack.py" = ["E741"]
 "**/__init__.py" = ["F401"]

@@ -6,7 +6,7 @@ import { Icon } from './Icon';
  * Shown when the hub is up but this browser has no way to call it: no demo tokens (production rules) and no token signed
  * in for this tab. The token stays in this tab's sessionStorage and is sent only to this hub.
  */
-export function SignIn({ onSignedIn, expired = false }: { onSignedIn: () => void; expired?: boolean }) {
+export function SignIn({ onSignedIn, expired = false, devHub = false }: { onSignedIn: () => void; expired?: boolean; devHub?: boolean }) {
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,6 +67,11 @@ export function SignIn({ onSignedIn, expired = false }: { onSignedIn: () => void
           </button>
           <span className="muted small">Kept in this tab only, and sent only to this hub.</span>
         </div>
+        {devHub && (
+          <p className="block-doc small" role="note">
+            This is a local development hub. Its built-in admin token is <code className="mono">token_human</code>; start the stack with <code className="mono">QUORUM_DEMO=1</code> to be signed in automatically with sandbox credentials.
+          </p>
+        )}
         <p className="block-doc muted small">
           Operators: <code className="mono">python scripts/make_token.py --tenant acme --role human</code> makes one. See docs/SETUP.md.
         </p>

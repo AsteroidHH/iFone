@@ -303,7 +303,7 @@ export default function ConsoleApp() {
     return <BlockScreen result={r} blocked={gate.blocked} checking={gate.checking} onRetry={() => void gate.recheck()} />;
   }
   if (auth.state === 'checking') return <ViewFallback />;
-  if (auth.state === 'needed') return <SignIn expired={auth.expired} onSignedIn={auth.done} />;
+  if (auth.state === 'needed') return <SignIn expired={auth.expired} onSignedIn={auth.done} devHub={r.health.env === 'development'} />;
   const warnings = r.health.warnings;
   return (
     <>
