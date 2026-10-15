@@ -47,7 +47,8 @@ def get_query_log(limit: int = 50) -> List[Dict[str, Any]]:
 
 
 def get_graph(tenant_id: str, kind: str = "commons"):
-    graph_name = f"tenant_{tenant_id}:{kind}"
+    clean_tenant = tenant_id[7:] if tenant_id.startswith("tenant_") else tenant_id
+    graph_name = f"tenant_{clean_tenant}:{kind}"
     db = get_db()
     g = db.select_graph(graph_name)
     # Ensure Meta node exists
@@ -73,6 +74,7 @@ def ensure_indexes(tenant_id: str):
         "CREATE INDEX FOR (a:Action) ON (a.status)",
         "CREATE INDEX FOR (h:Handoff) ON (h.id)",
         "CREATE INDEX FOR (s:Source) ON (s.id)",
+        "CREATE INDEX FOR (m:MemoryNode) ON (m.id)",
         "CREATE VECTOR INDEX FOR (f:Fact) ON (f.embedding) OPTIONS {dimension: 384, similarityFunction: 'cosine'}",
     ]
     for q in queries:
@@ -176,6 +178,9 @@ def derive(
     """
     Derives a new Conclusion (or Decision) node with atomic derivation guard.
     """
+    if not parent_ids:
+        return {"success": False, "error": "Atomic derivation guard refused: parent_ids cannot be empty"}
+
     g = get_graph(tenant_id, "commons")
     name = "derive"
     label_part = ":Conclusion:Decision:MemoryNode" if is_decision else ":Conclusion:MemoryNode"
@@ -183,7 +188,7 @@ def derive(
     cypher = f"""
     MATCH (p:MemoryNode) WHERE p.id IN $parent_ids
     WITH collect(p) AS parents
-    WHERE size(parents) = size($parent_ids) AND ALL(x IN parents WHERE x.status = 'HEALTHY')
+    WHERE size($parent_ids) > 0 AND size(parents) = size($parent_ids) AND ALL(x IN parents WHERE x.status = 'HEALTHY')
     CREATE (c{label_part} {{
         id: $id, text: $text, status: 'HEALTHY', stale: false,
         owner_team: $owner_team, created_at: timestamp()
@@ -191,7 +196,7 @@ def derive(
     WITH c, parents
     UNWIND parents AS p
     CREATE (p)-[:LEADS_TO]->(c)
-    RETURN c.id, c.status
+    RETURN DISTINCT c.id, c.status
     """
     params = {"id": conclusion_id, "parent_ids": parent_ids, "text": text, "owner_team": owner_team}
 
@@ -221,9 +226,9 @@ def execute_guard(tenant_id: str, action_id: str, request_id: Optional[str] = No
     name = "execute_guard"
     cypher = """
     MATCH (a:Action {id: $id})
-    WHERE a.status = 'HEALTHY' AND a.executed = false AND a.gate = 'PASSED'
+    WHERE a.status = 'HEALTHY' AND a.executed = false AND a.gate = 'PASSED' AND coalesce(a.stale, false) = false
     OPTIONAL MATCH (x:MemoryNode)-[:LEADS_TO|SUPPORTS*]->(a)
-    WHERE coalesce(x.status, 'MISSING') <> 'HEALTHY'
+    WHERE coalesce(x.status, 'MISSING') <> 'HEALTHY' OR coalesce(x.stale, false) = true
     WITH a, count(DISTINCT x) AS bad
     WHERE bad = 0
     SET a.executed = true, a.executed_at = timestamp(), a.confirmed = false
@@ -236,7 +241,7 @@ def execute_guard(tenant_id: str, action_id: str, request_id: Optional[str] = No
     log_query(name, cypher, ms, rows, request_id)
 
     if not rows:
-        return {"success": False, "action_id": action_id, "reason": "Guard refused: ancestor non-healthy or gate blocked"}
+        return {"success": False, "action_id": action_id, "reason": "Guard refused: ancestor non-healthy/stale or gate blocked"}
 
     row = res.result_set[0]
     return {
@@ -301,7 +306,14 @@ def cascade(tenant_id: str, root_fact_id: str, request_id: Optional[str] = None)
     log_query(name, cypher, ms_containment, rows, request_id)
 
     if not rows or not res.result_set[0][0]:
-        return {"affected_count": 0, "ms_to_containment": ms_containment, "node_ids_by_depth": {}, "executed_actions": []}
+        return {
+            "success": False,
+            "error": f"Root fact '{root_fact_id}' not found",
+            "affected_count": 0,
+            "ms_to_containment": ms_containment,
+            "node_ids_by_depth": {},
+            "executed_actions": [],
+        }
 
     raw_affected = res.result_set[0][0]
     epoch = res.result_set[0][1]
@@ -547,6 +559,8 @@ def claim_handoff(
         "handoff_id": row[0],
         "status": row[1],
         "claimed_by": row[2],
+        "winner": row[2],
+        "losers": [],
         "lease_until": row[3],
     }
 
@@ -645,8 +659,13 @@ def provenance(tenant_id: str, decision_id: str, request_id: Optional[str] = Non
 
     return [
         {
-            "claim": r[0], "quote": r[1], "source": r[2],
-            "url": r[3], "version": r[4], "owner": r[5]
+            "claim": r[0] or "",
+            "quote": r[1] or "",
+            "source_title": r[2] or "",
+            "source": r[2] or "",
+            "url": r[3] or "",
+            "version": r[4] or "1",
+            "owner": r[5] or "Engineering",
         }
         for r in res.result_set
     ]
@@ -660,7 +679,8 @@ def who_knows(tenant_id: str, topic_id: str, request_id: Optional[str] = None) -
     name = "who_knows"
     cypher = """
     MATCH (p:Person)-[:AUTHORED|RESOLVED]->(s:Source)-[:ABOUT]->(t:Topic {id: $topic_id})
-    RETURN p.id, p.name, count(s) AS evidence
+    OPTIONAL MATCH (p)-[:MEMBER_OF]->(team:Team)
+    RETURN p.id, p.name, coalesce(team.name, 'Engineering') AS team, count(DISTINCT s) AS evidence, collect(DISTINCT s.id) AS source_ids
     ORDER BY evidence DESC
     """
     t0 = time.time()
@@ -669,7 +689,17 @@ def who_knows(tenant_id: str, topic_id: str, request_id: Optional[str] = None) -
     rows = len(res.result_set)
     log_query(name, cypher, ms, rows, request_id)
 
-    return [{"person_id": r[0], "name": r[1], "evidence_count": r[2]} for r in res.result_set]
+    return [
+        {
+            "person": r[1] or r[0],
+            "team": r[2] or "Engineering",
+            "evidence_count": r[3],
+            "source_ids": r[4] or [],
+            "person_id": r[0],
+            "name": r[1] or r[0],
+        }
+        for r in res.result_set
+    ]
 
 
 # =========================================================================
@@ -681,27 +711,66 @@ def blast_preview(tenant_id: str, root_id: str, request_id: Optional[str] = None
     g = get_graph(tenant_id, "commons")
     name = "blast_preview"
     cypher = """
-    MATCH (root:Fact {id: $root_id})-[:LEADS_TO|SUPPORTS*0..15]->(m:MemoryNode)
+    MATCH (root:MemoryNode {id: $root_id})
+    OPTIONAL MATCH (root)-[:LEADS_TO|SUPPORTS*0..15]->(m:MemoryNode)
     RETURN count(DISTINCT CASE WHEN 'Fact' IN labels(m) THEN m END) AS facts,
            count(DISTINCT CASE WHEN 'Conclusion' IN labels(m) THEN m END) AS conclusions,
-           count(DISTINCT CASE WHEN 'Action' IN labels(m) AND m.executed = true THEN m END) AS executed_actions,
-           count(DISTINCT CASE WHEN 'Action' IN labels(m) AND m.executed = false THEN m END) AS staged_actions
+           count(DISTINCT CASE WHEN 'Action' IN labels(m) AND m.executed = true AND coalesce(m.reversibility, 'COMPENSABLE') = 'REVERSIBLE' THEN m END) AS executed_rev,
+           count(DISTINCT CASE WHEN 'Action' IN labels(m) AND m.executed = true AND coalesce(m.reversibility, 'COMPENSABLE') = 'COMPENSABLE' THEN m END) AS executed_comp,
+           count(DISTINCT CASE WHEN 'Action' IN labels(m) AND m.executed = true AND coalesce(m.reversibility, 'COMPENSABLE') = 'IRREVERSIBLE' THEN m END) AS executed_irrev,
+           count(DISTINCT CASE WHEN 'Action' IN labels(m) AND (m.executed IS NULL OR m.executed = false) THEN m END) AS staged_actions,
+           collect(DISTINCT m.id) AS node_ids
     """
     t0 = time.time()
-    res = g.query(cypher, {"root_id": root_id})
+    try:
+        res = g.ro_query(cypher, {"root_id": root_id})
+    except Exception:
+        res = g.query(cypher, {"root_id": root_id})
     ms = (time.time() - t0) * 1000
     rows = len(res.result_set)
     log_query(name, cypher, ms, rows, request_id)
 
-    if not rows:
-        return {"facts": 0, "conclusions": 0, "executed_actions": 0, "staged_actions": 0}
+    if not rows or not res.result_set[0][6]:
+        return {
+            "root_id": root_id,
+            "node_ids": [],
+            "impacted_count": 0,
+            "facts": 0,
+            "conclusions": 0,
+            "actions": {
+                "staged": 0,
+                "executed_reversible": 0,
+                "executed_compensable": 0,
+                "executed_irreversible": 0,
+            },
+            "executed_actions": 0,
+            "staged_actions": 0,
+        }
 
     row = res.result_set[0]
+    facts = row[0]
+    conclusions = row[1]
+    executed_rev = row[2]
+    executed_comp = row[3]
+    executed_irrev = row[4]
+    staged = row[5]
+    node_ids = row[6] or []
+    total_executed = executed_rev + executed_comp + executed_irrev
+
     return {
-        "facts": row[0],
-        "conclusions": row[1],
-        "executed_actions": row[2],
-        "staged_actions": row[3],
+        "root_id": root_id,
+        "node_ids": node_ids,
+        "impacted_count": len(node_ids),
+        "facts": facts,
+        "conclusions": conclusions,
+        "actions": {
+            "staged": staged,
+            "executed_reversible": executed_rev,
+            "executed_compensable": executed_comp,
+            "executed_irreversible": executed_irrev,
+        },
+        "executed_actions": total_executed,
+        "staged_actions": staged,
     }
 
 
@@ -710,37 +779,89 @@ def invariant_check(tenant_id: str, request_id: Optional[str] = None) -> Dict[st
     Audits graph invariants:
     1. Zero HEALTHY children under QUARANTINED parents (zero orphans).
     2. Zero actions executed after an ancestor was already quarantined.
+    Returns:
+      - passed: bool (True if all invariants hold)
+      - all_passed: bool (backward compatibility)
+      - violations: int (total count of violations)
+      - healthy_children_under_quarantined: int
+      - actions_executed_after_ancestor_quarantined: int
+      - violating_child_ids: List[str]
+      - violating_action_ids: List[str]
+      - violating_node_ids: List[str]
     """
     g = get_graph(tenant_id, "commons")
+    name = "invariant_check"
+    t0 = time.time()
 
     # Invariant 1: Healthy child under quarantined parent
     q1 = """
     MATCH (parent:MemoryNode {status: 'QUARANTINED'})-[:LEADS_TO|SUPPORTS]->(child:MemoryNode {status: 'HEALTHY'})
-    RETURN count(child)
+    RETURN count(DISTINCT child) AS cnt, collect(DISTINCT child.id) AS ids
     """
-    res1 = g.query(q1).result_set[0][0]
+    res1_raw = g.query(q1).result_set
+    if res1_raw and len(res1_raw) > 0 and len(res1_raw[0]) > 0:
+        res1 = res1_raw[0][0]
+        violating_child_ids = [cid for cid in (res1_raw[0][1] or []) if cid is not None]
+    else:
+        res1 = 0
+        violating_child_ids = []
 
     # Invariant 2: Action executed after an ancestor was already quarantined
     q2 = """
     MATCH (ancestor:MemoryNode)-[:LEADS_TO|SUPPORTS*]->(a:Action {executed: true})
-    WHERE ancestor.quarantined_at IS NOT NULL AND a.executed_at > ancestor.quarantined_at
-    RETURN count(a)
+    WHERE (ancestor.quarantined_at IS NOT NULL AND a.executed_at IS NOT NULL AND a.executed_at > ancestor.quarantined_at)
+       OR (ancestor.status = 'QUARANTINED' AND a.executed = true AND (a.executed_at IS NULL OR ancestor.quarantined_at IS NULL))
+    RETURN count(DISTINCT a) AS cnt, collect(DISTINCT a.id) AS ids
     """
-    res2 = g.query(q2).result_set[0][0]
+    res2_raw = g.query(q2).result_set
+    if res2_raw and len(res2_raw) > 0 and len(res2_raw[0]) > 0:
+        res2 = res2_raw[0][0]
+        violating_action_ids = [aid for aid in (res2_raw[0][1] or []) if aid is not None]
+    else:
+        res2 = 0
+        violating_action_ids = []
+
+    ms = (time.time() - t0) * 1000
+    total_violations = res1 + res2
+    log_query(name, f"{q1.strip()}\n---\n{q2.strip()}", ms, total_violations, request_id)
+
+    violating_node_ids = sorted(list(set(violating_child_ids + violating_action_ids)))
+    passed = (total_violations == 0)
+
+    now_ms = int(time.time() * 1000)
+    checks = [
+        {"name": "zero_healthy_under_quarantined", "ok": res1 == 0, "value": float(res1)},
+        {"name": "executed_has_healthy_ancestors", "ok": res2 == 0, "value": float(res2)},
+    ]
 
     return {
+        "ok": passed,
+        "checked_at": now_ms,
+        "checks": checks,
+        "passed": passed,
+        "all_passed": passed,
+        "violations": total_violations,
         "healthy_children_under_quarantined": res1,
         "actions_executed_after_ancestor_quarantined": res2,
-        "all_passed": (res1 == 0 and res2 == 0),
+        "violating_child_ids": violating_child_ids,
+        "violating_action_ids": violating_action_ids,
+        "violating_node_ids": violating_node_ids,
     }
 
 
-def bump_epoch(tenant_id: str) -> int:
+def bump_epoch(tenant_id: str, request_id: Optional[str] = None) -> int:
     """Increments Meta.epoch and returns new epoch."""
     g = get_graph(tenant_id, "commons")
-    res = g.query("MATCH (m:Meta {id: 'meta'}) SET m.epoch = m.epoch + 1 RETURN m.epoch")
+    name = "bump_epoch"
+    t0 = time.time()
+    cypher = "MERGE (m:Meta {id: 'meta'}) ON CREATE SET m.epoch = 1 ON MATCH SET m.epoch = m.epoch + 1 RETURN m.epoch"
+    res = g.query(cypher)
+    ms = (time.time() - t0) * 1000
     if res.result_set:
-        return res.result_set[0][0]
+        epoch = res.result_set[0][0]
+        log_query(name, cypher, ms, 1, request_id)
+        return epoch
+    log_query(name, cypher, ms, 0, request_id)
     return 1
 
 
@@ -758,7 +879,7 @@ def graph_snapshot(tenant_id: str, as_of_ms: Optional[int] = None) -> Dict[str, 
     nodes = []
     for r in res_nodes:
         nid, labels, props = r[0], r[1], r[2]
-        if not nid:
+        if not nid or "Meta" in labels or nid == "meta":
             continue
         kind = "fact"
         if "Action" in labels:
@@ -772,26 +893,53 @@ def graph_snapshot(tenant_id: str, as_of_ms: Optional[int] = None) -> Dict[str, 
         elif "Procedure" in labels:
             kind = "procedure"
 
-        nodes.append({
+        node_data = {
             "id": nid,
             "kind": kind,
             "is_decision": "Decision" in labels,
-            "label": props.get("text", props.get("id", nid))[:60],
-            "text": props.get("text"),
-            "key": props.get("key"),
-            "value": props.get("value"),
+            "label": (props.get("text") or props.get("id") or nid)[:60],
             "status": props.get("status", "HEALTHY"),
             "stale": props.get("stale", False),
-            "executed": props.get("executed", False),
-            "gate": props.get("gate"),
-            "reversibility": props.get("reversibility"),
-            "quarantined_at": props.get("quarantined_at"),
-            "released_at": props.get("released_at"),
-        })
+        }
+        if props.get("text") is not None:
+            node_data["text"] = str(props["text"])
+        if props.get("key") is not None:
+            node_data["key"] = str(props["key"])
+        if props.get("value") is not None:
+            node_data["value"] = str(props["value"])
+        if props.get("quarantined_at") is not None:
+            node_data["quarantined_at"] = props["quarantined_at"]
+        if props.get("released_at") is not None:
+            node_data["released_at"] = props["released_at"]
+        if props.get("quarantine_root") is not None:
+            node_data["quarantine_root"] = props["quarantine_root"]
+        if props.get("depth") is not None:
+            node_data["depth"] = props["depth"]
+        if props.get("owner_team") is not None:
+            node_data["owner_team"] = props["owner_team"]
+
+        # Backwards compatibility flat fields
+        node_data["executed"] = props.get("executed", False)
+        if props.get("gate"):
+            node_data["gate"] = props["gate"]
+        if props.get("reversibility"):
+            node_data["reversibility"] = props["reversibility"]
+
+        if kind == "action":
+            node_data["action"] = {
+                "type": props.get("type", "generic"),
+                "reversibility": props.get("reversibility", "COMPENSABLE"),
+                "executed": props.get("executed", False),
+                "confirmed": props.get("confirmed", False),
+                "gate": props.get("gate", "PASSED"),
+                "procedure_id": props.get("procedure_id"),
+            }
+        nodes.append(node_data)
 
     edges = []
     for r in res_edges:
         edges.append({
+            "id": f"e_{r[0]}_{r[2]}",
             "source": r[0],
             "type": r[1],
             "target": r[2],
@@ -799,8 +947,19 @@ def graph_snapshot(tenant_id: str, as_of_ms: Optional[int] = None) -> Dict[str, 
 
     epoch_res = g.query("MATCH (m:Meta {id: 'meta'}) RETURN m.epoch")
     epoch = epoch_res.result_set[0][0] if epoch_res.result_set else 1
+    now_ms = int(time.time() * 1000)
 
-    return {"nodes": nodes, "edges": edges, "epoch": epoch}
+    return {
+        "contract_version": "0.1.0",
+        "tenant": tenant_id,
+        "epoch": epoch,
+        "seq": len(QUERY_LOG),
+        "as_of": as_of_ms,
+        "generated_at": now_ms,
+        "truncated": False,
+        "nodes": nodes,
+        "edges": edges,
+    }
 
 
 # =========================================================================
@@ -916,7 +1075,8 @@ def upsert_procedure(
     ms = (time.time() - t0) * 1000
     log_query("upsert_procedure", cypher, ms, len(res.result_set), request_id)
     row = res.result_set[0] if res.result_set else {}
-    return {"id": procedure_id, "rank": row[1] if res.result_set else 0.5}
+    rank = row[1] if res.result_set else 0.5
+    return {"id": procedure_id, "rank": rank, "rank_score": rank}
 
 
 def score_procedure(
@@ -955,13 +1115,15 @@ def score_procedure(
     if not res.result_set:
         return {"success": False, "error": "Procedure not found"}
     r = res.result_set[0]
+    rank = round(r[4], 4)
     return {
         "success": True,
         "procedure_id": r[0],
         "uses": r[1],
         "successes": r[2],
         "failures": r[3],
-        "rank": round(r[4], 4),
+        "rank": rank,
+        "rank_score": rank,
     }
 
 
@@ -1000,11 +1162,14 @@ def rank_procedures(
         {
             "id": r[0],
             "name": r[1],
+            "task_type": r[1],
             "rank": round(r[2], 4) if r[2] is not None else 0.5,
+            "rank_score": round(r[2], 4) if r[2] is not None else 0.5,
             "uses": r[3] or 0,
             "successes": r[4] or 0,
             "failures": r[5] or 0,
             "steps": r[6] or [],
+            "seeded": False,
         }
         for r in res.result_set
     ]
@@ -1150,8 +1315,23 @@ def resume_agent(
         for r in res_commons.result_set
     ]
 
+    memories = [
+        {
+            "fact_id": s["fact_id"],
+            "text": s["summary"],
+            "source_ref": f"tenant_{tenant_id}:commons:{s['fact_id']}",
+            "quote": s["summary"][:200],
+        }
+        for s in summaries
+    ]
+    primary_session_id = summaries[0]["session_id"] if summaries else (recent_messages[0]["session_id"] if recent_messages else f"sess_{agent_id}_001")
+    primary_summary = summaries[0]["summary"] if summaries else (recent_messages[0]["content"] if recent_messages else "Agent resumed")
+
     return {
         "agent_id": agent_id,
+        "session_id": primary_session_id,
+        "summary": primary_summary,
+        "memories": memories,
         "recent_messages": recent_messages,
         "session_summaries": summaries,
         "resumed": True,
@@ -1213,6 +1393,8 @@ def supersede_with_review(
     # Step 1: Create new fact and SUPERSEDES link
     cypher_create = """
     MATCH (old:Fact {key: $old_key})
+    WHERE old.status <> 'SUPERSEDED'
+    WITH old LIMIT 1
     CREATE (new:Fact:MemoryNode {
         id: $new_id,
         key: $old_key,
@@ -1242,12 +1424,12 @@ def supersede_with_review(
     log_query("supersede_create_link", cypher_create, ms, len(res.result_set), request_id)
 
     if not res.result_set:
-        return {"success": False, "error": f"Old fact with key '{old_fact_key}' not found"}
+        return {"success": False, "error": f"Old fact with key '{old_fact_key}' not found or already superseded"}
 
-    # Step 2: Propagate stale=true to dependent Conclusions and Decisions
+    # Step 2: Propagate stale=true to dependent Conclusions, Decisions, and Actions
     cypher_stale = """
     MATCH (old:Fact {key: $old_key})-[:LEADS_TO*1..]->(dependent)
-    WHERE dependent:Conclusion OR dependent:Decision
+    WHERE dependent:Conclusion OR dependent:Decision OR dependent:Action
     SET dependent.stale = true, dependent.stale_since = $now_ms
     RETURN dependent.id AS dep_id, labels(dependent) AS dep_labels
     """
@@ -1257,17 +1439,17 @@ def supersede_with_review(
     stale_count = len(res_stale.result_set)
     log_query("supersede_propagate_stale", cypher_stale, ms2, stale_count, request_id)
 
-    stale_decisions = [
+    stale_decisions = list(dict.fromkeys([
         r[0] for r in res_stale.result_set
         if r[1] and "Decision" in r[1]
-    ]
+    ]))
 
     # Step 3: Create REVIEW Handoff for each stale Decision
     handoffs_created = []
     for decision_id in stale_decisions:
-        # Find owning team via: Decision<-LEADS_TO-Fact-:ABOUT->Topic, Team-:OWNS->Source
+        # Find owning team via: Decision<-LEADS_TO*1..-Fact<-FROM_SOURCE-Source<-OWNS-Team
         cypher_owner = """
-        MATCH (d:Decision {id: $dec_id})<-[:LEADS_TO]-(f:Fact)<-[:FROM_SOURCE]-(src:Source)
+        MATCH (d:Decision {id: $dec_id})<-[:LEADS_TO*1..]-(f:Fact)<-[:FROM_SOURCE]-(src:Source)
               <-[:OWNS]-(team:Team)
         RETURN team.id AS team_id
         LIMIT 1
@@ -1323,17 +1505,20 @@ def brain_ask(
     question: str,
     embedding: Optional[List[float]] = None,
     k: int = 5,
+    threshold: float = 0.0,
+    min_confidence: Optional[float] = None,
     request_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Grounded Q&A with citation guard (T03-5).
     1. Vector retrieval of top-k healthy, non-stale Facts.
-    2. For each fact: trace back to Source (url, title, owner_team, quote).
-    3. If no grounded facts: return structured refusal (never hallucinate).
+    2. For each fact: trace back to Source (url, title, owner_team, quote, author_tier).
+    3. If no grounded facts or confidence below threshold: return structured refusal (never hallucinate).
     Returns: {answer, citations[], grounded: bool, refused: bool}
     """
     g = get_graph(tenant_id, "commons")
     now_ms = int(time.time() * 1000)
+    effective_threshold = min_confidence if min_confidence is not None else threshold
 
     # Step 1: Vector retrieval — healthy, non-stale facts only
     if embedding:
@@ -1348,35 +1533,61 @@ def brain_ask(
         RETURN f.id, f.key, f.text, f.value, f.source_ref, dist
         """
         params: Dict[str, Any] = {"k": k}
+        t0 = time.time()
+        res = g.query(cypher_retrieve, params)
+        ms1 = (time.time() - t0) * 1000
+        log_query("brain_ask_retrieve", cypher_retrieve, ms1, len(res.result_set), request_id)
     else:
-        # Keyword fallback: pick the longest clean token (strip punctuation)
+        # Keyword fallback: try candidate keywords in descending length order
         import re as _re
-        tokens = [_re.sub(r'[^a-z0-9]', '', w) for w in question.lower().split()]
-        tokens = [t for t in tokens if len(t) > 3]
-        keyword = max(tokens, key=len) if tokens else question[:20].lower()
-        # Single-line query avoids FalkorDB multi-line WHERE/WITH parsing issues
-        cypher_retrieve = (
-            "MATCH (f:Fact:MemoryNode) "
-            "WHERE f.status = 'HEALTHY' AND (f.stale IS NULL OR f.stale = false) "
-            "AND toLower(f.text) CONTAINS $keyword "
-            "WITH f, 0.0 AS dist LIMIT $k "
-            "RETURN f.id, f.key, f.text, f.value, f.source_ref, dist"
-        )
-        params = {"keyword": keyword, "k": k}
+        raw_tokens = [_re.sub(r'[^a-z0-9]', '', w) for w in question.lower().split()]
+        raw_tokens = [t for t in raw_tokens if len(t) > 3]
 
-    t0 = time.time()
-    res = g.query(cypher_retrieve, params)
-    ms1 = (time.time() - t0) * 1000
-    log_query("brain_ask_retrieve", cypher_retrieve, ms1, len(res.result_set), request_id)
+        candidates = []
+        for t in raw_tokens:
+            candidates.append(t)
+            if t.endswith('s') and len(t) > 4:
+                candidates.append(t[:-1])
+
+        # Deduplicate while preserving length-descending order
+        seen = set()
+        unique_candidates = []
+        for t in sorted(candidates, key=len, reverse=True):
+            if t not in seen:
+                seen.add(t)
+                unique_candidates.append(t)
+
+        if not unique_candidates:
+            unique_candidates = [question[:20].lower()]
+
+        res = None
+        for kw in unique_candidates:
+            # Single-line query avoids FalkorDB multi-line WHERE/WITH parsing issues
+            cypher_retrieve = (
+                "MATCH (f:Fact:MemoryNode) "
+                "WHERE f.status = 'HEALTHY' AND (f.stale IS NULL OR f.stale = false) "
+                "AND toLower(f.text) CONTAINS $keyword "
+                "WITH f, 0.0 AS dist LIMIT $k "
+                "RETURN f.id, f.key, f.text, f.value, f.source_ref, dist"
+            )
+            params = {"keyword": kw, "k": k}
+            t0 = time.time()
+            res = g.query(cypher_retrieve, params)
+            ms1 = (time.time() - t0) * 1000
+            log_query("brain_ask_retrieve", cypher_retrieve, ms1, len(res.result_set), request_id)
+            if res.result_set:
+                break
 
     if not res.result_set:
         # Structured refusal — never return ungrounded answer
         log_query("brain_ask_refused", "-- refusal: no grounded facts --", 0.0, 0, request_id)
+        msg = "No verified, healthy, non-stale facts found matching this query. Answer withheld."
         return {
             "answer": None,
             "grounded": False,
             "refused": True,
-            "refusal_reason": "No verified, healthy, non-stale facts found matching this query. Answer withheld.",
+            "reason": msg,
+            "refusal_reason": msg,
             "citations": [],
             "generated_at": now_ms,
         }
@@ -1389,11 +1600,18 @@ def brain_ask(
         if not text:
             continue
 
-        # Provenance: fact -> Source -> Team
+        similarity = round(1.0 - float(dist), 4)
+        if effective_threshold > 0.0 and similarity < effective_threshold:
+            continue
+
+        # Provenance: fact -> Source -> Team & Agent author tier
         cypher_prov = """
         MATCH (f:Fact {id: $fact_id})
-        OPTIONAL MATCH (f)-[:FROM_SOURCE]->(src:Source)<-[:OWNS]-(team:Team)
-        RETURN f.id, src.id, src.title, src.url, src.kind, team.id, team.name
+        OPTIONAL MATCH (f)-[:FROM_SOURCE]->(src:Source)
+        OPTIONAL MATCH (src)<-[:OWNS]-(team:Team)
+        OPTIONAL MATCH (agent:Agent) WHERE agent.id = f.agent_id OR agent.id = f.author OR agent.id = f.asserted_by
+        RETURN f.id, src.id, src.title, src.url, src.kind, src.version, team.id, team.name,
+               f.quote, f.valid_from, f.stale, COALESCE(f.author_tier, f.tier, agent.tier, 'root') AS author_tier
         LIMIT 1
         """
         t1 = time.time()
@@ -1401,35 +1619,47 @@ def brain_ask(
         ms_p = (time.time() - t1) * 1000
         log_query("brain_ask_provenance", cypher_prov, ms_p, len(prov_res.result_set), request_id)
 
-        src_title = "Internal policy"
-        src_url = ""
-        src_kind = "DOC"
-        owner_team = "unknown"
-        if prov_res.result_set:
-            pr = prov_res.result_set[0]
-            src_title = pr[2] or "Internal policy"
-            src_url = pr[3] or ""
-            src_kind = pr[4] or "DOC"
-            owner_team = pr[6] or "unknown"
+        pr = prov_res.result_set[0] if prov_res.result_set else None
+        src_title = (pr[2] if pr and pr[2] else None) or "Internal policy"
+        src_url = (pr[3] if pr and pr[3] else "") or ""
+        src_kind = (pr[4] if pr and pr[4] else None) or "DOC"
+        src_version = (pr[5] if pr and pr[5] else None) or "1.0"
+        owner_team = (pr[7] if pr and pr[7] else None) or "unknown"
+        fact_quote = (pr[8] if pr and pr[8] else None) or text[:200]
+        valid_from = pr[9] if pr and pr[9] is not None else now_ms
+        stale_status = bool(pr[10]) if pr and pr[10] is not None else False
+        author_tier = (pr[11] if pr and pr[11] else None) or "root"
 
         citations.append({
             "fact_id": fact_id,
             "key": key,
-            "quote": text[:200],
+            "quote": fact_quote,
             "source_title": src_title,
             "source_url": src_url,
+            "url": src_url,
             "source_kind": src_kind,
+            "version": src_version,
             "owner_team": owner_team,
-            "similarity": round(1.0 - float(dist), 4),
+            "author_tier": author_tier,
+            "valid_from": valid_from,
+            "stale": stale_status,
+            "similarity": similarity,
         })
         answer_parts.append(text)
 
     if not citations:
+        refusal_msg = (
+            f"No verified healthy facts met confidence threshold ({effective_threshold:.2f}). Answer withheld."
+            if effective_threshold > 0.0
+            else "Facts retrieved but none had traceable sources. Answer withheld."
+        )
+        log_query("brain_ask_refused", f"-- refusal: {refusal_msg} --", 0.0, 0, request_id)
         return {
             "answer": None,
             "grounded": False,
             "refused": True,
-            "refusal_reason": "Facts retrieved but none had traceable sources. Answer withheld.",
+            "reason": refusal_msg,
+            "refusal_reason": refusal_msg,
             "citations": [],
             "generated_at": now_ms,
         }

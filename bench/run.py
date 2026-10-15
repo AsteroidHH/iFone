@@ -12,6 +12,7 @@ Runs automated stress tests and benchmarks:
 Generates bench/results.json for the UI Benchmark panel.
 """
 
+import os
 import time
 import json
 import random
@@ -291,7 +292,8 @@ def main():
         "poison_bench": run_poison_benchmark(),
     }
 
-    with open("bench/results.json", "w") as f:
+    results_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results.json")
+    with open(results_path, "w") as f:
         json.dump(results, f, indent=2)
 
     print("\n" + "=" * 70)
