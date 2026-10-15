@@ -15,7 +15,68 @@ export interface AdapterHandlers {
 
 const reduced = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const uri = (svg: string) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}...` : s);
+export function wrapNodeLabel(str: string, maxLineLen = 14, maxLines = 3): string {
+  if (!str) return '';
+  const words = str.trim().split(/\s+/);
+  const lines: string[] = [];
+  let currentLine = '';
+
+  const pushChunk = (chunk: string) => {
+    if (!currentLine) {
+      currentLine = chunk;
+    } else if (currentLine.length + 1 + chunk.length <= maxLineLen) {
+      currentLine += ' ' + chunk;
+    } else {
+      lines.push(currentLine);
+      currentLine = chunk;
+    }
+  };
+
+  for (const word of words) {
+    if (word.length <= maxLineLen) {
+      pushChunk(word);
+    } else {
+      let remaining = word;
+      while (remaining.length > maxLineLen) {
+        let splitIdx = -1;
+        for (let i = maxLineLen; i >= 4; i--) {
+          const ch = remaining.charAt(i - 1);
+          if (ch && '_.-/@:()[]'.includes(ch)) {
+            splitIdx = i;
+            break;
+          }
+        }
+        if (splitIdx === -1) {
+          splitIdx = maxLineLen - 1;
+          pushChunk(remaining.slice(0, splitIdx) + '-');
+          remaining = remaining.slice(splitIdx);
+        } else {
+          pushChunk(remaining.slice(0, splitIdx));
+          remaining = remaining.slice(splitIdx);
+        }
+      }
+      if (remaining) {
+        pushChunk(remaining);
+      }
+    }
+  }
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  if (lines.length > maxLines) {
+    const kept = lines.slice(0, maxLines);
+    let last = kept[maxLines - 1] ?? '';
+    if (last.length > maxLineLen - 3) {
+      last = last.slice(0, Math.max(1, maxLineLen - 3)).trimEnd() + '...';
+    } else {
+      last = last.trimEnd() + '...';
+    }
+    kept[maxLines - 1] = last;
+    return kept.join('\n');
+  }
+  return lines.join('\n');
+}
 
 function nodeImage(n: GraphNode): string {
   const tone =
@@ -36,10 +97,11 @@ function nodeImage(n: GraphNode): string {
 function toData(n: GraphNode): cytoscape.NodeDataDefinition {
   const isAction = n.kind === 'action';
   const display = isAction ? copy.actionState[actionDisplayState(n)] : '';
+  const labelText = isAction ? `${wrapNodeLabel(n.label, 14, 1)}\n${display}` : wrapNodeLabel(n.label, 14, 3);
   return {
     id: n.id,
     label: n.label,
-    label2: isAction ? `${clip(n.label, 22)}\n${display}` : clip(n.label, 34),
+    label2: labelText,
     kind: n.kind,
     status: n.status,
     stale: n.stale && n.status === 'HEALTHY' ? 1 : 0,
@@ -57,7 +119,7 @@ const style = [
       height: NODE_H,
       'corner-radius': 10,
       'font-family': '"Schibsted Grotesk", system-ui, sans-serif',
-      'font-size': 13,
+      'font-size': 12,
       'font-weight': 500,
       color: P.text,
       label: 'data(label2)',
@@ -66,7 +128,7 @@ const style = [
       'text-margin-x': 14,
       'text-wrap': 'wrap',
       'text-max-width': `${NODE_W - 46}px`,
-      'line-height': 1.25,
+      'line-height': 1.18,
       'min-zoomed-font-size': 6,
       'background-color': P.bg3,
       'border-width': 2,
