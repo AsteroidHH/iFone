@@ -552,8 +552,9 @@ def test_04_snapshot_and_as_of_preserves_tenant_boundaries_across_epochs():
     setup_tenant_data(TENANT_BETA, BETA_SECRETS)
     setup_tenant_data(TENANT_GAMMA, GAMMA_SECRETS)
 
-    time.sleep(0.02)
+    time.sleep(0.05)
     t0_alpha = int(time.time() * 1000)
+    time.sleep(0.05)
 
     # -----------------------------------------------------------------
     # TENANT ALPHA: Advance through 5 distinct epochs with mutations
@@ -568,7 +569,7 @@ def test_04_snapshot_and_as_of_preserves_tenant_boundaries_across_epochs():
     })
     """)
     queries.bump_epoch(TENANT_ALPHA)  # Epoch 2
-    time.sleep(0.02)
+    time.sleep(0.05)
     t1_alpha = int(time.time() * 1000)
 
     # Epoch 3: Quarantine alpha_fact_apollo

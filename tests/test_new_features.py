@@ -31,6 +31,12 @@ skip_no_db = pytest.mark.skipif(
 TENANT = "test_features"
 
 
+def setup_module(_module):
+    if not falkordb_available:
+        return
+    teardown_module(_module)
+
+
 def teardown_module(_module):
     if not falkordb_available:
         return

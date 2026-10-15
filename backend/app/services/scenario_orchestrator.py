@@ -154,6 +154,10 @@ class ScenarioOrchestrator:
             type=EdgeType.FROM_SOURCE,
         )
 
+        with store._lock:
+            store.nodes.pop(src_webhook.id, None)
+            store.nodes.pop(fact_90d.id, None)
+            store.edges = [e for e in store.edges if e.id != edge_webhook.id]
         store.add_node(src_webhook, request_id=request_id)
         store.add_node(fact_90d, request_id=request_id)
         store.add_edge(edge_webhook, request_id=request_id)
@@ -186,6 +190,9 @@ class ScenarioOrchestrator:
             target="conc_eligible_1042",
             type=EdgeType.LEADS_TO,
         )
+        with store._lock:
+            store.nodes.pop(conc.id, None)
+            store.edges = [e for e in store.edges if e.id != e_conc.id]
         store.add_node(conc, request_id=request_id)
         store.add_edge(e_conc, request_id=request_id)
         event_bus.publish(tenant, "node_added", {"node": conc.model_dump()}, request_id=request_id)
@@ -223,6 +230,9 @@ class ScenarioOrchestrator:
                 target=act_id,
                 type=EdgeType.LEADS_TO,
             )
+            with store._lock:
+                store.nodes.pop(act_node.id, None)
+                store.edges = [e for e in store.edges if e.id != e_act.id]
             store.add_node(act_node, request_id=request_id)
             store.add_edge(e_act, request_id=request_id)
             event_bus.publish(tenant, "node_added", {"node": act_node.model_dump()}, request_id=request_id)
@@ -260,6 +270,9 @@ class ScenarioOrchestrator:
             target="act_email_cust",
             type=EdgeType.LEADS_TO,
         )
+        with store._lock:
+            store.nodes.pop(email_node.id, None)
+            store.edges = [e for e in store.edges if e.id != e_email.id]
         store.add_node(email_node, request_id=request_id)
         store.add_edge(e_email, request_id=request_id)
         event_bus.publish(tenant, "node_added", {"node": email_node.model_dump()}, request_id=request_id)
@@ -366,6 +379,10 @@ class ScenarioOrchestrator:
             type=EdgeType.SUPERSEDES,
         )
 
+        with store._lock:
+            store.nodes.pop(src_v4.id, None)
+            store.nodes.pop(fact_45d.id, None)
+            store.edges = [e for e in store.edges if e.id not in (e_src.id, e_supersedes.id)]
         store.add_node(src_v4, request_id=request_id)
         store.add_node(fact_45d, request_id=request_id)
         store.add_edge(e_src, request_id=request_id)

@@ -10,6 +10,7 @@ import os
 import time
 import json
 import logging
+import threading
 from typing import Any, Dict, List, Optional, Tuple
 from falkordb import FalkorDB
 
@@ -20,6 +21,7 @@ QUERY_LOG: List[Dict[str, Any]] = []
 MAX_QUERY_LOG_SIZE = 500
 
 _db_client: Optional[FalkorDB] = None
+_record_lock = threading.Lock()
 
 
 def get_db(host: Optional[str] = None, port: Optional[int] = None) -> FalkorDB:
@@ -1057,52 +1059,53 @@ def record_episode(
     Links:   (prev_message)-[:NEXT]->(message)  (ordered chain)
     Graph:   tenant_<id>:agent_<n>:raw
     """
-    g = get_graph(tenant_id, f"agent_{agent_id}:raw")
-    ts = ts_ms or int(time.time() * 1000)
-    # Step 1: Merge session + create message node
-    cypher_create = """
-    MERGE (s:Session {id: $session_id})
-    ON CREATE SET s.started_at = $ts
-    CREATE (m:Message {
-        id: $message_id,
-        session_id: $session_id,
-        role: $role,
-        content: $content,
-        ts: $ts
-    })
-    MERGE (s)-[:HAS_MESSAGE]->(m)
-    RETURN m.id AS message_id, s.id AS session_id
-    """
-    t0 = time.time()
-    res = g.query(cypher_create, {
-        "session_id": session_id,
-        "message_id": message_id,
-        "role": role,
-        "content": content,
-        "ts": ts,
-    })
-    ms = (time.time() - t0) * 1000
-    log_query("record_episode_create", cypher_create, ms, len(res.result_set), request_id)
-
-    # Step 2: Link previous message with NEXT (FalkorDB has no FOREACH)
-    cypher_next = """
-    MATCH (prev:Message {session_id: $session_id})
-    WHERE prev.id <> $message_id AND prev.ts < $ts
-    WITH prev ORDER BY prev.ts DESC LIMIT 1
-    MATCH (m:Message {id: $message_id})
-    CREATE (prev)-[:NEXT]->(m)
-    RETURN prev.id
-    """
-    try:
-        g.query(cypher_next, {
+    with _record_lock:
+        g = get_graph(tenant_id, f"agent_{agent_id}:raw")
+        ts = ts_ms or int(time.time() * 1000)
+        # Step 1: Merge session + create message node
+        cypher_create = """
+        MERGE (s:Session {id: $session_id})
+        ON CREATE SET s.started_at = $ts
+        CREATE (m:Message {
+            id: $message_id,
+            session_id: $session_id,
+            role: $role,
+            content: $content,
+            ts: $ts
+        })
+        MERGE (s)-[:HAS_MESSAGE]->(m)
+        RETURN m.id AS message_id, s.id AS session_id
+        """
+        t0 = time.time()
+        res = g.query(cypher_create, {
             "session_id": session_id,
             "message_id": message_id,
+            "role": role,
+            "content": content,
             "ts": ts,
         })
-    except Exception:
-        pass  # No prior message — first in session, no NEXT link needed
+        ms = (time.time() - t0) * 1000
+        log_query("record_episode_create", cypher_create, ms, len(res.result_set), request_id)
 
-    return {"success": True, "message_id": message_id, "session_id": session_id}
+        # Step 2: Link previous message with NEXT (FalkorDB has no FOREACH)
+        cypher_next = """
+        MATCH (prev:Message {session_id: $session_id})
+        WHERE prev.id <> $message_id AND prev.ts < $ts
+        WITH prev ORDER BY prev.ts DESC LIMIT 1
+        MATCH (m:Message {id: $message_id})
+        CREATE (prev)-[:NEXT]->(m)
+        RETURN prev.id
+        """
+        try:
+            g.query(cypher_next, {
+                "session_id": session_id,
+                "message_id": message_id,
+                "ts": ts,
+            })
+        except Exception:
+            pass  # No prior message — first in session, no NEXT link needed
+
+        return {"success": True, "message_id": message_id, "session_id": session_id}
 
 
 def upsert_procedure(
@@ -1172,7 +1175,7 @@ def score_procedure(
     SET p.uses = p.uses + 1,
         p.successes = p.successes + $inc_success,
         p.failures = p.failures + $inc_failure,
-        p.rank = toFloat(p.successes + 1) / toFloat(p.uses + 2),
+        p.rank = toFloat(p.successes + $inc_success + 1) / toFloat(p.uses + 3),
         p.last_used_at = timestamp()
     RETURN p.id AS id, p.uses AS uses, p.successes AS successes,
            p.failures AS failures, p.rank AS rank
@@ -1190,7 +1193,7 @@ def score_procedure(
     if not res.result_set:
         return {"success": False, "error": "Procedure not found"}
     r = res.result_set[0]
-    rank = round(r[4], 4)
+    rank = round((r[2] + 1.0) / (r[1] + 2.0), 4)
     return {
         "success": True,
         "procedure_id": r[0],
