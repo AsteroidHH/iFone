@@ -20,10 +20,9 @@ import time
 import hashlib
 import threading
 import statistics
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import pytest
 import redis
 from falkordb import FalkorDB
 
@@ -504,7 +503,7 @@ def test_03_redis_acl_enforcement_and_forbidden_commands():
     assert isinstance(raw_graph_list, list)
 
     has_foreign_graphs = any("tenant_beta" in str(g) or "tenant_gamma" in str(g) for g in raw_graph_list)
-    print(f"\n  [GRAPH.LIST Analysis]")
+    print("\n  [GRAPH.LIST Analysis]")
     print(f"  - Total graphs visible in server GRAPH.LIST: {len(raw_graph_list)}")
     print(f"  - Contains foreign tenant graph keys: {has_foreign_graphs}")
 

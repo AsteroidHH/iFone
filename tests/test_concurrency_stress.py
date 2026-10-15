@@ -5,7 +5,6 @@ Automated pytest suite for T02-4: FalkorDB concurrency throughput, connection po
 and live invariant consistency under continuous concurrent mutation.
 """
 
-import time
 import pytest
 from bench.stress_test_t02_4 import (
     run_mixed_workload_benchmark,

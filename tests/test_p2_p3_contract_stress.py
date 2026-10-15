@@ -15,7 +15,6 @@ import os
 import time
 import pytest
 import jsonschema
-from typing import Dict, Any, List
 
 from graph import queries
 

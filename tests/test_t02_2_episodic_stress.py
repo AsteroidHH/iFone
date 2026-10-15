@@ -31,12 +31,10 @@ Tests:
    - Extreme limits (limit=0, limit=1, limit=100)
 """
 
-import sys
-import os
 import time
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any
 
 import graph.queries as queries
 

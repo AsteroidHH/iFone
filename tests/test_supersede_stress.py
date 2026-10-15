@@ -11,9 +11,6 @@ Covers:
 6. Test chain of supersessions: Fact v1 -> Fact v2 -> Fact v3 and verify stale propagation across historical chain.
 """
 
-import time
-import pytest
-from typing import Dict, Any, List
 import graph.queries as queries
 
 TENANT = "test_subagent_09_stress"

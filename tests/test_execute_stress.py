@@ -14,9 +14,7 @@ Specific Tests:
 import time
 import random
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Any
-import pytest
 import graph.queries as queries
 
 TENANT = "test_stress_execute"

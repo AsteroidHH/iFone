@@ -14,7 +14,7 @@ import threading
 import statistics
 import pytest
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, List, Any
+from typing import Dict, List
 import redis
 from falkordb import FalkorDB
 import graph.queries as queries
@@ -46,9 +46,9 @@ def test_50_handoffs_20_threads_concurrency():
     num_handoffs = 50
     num_claimers = 20
 
-    print(f"\n================================================================================")
+    print("\n================================================================================")
     print(f"--- [TEST 1, 2, 3] Stress Test: {num_handoffs} handoffs x {num_claimers} concurrent threads (Barrier Sync) ---")
-    print(f"================================================================================")
+    print("================================================================================")
 
     # 1. Create 50 distinct handoffs
     for i in range(num_handoffs):
@@ -104,7 +104,7 @@ def test_50_handoffs_20_threads_concurrency():
     p_max = max(latencies_sorted)
     p_avg = statistics.mean(latencies_sorted)
 
-    print(f"Results Summary:")
+    print("Results Summary:")
     print(f"  • Total Handoffs Tested:          {num_handoffs}")
     print(f"  • Claims Attempted:               {total_claims}")
     print(f"  • Single-Winner Handoffs:         {single_winner_count}/{num_handoffs} ({(single_winner_count/num_handoffs)*100:.2f}%)")
@@ -113,7 +113,7 @@ def test_50_handoffs_20_threads_concurrency():
     print(f"  • Expected Rejections:            {total_rejections}/{total_claims - num_handoffs}")
     print(f"  • Total Test Duration:            {total_duration:.3f} s")
     print(f"  • Throughput:                     {total_claims / total_duration:.1f} claims/sec")
-    print(f"Latency Profile:")
+    print("Latency Profile:")
     print(f"  • Min:                            {p_min:.2f} ms")
     print(f"  • Mean:                           {p_avg:.2f} ms")
     print(f"  • Median (p50):                   {p50:.2f} ms")
@@ -139,9 +139,9 @@ def test_50_handoffs_global_parallel_pool_race():
     num_handoffs = 50
     num_claimers = 20
 
-    print(f"\n================================================================================")
+    print("\n================================================================================")
     print(f"--- [GLOBAL POOL STRESS] {num_handoffs} handoffs x {num_claimers} claimers in 50-Worker Pool ---")
-    print(f"================================================================================")
+    print("================================================================================")
 
     for i in range(num_handoffs):
         hid = f"h_pool_{i}"
@@ -180,7 +180,7 @@ def test_50_handoffs_global_parallel_pool_race():
     multiple_winner_count = sum(1 for w in winners.values() if len(w) > 1)
     zero_winner_count = sum(1 for w in winners.values() if len(w) == 0)
 
-    print(f"Pool Stress Results:")
+    print("Pool Stress Results:")
     print(f"  • Single-Winner Rate:             {single_winner_count}/{num_handoffs} ({(single_winner_count/num_handoffs)*100:.2f}%)")
     print(f"  • Multiple-Winner Rate:           {multiple_winner_count}")
     print(f"  • Zero-Winner Rate:               {zero_winner_count}")
@@ -203,9 +203,9 @@ def test_lease_expiration_and_reclaiming():
     g = queries.get_graph(TENANT_TEST, "commons")
     hid = "h_lease_test"
 
-    print(f"\n================================================================================")
-    print(f"--- [TEST 4] Lease Expiration & Re-claiming Behavior ---")
-    print(f"================================================================================")
+    print("\n================================================================================")
+    print("--- [TEST 4] Lease Expiration & Re-claiming Behavior ---")
+    print("================================================================================")
 
     # 1. Create a pending handoff
     g.query(f"CREATE (:Handoff {{id: '{hid}', kind: 'TASK', status: 'PENDING', lease_until: null}})")
@@ -260,9 +260,9 @@ def test_tenant_isolation_handoffs():
     g_a = queries.get_graph(TENANT_A, "commons")
     g_b = queries.get_graph(TENANT_B, "commons")
 
-    print(f"\n================================================================================")
-    print(f"--- [TEST 5] Tenant Isolation in Handoffs ---")
-    print(f"================================================================================")
+    print("\n================================================================================")
+    print("--- [TEST 5] Tenant Isolation in Handoffs ---")
+    print("================================================================================")
 
     # 1. Create a handoff ONLY in Tenant B
     g_b.query("CREATE (:Handoff {id: 'h_beta_exclusive', kind: 'TASK', status: 'PENDING', lease_until: null})")
@@ -332,9 +332,9 @@ def test_handoff_role_and_anchor_invariants():
     clean_graph(TENANT_TEST)
     g = queries.get_graph(TENANT_TEST, "commons")
 
-    print(f"\n================================================================================")
-    print(f"--- [ADDITIONAL] Role & Anchor Invariant Tests ---")
-    print(f"================================================================================")
+    print("\n================================================================================")
+    print("--- [ADDITIONAL] Role & Anchor Invariant Tests ---")
+    print("================================================================================")
 
     # 1. REVIEW handoff role permission check
     g.query("CREATE (:Handoff {id: 'h_review_1', kind: 'REVIEW', status: 'PENDING', lease_until: null})")

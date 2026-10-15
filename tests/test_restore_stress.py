@@ -17,7 +17,6 @@ import time
 import threading
 import random
 import pytest
-from typing import Dict, List, Any
 import graph.queries as queries
 
 TENANT = "test_restore_stress"

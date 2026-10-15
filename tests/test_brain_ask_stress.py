@@ -17,7 +17,6 @@ import numpy as np
 from typing import Dict, List, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import pytest
 from graph import queries
 
 
@@ -649,9 +648,9 @@ def test_concurrent_100_queries_under_mutation():
     max_lat = max(lats_sorted)
     qps = total_queries / total_duration
 
-    print(f"\n================================================================================")
-    print(f"--- CONCURRENCY STRESS TEST RESULTS ---")
-    print(f"================================================================================")
+    print("\n================================================================================")
+    print("--- CONCURRENCY STRESS TEST RESULTS ---")
+    print("================================================================================")
     print(f"  Total Queries Executed:       {total_queries} (across {num_threads} concurrent threads)")
     print(f"  Total Duration:               {total_duration:.3f} s")
     print(f"  Throughput (Queries/sec):     {qps:.2f} QPS")
@@ -660,7 +659,7 @@ def test_concurrent_100_queries_under_mutation():
     print(f"  Latency p95:                  {p95:.2f} ms")
     print(f"  Latency p99:                  {p99:.2f} ms")
     print(f"  Latency Max:                  {max_lat:.2f} ms")
-    print(f"--------------------------------------------------------------------------------")
+    print("--------------------------------------------------------------------------------")
     print(f"  Background Fact Additions:    {mutation_stats['adds']}")
     print(f"  Background Supersedes:        {mutation_stats['supersedes']}")
     print(f"  Background Mutator Errors:    {len(mutation_stats['errors'])}")
@@ -669,7 +668,7 @@ def test_concurrent_100_queries_under_mutation():
     print(f"  Valid Citations Verified:     {valid_citation_count}")
     print(f"  Race Condition Leaks:         {stale_or_superseded_leaks} (Expected: 0)")
     print(f"  Post-Concurrency Leaks:       {post_supersede_leaks} (Expected: 0)")
-    print(f"================================================================================\n")
+    print("================================================================================\n")
 
     assert stale_or_superseded_leaks == 0, f"Found {stale_or_superseded_leaks} race condition leaks in citations!"
     assert post_supersede_leaks == 0, f"Found {post_supersede_leaks} post-concurrency leaks in citations!"

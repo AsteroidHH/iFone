@@ -13,8 +13,7 @@ Comprehensive test suite verifying:
 import os
 import sys
 import time
-import pytest
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
@@ -384,7 +383,7 @@ class TestSnapshotTimeTravelStress:
         # NOTE: In-place property mutation issue!
         f1_e1_status = next(r["status"] for r in res_e1 if r["id"] == "F1")
         print(f"  CRITICAL LOGIC OBSERVATION: F1 status returned at Epoch 1 timestamp is '{f1_e1_status}'.")
-        print(f"  Historically at Epoch 1, F1 was HEALTHY, but because FalkorDB mutates properties in-place,")
+        print("  Historically at Epoch 1, F1 was HEALTHY, but because FalkorDB mutates properties in-place,")
         print(f"  as_of returns the current property value '{f1_e1_status}'.")
 
         # Epoch 3: T_e3. Active facts: F1 (valid_to > t_e3), F2 (restored at t_e3, released_at <= t_e3), F3 (valid_to > t_e3).

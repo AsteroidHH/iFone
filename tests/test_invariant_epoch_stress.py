@@ -23,8 +23,7 @@ Tests:
 import time
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, List, Set, Any
-import pytest
+from typing import List
 from graph import queries
 
 TENANT_HEALTHY = "test_inv_healthy"
@@ -352,7 +351,7 @@ def test_bump_epoch_multi_tenant_isolation_concurrency():
     results_b: List[int] = []
     lock = threading.Lock()
 
-    print(f"\n[Test 4B] Racing 500 bumps on Tenant A and 500 on Tenant B...")
+    print("\n[Test 4B] Racing 500 bumps on Tenant A and 500 on Tenant B...")
 
     def worker_a():
         val = queries.bump_epoch(TENANT_EPOCH_A)

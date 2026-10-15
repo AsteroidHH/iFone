@@ -15,8 +15,6 @@ Specific tests:
 
 import time
 import threading
-import pytest
-from typing import Dict, List, Any
 import graph.queries as queries
 
 TENANT = "test_derive_stress"

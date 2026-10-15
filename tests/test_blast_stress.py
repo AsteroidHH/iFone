@@ -15,7 +15,6 @@ Covers:
 import time
 import threading
 import random
-import pytest
 from typing import Dict, List, Set, Any, Tuple
 import graph.queries as queries
 
@@ -604,7 +603,7 @@ def test_concurrent_blast_preview_under_writes():
     p99 = latencies[int(n_queries * 0.99)] if n_queries else 0.0
     max_lat = max(latencies) if n_queries else 0.0
 
-    print(f"\n--- Concurrent Blast Preview Benchmark (100 nodes, 10 threads) ---")
+    print("\n--- Concurrent Blast Preview Benchmark (100 nodes, 10 threads) ---")
     print(f"Total blast_preview queries completed: {n_queries}")
     print(f"Total time: {total_query_time:.3f} s")
     print(f"Throughput: {n_queries / total_query_time:.1f} queries/sec")

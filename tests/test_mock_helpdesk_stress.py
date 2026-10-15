@@ -12,7 +12,6 @@ Covers:
 import time
 import threading
 import random
-import pytest
 from typing import Dict, List, Any
 from fastapi.testclient import TestClient
 
@@ -379,7 +378,7 @@ def test_tombstone_rule_rejects_late_execution_arrivals():
     duration = time.time() - t0
     rejection_rate = (rejected_count / total_attempts) * 100
 
-    print(f"  [+] Stress Results:")
+    print("  [+] Stress Results:")
     print(f"      Total Late Execution Attempts: {total_attempts}")
     print(f"      Rejections (HTTP 409): {rejected_count} ({rejection_rate:.2f}%)")
     print(f"      Erroneously Accepted (HTTP 200): {accepted_count}")
