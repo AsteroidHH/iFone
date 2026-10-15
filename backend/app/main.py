@@ -64,6 +64,17 @@ def _flusher(stop: threading.Event) -> None:
     """Persists changes made by background work (agents, saga) that happen outside a request."""
     while not stop.wait(0.5):
         try:
+            from app.graph.queries import _stores, _stores_lock, get_graph_store
+            from app.services.saga import saga_worker
+
+            # Discover persisted tenants too, so recovery does not wait for a user request after restart.
+            for name in db.get_client().list_graphs():
+                if name.startswith("quorum:"):
+                    get_graph_store(name[len("quorum:"):])
+            with _stores_lock:
+                stores = list(_stores.values())
+            for store in stores:
+                saga_worker.process_pending(store, tenant=store.tenant)
             sync_all()
         except Exception:
             pass  # the next request reports FalkorDB being down; the failed diff is retried on the next pass

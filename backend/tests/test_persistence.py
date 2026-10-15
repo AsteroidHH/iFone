@@ -36,6 +36,86 @@ def _fact(i: str, label: str) -> GraphNode:
     return GraphNode(id=i, kind=NodeKind.FACT, label=label, status=Status.HEALTHY, stale=False, text=f"text of {label}")
 
 
+def test_atomic_quarantine_includes_recovery_intent_and_survives_restart(falkor):
+    from app.models.common import CompensationStatus, GateStatus, Reversibility
+    from app.models.graph import ActionInfo
+    from app.services.auditor import auditor_service
+
+    store = queries.get_graph_store(falkor)
+    store.add_node(_fact("root", "original"))
+    store.add_node(GraphNode(id="action", kind=NodeKind.ACTION, label="ticket", status=Status.HEALTHY,
+                             action=ActionInfo(type="ticket", reversibility=Reversibility.REVERSIBLE,
+                                               gate=GateStatus.PASSED, executed=True)))
+    store.add_edge(GraphEdge(id="cause", source="root", target="action", type=EdgeType.LEADS_TO))
+    store.commit()
+    auditor_service.quarantine(store, "root", tenant=falkor)
+    queries.forget_stores()
+    restored = queries.get_graph_store(falkor)
+    assert restored.nodes["root"].status == Status.QUARANTINED
+    assert restored.nodes["action"].status == Status.QUARANTINED
+    assert restored.nodes["action"].action.compensation.status == CompensationStatus.PENDING_COMPENSATION
+    assert restored.epoch == 2
+
+
+def test_compensation_external_success_then_confirmation_failure_recovers(falkor, monkeypatch):
+    from app.models.common import CompensationStatus, GateStatus, Reversibility
+    from app.models.graph import ActionInfo, CompensationInfo
+    from app.services import saga
+    from app.services.helpdesk import MockHelpdeskService
+
+    store = queries.get_graph_store(falkor)
+    node = GraphNode(id="a", kind=NodeKind.ACTION, label="ticket", status=Status.QUARANTINED,
+                     action=ActionInfo(type="ticket", reversibility=Reversibility.REVERSIBLE,
+                                       gate=GateStatus.PASSED, executed=True,
+                                       compensation=CompensationInfo(status=CompensationStatus.PENDING_COMPENSATION)))
+    store.add_node(node)
+    store.commit()
+    service = MockHelpdeskService()
+    monkeypatch.setattr(saga, "helpdesk_service", service)
+    real = store.persister._q
+
+    def fail_confirmation(*args, **kwargs):
+        if node.action.compensation.status == CompensationStatus.COMPENSATED:
+            raise ConnectionError("confirmation persistence failed")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(store.persister, "_q", fail_confirmation)
+    with pytest.raises(ConnectionError):
+        saga.OutboxSagaWorker().process_pending(store, falkor)
+    queries.forget_stores()
+    recovered = queries.get_graph_store(falkor)
+    comp = recovered.nodes["a"].action.compensation
+    assert comp.status == CompensationStatus.DISPATCHING and comp.attempts == 1
+    assert recovered.nodes["a"].action.external_key in service.tombstones
+    comp.lease_until = 1
+    assert saga.OutboxSagaWorker().process_pending(recovered, falkor)
+    queries.forget_stores()
+    assert queries.get_graph_store(falkor).nodes["a"].action.compensation.status == CompensationStatus.COMPENSATED
+
+
+def test_projection_failure_recovers_from_atomic_checkpoint(falkor, monkeypatch):
+    store = queries.get_graph_store(falkor)
+    store.add_node(_fact("checkpoint_fact", "durable recovery fact"))
+    store.record_call({"tool": "checkpoint-test"})
+    real = store.persister._q
+
+    def fail_projection(name, *args, **kwargs):
+        if name == "upsert_fact":
+            raise ConnectionError("projection interrupted after checkpoint committed")
+        return real(name, *args, **kwargs)
+
+    monkeypatch.setattr(store.persister, "_q", fail_projection)
+    with pytest.raises(ConnectionError):
+        store.commit()
+    queries.forget_stores()
+    recovered = queries.get_graph_store(falkor)
+    assert recovered.nodes["checkpoint_fact"].label == "durable recovery fact"
+    assert recovered.calls[-1]["tool"] == "checkpoint-test"
+    recovered.commit()
+    rows = db.graph_for(falkor).query("MATCH (n:QNode {id:'checkpoint_fact'}) RETURN n.json").result_set
+    assert GraphNode.model_validate_json(rows[0][0]).id == "checkpoint_fact"
+
+
 def test_writes_survive_a_restart(falkor):
     s = queries.get_graph_store(falkor)
     s.add_node(_fact("f1", "Refund window is 30 days"))

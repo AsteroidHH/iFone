@@ -235,7 +235,7 @@ def _cache_put(k: str, val: Tuple[str, np.ndarray]) -> None:
     _cache[k] = val
     if hasattr(_cache, "move_to_end"):
         _cache.move_to_end(k)
-    if len(_cache) > MAX_CACHE:
+    while len(_cache) > MAX_CACHE:
         if hasattr(_cache, "popitem"):
             _cache.popitem(last=False)
         else:

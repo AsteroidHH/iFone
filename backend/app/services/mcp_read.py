@@ -3,7 +3,7 @@ import json
 from typing import Any, Dict, List, Optional
 
 from app.graph.queries import get_graph_store
-from app.models.common import NodeKind, Status
+from app.models.common import Status
 from app.services import context_pack as cp
 from app.services.context_pack import estimate_tokens
 from app.services.mcp_guard import AuthError, _get_auth, effective_token, emit as _emit, guarded, viewer_of as _viewer  # noqa: F401
@@ -60,8 +60,15 @@ def retrieve_context(
         return out
 
     with store._lock:
-        nodes = [n for n in store.nodes.values() if viewer.can_see(n)]
-    candidates = [n for n in nodes if n.kind == NodeKind.FACT and n.status == Status.HEALTHY and not n.stale]
+        candidates = store.nodes.candidates(viewer)
+        cache_key = (store.nodes.revision, query, viewer.scoped, viewer.team_id, tuple(sorted(viewer.linked_teams)))
+        baseline = store.baseline_cache.get(cache_key)
+        if baseline is None:
+            nodes = [n for n in store.nodes.values() if viewer.can_see(n)]
+            baseline = cp.baseline_tokens(nodes, query)
+            if len(store.baseline_cache) >= 32:
+                store.baseline_cache.clear()
+            store.baseline_cache[cache_key] = baseline
     idf = cp.idf_weights(candidates)
     ranked = [(n, sc) for n, sc, _ in cp.rank(candidates, query, idf)]
     matched = [
@@ -80,7 +87,7 @@ def retrieve_context(
     out = {"epoch": store.epoch, "count": len(matched), "context": matched[:k_val]}
     _remember_delivery(store, auth, [m["id"] for m in out["context"]], query)
     out["tokens"] = estimate_tokens(json.dumps(out))
-    out["tokens_baseline"] = cp.baseline_tokens(nodes, query)
+    out["tokens_baseline"] = baseline
     return out
 
 

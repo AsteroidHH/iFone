@@ -4,6 +4,7 @@ import type { GraphNode } from '../api/schemas';
 import { graphBus } from '../graph/bus';
 import { actionDisplayState, actionTone } from '../state/actionState';
 import { getCypher, getNode } from '../state/endpoints';
+import { queryTiming } from './queryTiming';
 import { useStore, type InspectorTab } from '../state/store';
 import { Icon } from './Icon';
 import { tools } from '../copy/tools';
@@ -211,8 +212,8 @@ function CypherTab({ nodeId }: { nodeId: string }) {
         <article key={i} className="cypher-entry">
           <header>
             <strong className="mono">{c.name}</strong>
-            <span className="num">
-              {c.ms} ms, {copy.inspector.rows(c.rows)}
+            <span className="num timing-badge" title={`${c.ms} ms; ${c.timing_boundary ?? 'measurement boundary unknown'}; ${copy.inspector.rows(c.rows)}`}>
+              {queryTiming(c)}
             </span>
           </header>
           <Cypher text={c.cypher} />

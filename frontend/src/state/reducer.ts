@@ -213,6 +213,11 @@ export function applyEvent(prev: CoreState, ev: SseEvent): { state: CoreState; e
     case 'epoch_changed': {
       const reason = String(ev.data.reason);
       s = { ...s, epoch: ev.data.epoch };
+      if (reason === 'reset') {
+        s = { ...s, cascade: null };
+        effects.push({ kind: 'resync' });
+        break;
+      }
       const c = s.cascade;
       if (reason === 'quarantine' && c) {
         const actions = c.ids.filter((id) => s.nodes[id]?.kind === 'action' && s.nodes[id]?.action?.executed).length;

@@ -1,11 +1,14 @@
 import time
 import threading
+from collections import deque
 from typing import Dict, List, Optional, Any, Sequence
 from pydantic import BaseModel
+from fastapi import HTTPException
 from app.models.common import Status, NodeKind, EdgeType, Tier, Reversibility, GateStatus, CompensationStatus
 from app.models.graph import GraphNode, GraphEdge, GraphResponse
 from app.models.handoffs import Handoff
 from app.config import settings
+from app.graph.candidates import NodeRegistry
 
 
 class CypherLogEntry(BaseModel):
@@ -15,6 +18,9 @@ class CypherLogEntry(BaseModel):
     cypher: str
     ms: float
     rows: int
+    origin: str = "illustrative"
+    outcome: str = "success"
+    timing_boundary: str = "client_round_trip"
 
 
 class GraphStore:
@@ -25,13 +31,15 @@ class GraphStore:
     def __init__(self, tenant: str = "acme"):
         self.tenant = tenant
         self._lock = threading.RLock()
-        self.nodes: Dict[str, GraphNode] = {}
+        self.nodes = NodeRegistry()
+        self.baseline_cache: Dict[Any, int] = {}
         self.edges: List[GraphEdge] = []
         self.epoch: int = 1
         self.query_log: List[CypherLogEntry] = []
         # Handoffs belong to the tenant's graph, like everything else.
         self.handoffs: List[Handoff] = []
-        self.handoff_lock = threading.RLock()
+        # One lock order for graph, workspace authorization, persistence and handoff claims.
+        self.handoff_lock = self._lock
         self.persister: Optional[Any] = None  # set by get_graph_store when persistence is FalkorDB
         from app.services.workspace import default_workspace
 
@@ -64,7 +72,7 @@ class GraphStore:
             return 0
         return self.persister.sync(request_id)
 
-    def log_query(self, name: str, cypher: str, ms: float, rows: int, request_id: Optional[str] = None, real: bool = False):
+    def log_query(self, name: str, cypher: str, ms: float, rows: int, request_id: Optional[str] = None, real: bool = False, timing_boundary: str = "client_round_trip", outcome: str = "success"):
         # With FalkorDB behind the store the log shows only Cypher that actually ran (persistence passes real=True).
         if self.persister is not None and not real:
             return
@@ -75,6 +83,9 @@ class GraphStore:
             cypher=cypher,
             ms=ms,
             rows=rows,
+            origin="falkordb" if real else "memory",
+            timing_boundary=timing_boundary if real else "in_process",
+            outcome=outcome,
         )
         with self._lock:
             self.query_log.append(entry)
@@ -91,12 +102,24 @@ class GraphStore:
     def add_node(self, node: GraphNode, request_id: Optional[str] = None):
         with self._lock:
             start = time.time()
+            existing = self.nodes.get(node.id)
+            if existing is not None:
+                if existing.model_dump() == node.model_dump():
+                    return  # exact retry, including status, provenance and scope
+                raise HTTPException(409, {"error": {"code": "CONFLICT", "message": "Node ID already exists; use an authorized restore or a new version ID."}})
             self.nodes[node.id] = node
             self.log_query("add_node", f"CREATE (n:{node.kind.value.capitalize()} {{id:'{node.id}'}})", (time.time() - start) * 1000, 1, request_id)
 
     def add_edge(self, edge: GraphEdge, request_id: Optional[str] = None):
         with self._lock:
             start = time.time()
+            if any(e.id == edge.id for e in self.edges):
+                if any(e == edge for e in self.edges):
+                    return
+                raise HTTPException(409, "Edge ID already exists")
+            if edge.type in (EdgeType.LEADS_TO, EdgeType.SUPPORTS, EdgeType.FROM_SOURCE):
+                if edge.source == edge.target:
+                    raise HTTPException(409, "Causal links must form a DAG")
             self.edges.append(edge)
             self.log_query("add_edge", f"MATCH (a), (b) CREATE (a)-[:{edge.type.value}]->(b)", (time.time() - start) * 1000, 1, request_id)
 
@@ -260,57 +283,7 @@ class GraphStore:
 
             now_ms = int(time.time() * 1000)
 
-            # If FalkorDB is attached, execute the cascade traversal & state mutation directly via Cypher
-            if self.persister is not None:
-                self.persister.sync(request_id)
-                cypher = (
-                    "MATCH (root:QNode {id: $root_id}) "
-                    "SET root.status = 'QUARANTINED', root.quarantined_at = $now_ms, root.quarantine_root = $root_id, root.depth = 0 "
-                    "WITH root "
-                    "OPTIONAL MATCH (root)-[:LEADS_TO|SUPPORTS*1..]->(descendant:QNode) "
-                    "WHERE descendant IS NOT NULL "
-                    "SET descendant.status = 'QUARANTINED', descendant.quarantined_at = $now_ms, descendant.quarantine_root = $root_id "
-                    "RETURN DISTINCT descendant.id AS id"
-                )
-                try:
-                    res = self.persister._q("cascade_quarantine", cypher, {"root_id": root_id, "now_ms": now_ms}, request_id)
-                    root.status = Status.QUARANTINED
-                    root.quarantined_at = now_ms
-                    root.quarantine_root = root_id
-                    root.depth = 0
-
-                    affected = [{"id": root.id, "status": Status.QUARANTINED, "depth": 0, "root_id": root_id}]
-
-                    descendant_ids = {str(row[0]) for row in (res.result_set or [])}
-                    queue = [(root_id, 0)]
-                    visited = {root_id}
-                    while queue:
-                        curr_id, curr_depth = queue.pop(0)
-                        outgoing = [e for e in self.edges if e.source == curr_id and e.type.value in ["LEADS_TO", "SUPPORTS", "FROM_SOURCE"]]
-                        for edge in outgoing:
-                            child_id = edge.target
-                            if child_id not in visited:
-                                visited.add(child_id)
-                                child = self.nodes.get(child_id)
-                                if child:
-                                    child.status = Status.QUARANTINED
-                                    child.quarantined_at = now_ms
-                                    child.quarantine_root = root_id
-                                    child.depth = curr_depth + 1
-                                    affected.append({
-                                        "id": child_id,
-                                        "status": Status.QUARANTINED,
-                                        "depth": curr_depth + 1,
-                                        "root_id": root_id,
-                                    })
-                                queue.append((child_id, curr_depth + 1))
-
-                    self.bump_epoch(request_id)
-                    return affected
-                except Exception:
-                    pass
-
-            # In-memory BFS fallback (PERSISTENCE=memory or offline testing)
+            # One process owns traversal; the auditor commits status and compensation intent together.
             cypher = (
                 "MATCH (root:Fact {id:$root_id}) "
                 "OPTIONAL MATCH (root)-[:LEADS_TO|SUPPORTS*]->(descendant) "
@@ -326,12 +299,16 @@ class GraphStore:
             affected = [{"id": root.id, "status": Status.QUARANTINED, "depth": 0, "root_id": root_id}]
 
             # BFS for descendants to compute exact hop depth
-            queue = [(root_id, 0)]
+            queue = deque([(root_id, 0)])
             visited = {root_id}
+            outgoing_by_id: Dict[str, List[GraphEdge]] = {}
+            for edge in self.edges:
+                if edge.type in (EdgeType.LEADS_TO, EdgeType.SUPPORTS, EdgeType.FROM_SOURCE):
+                    outgoing_by_id.setdefault(edge.source, []).append(edge)
 
             while queue:
-                curr_id, curr_depth = queue.pop(0)
-                outgoing = [e for e in self.edges if e.source == curr_id and e.type.value in ["LEADS_TO", "SUPPORTS", "FROM_SOURCE"]]
+                curr_id, curr_depth = queue.popleft()
+                outgoing = outgoing_by_id.get(curr_id, [])
                 for edge in outgoing:
                     child_id = edge.target
                     if child_id not in visited:
@@ -365,6 +342,8 @@ class GraphStore:
             now_ms = int(time.time() * 1000)
             root = self.nodes.get(root_id)
             if not root or root.status != Status.QUARANTINED:
+                return []
+            if root.action and root.action.executed:
                 return []
 
             restored = []

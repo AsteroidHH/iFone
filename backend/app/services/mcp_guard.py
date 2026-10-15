@@ -14,6 +14,7 @@ from app.models.graph import GraphEdge, GraphNode
 from app.services import workspace
 from app.services.context_pack import estimate_tokens
 from app.services.event_bus import event_bus
+from app.services.access import audit_scopes
 
 
 def emit(tenant: str, nodes: Sequence[GraphNode] = (), edges: Sequence[GraphEdge] = ()) -> None:
@@ -72,6 +73,7 @@ def _record(tool: str, bound: Dict[str, Any], out: Any, ms: float) -> None:
             "member_id": info.get("member_id"),
             "role": info["role"],
             "summary": _summary(tool, bound),
+            "scope_teams": audit_scopes(store, info),
             "tokens": tokens,
             "baseline": baseline,
             "ms": round(ms, 1),
@@ -121,10 +123,7 @@ def guarded(fn):
             if settings.PERSISTENCE == "falkordb":
                 db.require_db()
                 if os.getenv("QUORUM_STANDALONE_MCP") == "1":
-                    # A separate MCP process shares FalkorDB, not memory: start every call from the stored state.
-                    from app.graph.queries import forget_stores
-
-                    forget_stores()
+                    raise RuntimeError("Standalone MCP cannot safely share a writer with the API. Use embedded MCP in the supported single-process deployment.")
             bound_args = dict(sig.bind(*args, **kwargs).arguments)
             who = effective_token(bound_args.get("token")) or "anonymous"
             ok, wait = tool_limiter.allow(who)
@@ -167,6 +166,7 @@ def record_event(info: Dict[str, Any], tool: str, summary: str, ms: float = 0.0,
             "member_id": info.get("member_id"),
             "role": info["role"],
             "summary": summary if len(summary) <= 70 else summary[:69] + "…",
+            "scope_teams": audit_scopes(store, info),
             "tokens": 0,
             "baseline": 0,
             "ms": round(ms, 1),

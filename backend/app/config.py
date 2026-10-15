@@ -75,7 +75,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="QUORUM_")
 
     def dynamic_tokens_allowed(self) -> bool:
-        return self.ALLOW_DYNAMIC_TOKENS if self.ALLOW_DYNAMIC_TOKENS is not None else self.ENV != "production"
+        return self.ENV != "production" and self.ALLOW_DYNAMIC_TOKENS is not False
 
     def mcp_header_required(self) -> bool:
         return self.MCP_REQUIRE_HEADER if self.MCP_REQUIRE_HEADER is not None else self.ENV == "production"

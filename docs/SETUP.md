@@ -95,7 +95,7 @@ This was run end to end: the hub starts with production rules, FalkorDB asks for
 
 ## Production checklist
 
-1. `QUORUM_ENV=production`, and `QUORUM_TOKENS_JSON` with real tokens. Replace `frontend/public/config.json` at deploy time with a file holding the same tokens for the console.
+1. `QUORUM_ENV=production`, and `QUORUM_TOKENS_JSON` with real tokens. Sign in using the console token form. Keep bearer credentials in backend secrets and the signed-in tab only; never deploy them in public files.
 2. FalkorDB with a volume and a password in `QUORUM_FALKORDB_URL` (`redis://:password@host:6379`). Do not expose port 6379.
 3. One backend process. Atomic guards run in the process under locks, so do not run several API workers against one FalkorDB.
 4. Put HTTPS in front of the console, the API and `/mcp`: `docker compose --profile tls up -d` runs a Caddy proxy (see [`MCP.md`](MCP.md#https-for-a-team)). Set `QUORUM_PUBLIC_URL` to its address and `QUORUM_CORS_ORIGINS` to the console's origin.
@@ -108,7 +108,7 @@ This was run end to end: the hub starts with production rules, FalkorDB asks for
 | "Database not ready" screen | `docker compose up -d falkordb`, then `python scripts/doctor.py` |
 | "Redis is running but the FalkorDB graph module is not loaded" | You started plain Redis. Use the `falkordb/falkordb` image. |
 | "Backend not running" screen | Start the backend (step 2), or `docker compose up -d backend`. |
-| Console loads but every call is 401 | The tokens in `frontend/public/config.json` do not match the backend's tokens (see `QUORUM_TOKENS_JSON`). |
+| Console loads but every call is 401 | Sign in with a configured or issued member token; check expiry and revocation (see `QUORUM_TOKENS_JSON`). |
 | Agent writes do not show in the console | The MCP server is a separate process. Use `QUORUM_EMBED_MCP=1`, and for stdio apps use `mcp/bridge.py` rather than the standalone server. |
 | An MCP client gets 401 | The `Authorization` header is missing or the token is wrong. A member token is shown once; rotate it on the Team page. |
 | Tool calls answer `rate_limited` or HTTP 429 | The per-token limit was hit. Wait `retry_after` seconds, or raise `QUORUM_RATE_LIMIT_TOOLS_PER_MIN` (a bulk import needs it). |

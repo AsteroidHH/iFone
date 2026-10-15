@@ -47,12 +47,15 @@ def get_cypher_log(
     store = get_graph_store(auth.tenant)
     with store._lock:
         entries = list(store.query_log)
+    if auth.member_id:
+        # Statements can describe other teams' writes; parameter-free Cypher is still sensitive.
+        return []
 
     if request_id:
         entries = [e for e in entries if e.request_id == request_id]
 
     return [
-        CypherLogItem(ts=e.ts, request_id=e.request_id, name=e.name, cypher=e.cypher, ms=round(e.ms, 2), rows=e.rows)
+        CypherLogItem(**e.model_dump())
         for e in reversed(entries[-limit:])
     ]
 

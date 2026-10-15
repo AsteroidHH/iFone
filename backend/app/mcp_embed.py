@@ -2,8 +2,7 @@
 Optional: serve the MCP tools from the API process itself (set QUORUM_EMBED_MCP=1).
 
 Why: the API and a standalone MCP server each hold their own in-memory graph, so what agents write over MCP never shows
-up in the console. Embedding puts both on one graph and one event bus. The standalone server (mcp/server.py) is
-unchanged and still works for setups where the graph lives in FalkorDB.
+up in the console. Embedding puts both on one graph and one event bus. Standalone MCP writers are unsupported with persistence; stdio clients use mcp/bridge.py to reach the single hub.
 """
 from typing import Optional
 

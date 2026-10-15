@@ -8,8 +8,9 @@ FalkorDB is the system of record. Each tenant has a graph named quorum:<tenant> 
   (:QMeta {id:'meta', epoch})                                                 the context epoch
 
 Hot-path logic (cascade, guards, gate) still runs in the API process under locks, then `sync()` writes every change
-that happened since the last sync. `load()` rebuilds the in-memory view from FalkorDB when a tenant is first used,
-so a restart loses nothing. The Cypher shown in the console is the Cypher that actually ran.
+that happened since the last sync. `load()` rebuilds the in-memory view when a tenant is first used.
+A single QCheckpoint stores authoritative recovery state; QNode/edge projections are replayed after an interrupted sync.
+The console distinguishes real statements from in-process operations.
 """
 import hashlib
 import json
@@ -36,6 +37,7 @@ def _h(js: str) -> str:
 class Persister:
     def __init__(self, store):
         self.store = store
+        self.checkpoint: Optional[str] = None
         self.nodes: Dict[str, str] = {}
         self.edges: Dict[str, str] = {}
         self.handoffs: Dict[str, str] = {}
@@ -50,11 +52,18 @@ class Persister:
         return db.graph_for(self.store.tenant)
 
     def _q(self, name: str, cypher: str, params: Dict[str, Any], request_id: Optional[str] = None):
-        t0 = time.time()
-        res = self.graph.query(cypher, params)
+        t0 = time.perf_counter()
+        try:
+            res = self.graph.query(cypher, params)
+        except Exception:
+            self.store.log_query(name, cypher, (time.perf_counter() - t0) * 1000, 0, request_id, real=True, outcome="failure")
+            raise
         rows = len(res.result_set) if res.result_set else 0
         written = (res.nodes_created or 0) + (res.properties_set or 0) + (res.relationships_created or 0) + (res.nodes_deleted or 0)
-        self.store.log_query(name, cypher.strip().replace("\n", " "), (time.time() - t0) * 1000, rows or written, request_id, real=True)
+        server_ms = getattr(res, "run_time_ms", None)
+        measured = server_ms if isinstance(server_ms, (int, float)) else (time.perf_counter() - t0) * 1000
+        self.store.log_query(name, cypher.strip().replace("\n", " "), measured, rows or written, request_id,
+                             real=True, timing_boundary="server_execution" if isinstance(server_ms, (int, float)) else "client_round_trip")
         return res
 
     def ensure_schema(self) -> None:
@@ -84,6 +93,37 @@ class Persister:
         """Rebuild the store from FalkorDB. Returns True if the tenant already had data."""
         self.ensure_schema()
         store = self.store
+        checkpoint = self.graph.query("MATCH (s:QCheckpoint {id:'state'}) RETURN s.json").result_set
+        if checkpoint:
+            state = json.loads(checkpoint[0][0])
+            if state.get("version") != 1:
+                raise ValueError("Unsupported recovery checkpoint version")
+            with store._lock:
+                store.nodes.clear()
+                for js in state["nodes"]:
+                    node = GraphNode.model_validate_json(js)
+                    store.nodes[node.id] = node
+                store.edges = [GraphEdge.model_validate_json(js) for js in state["edges"]]
+                store.handoffs = [Handoff.model_validate_json(js) for js in state["handoffs"]]
+                store.epoch = state["epoch"]
+                store.workspace = state["workspace"]
+                store.calls = state["calls"]
+                store.call_seq = max((c["id"] for c in store.calls), default=0)
+                store.agent_state = state["agent_state"]
+                self.checkpoint = _h(checkpoint[0][0])
+                # Compare projections too: a crash may have interrupted their sync.
+                self.nodes = {row[0]: "repair" for row in self.graph.query("MATCH (n:QNode) RETURN n.id").result_set}
+                self.edges = {row[0]: "repair" for row in self.graph.query("MATCH ()-[r]->() WHERE r.id IS NOT NULL RETURN r.id").result_set}
+                self.handoffs = {row[0]: "repair" for row in self.graph.query("MATCH (h:QHandoff) RETURN h.id").result_set}
+                self.calls = {row[0]: "repair" for row in self.graph.query("MATCH (c:QCall) RETURN c.id").result_set}
+                self.agents = {row[0]: "repair" for row in self.graph.query("MATCH (a:QAgent) RETURN a.id").result_set}
+                from app.services import embeddings
+                for node_id, vector, digest in self.graph.query("MATCH (n:QNode) RETURN n.id, n.embedding, n.emb").result_set:
+                    node = store.nodes.get(node_id)
+                    if node is not None and vector and digest == embeddings.digest_for(node):
+                        embeddings.seed_cache(node_id, digest, vector)
+                        self.emb[node_id] = digest
+            return True
         nodes = self.graph.query("MATCH (n:QNode) RETURN n.json, n.embedding, n.emb").result_set
         edges = self.graph.query("MATCH (:QNode)-[r]->(:QNode) WHERE r.id IS NOT NULL RETURN r.json").result_set
         hands = self.graph.query("MATCH (h:QHandoff) RETURN h.json").result_set
@@ -99,6 +139,9 @@ class Persister:
             store.handoffs.clear()
             for js, vec, dig in nodes:
                 n = GraphNode.model_validate_json(js)
+                if n.action and n.action.executed and "external_key" not in (json.loads(js).get("action") or {}):
+                    # Pre-migration records were delivered with an unnamespaced key. Never change it on recovery.
+                    n.action.external_key = n.action.idempotency_key or f"key_{n.id}"
                 store.nodes[n.id] = n
                 self.nodes[n.id] = _h(js)
                 if vec and dig and dig == embeddings.digest_for(n):
@@ -133,6 +176,32 @@ class Persister:
 
     # ---------- sync ----------
     def sync(self, request_id: Optional[str] = None) -> int:
+        """Atomically checkpoint all recovery state, then update graph projections.
+
+        The one QCheckpoint write contains quarantine + compensation, execution
+        intent + key, leases, epoch and handoffs. Projection writes are independent,
+        replayable writes, NOT a transaction. A projection error is still an error
+        to the caller; restart loads the authoritative checkpoint and repairs the
+        projections before successful subsequent commits.
+        """
+        store = self.store
+        with store._lock:
+            state = json.dumps({
+                "version": 1,
+                "nodes": [n.model_dump_json() for n in store.nodes.values()],
+                "edges": [e.model_dump_json() for e in store.edges],
+                "handoffs": [h.model_dump_json() for h in store.handoffs],
+                "epoch": store.epoch, "workspace": store.workspace,
+                "calls": store.calls, "agent_state": store.agent_state,
+            }, sort_keys=True)
+            changed = self.checkpoint != _h(state)
+            if changed:
+                self._q("save_recovery_checkpoint", "MERGE (s:QCheckpoint {id:'state'}) SET s.json = $json",
+                        {"json": state}, request_id)
+                self.checkpoint = _h(state)
+            return self._sync_diff(request_id) + int(changed)
+
+    def _sync_diff(self, request_id: Optional[str] = None) -> int:
         """Writes everything that changed since the last sync. Returns the number of statements run."""
         store = self.store
         with store._lock:
@@ -154,7 +223,7 @@ class Persister:
         del_hands = [i for i in self.handoffs if i not in cur_hands]
         epoch_changed = self.epoch != epoch
         ws_changed = self.workspace != _h(cur_ws)
-        up_calls = [i for i, js in cur_calls.items() if i not in self.calls]
+        up_calls = [i for i, js in cur_calls.items() if self.calls.get(i) != _h(js)]
         del_calls = [i for i in self.calls if i not in cur_calls]
         up_agents = [k for k, js in cur_agents.items() if self.agents.get(k) != _h(js)]
         del_agents = [k for k in self.agents if k not in cur_agents]
@@ -280,4 +349,5 @@ class Persister:
         except Exception:
             pass
         self.nodes, self.edges, self.handoffs, self.epoch, self.workspace, self.calls = {}, {}, {}, None, None, {}
+        self.checkpoint = None
         self.agents, self.emb = {}, {}

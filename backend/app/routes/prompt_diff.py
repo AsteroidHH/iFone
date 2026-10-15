@@ -7,6 +7,8 @@ from app.models.common import Status
 from app.graph.queries import get_graph_store
 from app.models.common import NodeKind
 
+from app.services.workspace import viewer_for
+
 router = APIRouter()
 
 
@@ -16,9 +18,10 @@ def get_prompt_diff(
     auth: AuthContext = Depends(get_auth_context),
 ):
     store = get_graph_store(auth.tenant)
+    viewer = viewer_for(store, auth.member_id)
     with store._lock:
-        quarantined = [n for n in store.nodes.values() if n.status == Status.QUARANTINED and n.kind in [NodeKind.FACT, NodeKind.CONCLUSION]]
-        healthy = [n for n in store.nodes.values() if n.status == Status.HEALTHY and n.kind in [NodeKind.FACT, NodeKind.CONCLUSION]]
+        quarantined = [n for n in store.nodes.values() if viewer.can_see(n) and n.status == Status.QUARANTINED and n.kind in [NodeKind.FACT, NodeKind.CONCLUSION]]
+        healthy = [n for n in store.nodes.values() if viewer.can_see(n) and n.status == Status.HEALTHY and n.kind in [NodeKind.FACT, NodeKind.CONCLUSION]]
 
     if quarantined:
         removed_ids = [n.id for n in quarantined]

@@ -1,5 +1,5 @@
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field
+from typing import Optional, List, Dict, Any, Callable
+from pydantic import BaseModel, Field, PrivateAttr
 from app.models.common import (
     Status,
     NodeKind,
@@ -28,6 +28,10 @@ class SourceInfo(BaseModel):
 class CompensationInfo(BaseModel):
     status: CompensationStatus
     attempts: int = Field(default=0, ge=0)
+    lease_owner: Optional[str] = None
+    lease_until: Optional[int] = None
+    next_attempt_at: int = 0
+    last_error: Optional[str] = None
 
 
 class ActionInfo(BaseModel):
@@ -39,11 +43,23 @@ class ActionInfo(BaseModel):
     gate: GateStatus
     procedure_id: Optional[str] = None
     idempotency_key: Optional[str] = None
+    external_key: Optional[str] = None
+    payload: Dict[str, Any] = Field(default_factory=dict)
+    delivery_error: Optional[str] = None
+    execution_attempts: int = 0
+    execution_lease_until: Optional[int] = None
     compensation: Optional[CompensationInfo] = None
     correction_notice: Optional[Dict[str, Any]] = None
 
 
 class GraphNode(BaseModel):
+    _on_change: Optional[Callable] = PrivateAttr(default=None)
+
+    def __setattr__(self, name, value):
+        super().__setattr__(name, value)
+        if name in {"status", "stale", "kind", "label", "text", "key", "value", "scope_team", "scope_teams"} and self._on_change:
+            self._on_change(self)
+
     id: str
     kind: NodeKind
     is_decision: Optional[bool] = None
@@ -67,6 +83,8 @@ class GraphNode(BaseModel):
     owner_team: Optional[str] = None
     # Private to one team (and to teams linked to it). None means the shared commons everyone in the tenant can read.
     scope_team: Optional[str] = None
+    # Every private parent scope must be visible. Older records retain scope_team compatibility.
+    scope_teams: List[str] = Field(default_factory=list)
     action: Optional[ActionInfo] = None
     correction_notice: Optional[Dict[str, Any]] = None
 

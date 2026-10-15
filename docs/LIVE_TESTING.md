@@ -42,7 +42,7 @@ cd frontend && npm run build && QUORUM_MCP=http://127.0.0.1:8000 npx vite previe
 cd frontend && npm run qa:live
 ```
 
-The default build is the live one and reads tokens from `frontend/public/config.json`, which holds the development demo tokens. `npm run build:mock` makes the sample-data build for screenshots and demos only.
+The default build is live and uses the token sign-in screen. Only a development demo sandbox offers built-in demo credentials. Public config files must never carry bearer credentials. `npm run build:mock` makes the sample-data build for screenshots and demos only.
 
 ## What FalkorDB does here
 

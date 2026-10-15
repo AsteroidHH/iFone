@@ -49,7 +49,7 @@ A token bucket per caller: `QUORUM_RATE_LIMIT_TOOLS_PER_MIN` (default 600, burst
 python mcp/bridge.py --url https://hub.example.com:8443/mcp     # token from QUORUM_MCP_TOKEN
 ```
 
-`mcp/server.py --stdio` still exists: it runs its own copy of the tools beside the database. It works (it is exercised in the protocol check), but the API process and the console only see what it wrote after they reload from FalkorDB. Use the bridge unless there is no hub.
+`mcp/server.py` remains for historical memory-mode demos, but standalone FalkorDB writers are refused: reloading a snapshot per call does not make guards or leases safe across processes. Use the stdio bridge to the one API process with embedded MCP.
 
 ## Passive capture (no tool call needed)
 

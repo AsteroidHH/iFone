@@ -3,7 +3,7 @@
  *
  *   Needs: backend on :8000 started with QUORUM_EMBED_MCP=1 (so MCP and the API share one graph),
  *          the console built with VITE_API_MODE=live and served on BASE (default http://127.0.0.1:5174)
- *          with a config.json holding the demo tokens (see docs/LIVE_TESTING.md).
+ *          with an explicitly enabled development demo sandbox (see docs/LIVE_TESTING.md).
  *
  *   node scripts/live.mjs [BASE] [API]
  */

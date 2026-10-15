@@ -1,5 +1,6 @@
 import time
 import threading
+import uuid
 from typing import Dict, Any, Optional
 from app.graph.queries import get_graph_store
 from app.models.common import (
@@ -22,7 +23,7 @@ from app.services.event_bus import event_bus
 from app.services.executor import action_executor
 from app.services.auditor import auditor_service
 from app.services.saga import saga_worker
-from app.services.helpdesk import helpdesk_service
+from app.services.helpdesk import helpdesk_service, MockHelpdeskService
 from agents.procedures import procedure_registry
 
 
@@ -54,8 +55,10 @@ class ScenarioOrchestrator:
             store.nodes.clear()
             store.edges.clear()
             store.epoch = 1
+            store.workspace["demo_run_id"] = uuid.uuid4().hex
 
-        helpdesk_service.reset()
+        if isinstance(helpdesk_service, MockHelpdeskService):
+            helpdesk_service.reset()
         procedure_registry.reset()
         with store.handoff_lock:
             store.handoffs.clear()
@@ -210,7 +213,7 @@ class ScenarioOrchestrator:
                     confirmed=False,
                     gate=GateStatus.PASSED,
                     procedure_id="proc_refund_standard",
-                    idempotency_key=idemp_key,
+                    idempotency_key=f"{idemp_key}:{store.workspace.get('demo_run_id', 'legacy')}",
                 ),
                 valid_from=now_ms,
             )

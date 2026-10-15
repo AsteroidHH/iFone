@@ -7,6 +7,7 @@ from app.graph.queries import get_graph_store
 
 from app.services import context_pack as cp
 from app.services import workspace as ws
+from app.services.access import call_visible
 
 router = APIRouter()
 
@@ -16,16 +17,9 @@ def visible_calls(store, auth: AuthContext) -> List[Dict[str, Any]]:
     viewer = ws.viewer_for(store, auth.member_id)
     with store._lock:
         calls = list(store.calls)
-        members = {m["id"]: m for m in store.workspace["members"]}
     if not viewer.scoped:
         return calls
-    allowed = {viewer.team_id} | set(viewer.linked_teams)
-    out = []
-    for c in calls:
-        m = members.get(c.get("member_id") or "")
-        if m is None or m["team_id"] in allowed:
-            out.append(c)
-    return out
+    return [c for c in calls if call_visible(store, viewer, c)]
 
 
 def stats_for(calls: List[Dict[str, Any]]) -> Dict[str, Any]:

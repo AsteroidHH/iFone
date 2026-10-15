@@ -24,6 +24,7 @@ services:
     ports: !reset []
     environment:
       - QUORUM_ENV=production
+      - QUORUM_DEMO=0
       - QUORUM_FALKORDB_URL=redis://:${FALKORDB_PASSWORD}@falkordb:6379
       - QUORUM_TOKENS_JSON=${QUORUM_TOKENS_JSON:?set QUORUM_TOKENS_JSON (scripts/make_token.py)}
       - QUORUM_PUBLIC_URL=${QUORUM_PUBLIC_URL:-}

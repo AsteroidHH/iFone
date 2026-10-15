@@ -23,10 +23,13 @@ def role_guide(auth: AuthContext = Depends(get_auth_context)):
 @router.get("/dev-config")
 def dev_config():
     """The built-in demo tokens, for the console in a local demo. It exists only when QUORUM_ENV=development."""
-    if settings.ENV != "development":
+    if settings.ENV != "development" or not settings.DEMO:
         raise HTTPException(status_code=404, detail={"error": {"code": "NOT_FOUND", "message": "Not available outside development."}})
     tokens: dict = {}
+    builtin = type(settings).model_fields["DEMO_TOKENS"].default
     for tok, info in settings.DEMO_TOKENS.items():
+        if tok not in builtin or info != builtin[tok]:
+            continue
         tokens.setdefault(info["tenant"], {})
         tokens[info["tenant"]].setdefault(info["role"], tok)
     return {"tokens": tokens, "tenants": list(tokens)}

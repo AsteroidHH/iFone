@@ -42,6 +42,7 @@ export function ScrollChrome({ sections }: { sections: [string, string][] }) {
             key={id}
             className={active === id ? 'on' : ''}
             aria-label={id === 'top' ? 'Top' : (sections.find(([s]) => s === id)?.[1] ?? id)}
+            title={id === 'top' ? 'Top' : (sections.find(([s]) => s === id)?.[1] ?? id)}
             aria-current={active === id ? 'true' : undefined}
             onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth' })}
           >

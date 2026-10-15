@@ -854,21 +854,21 @@ export class MockBackend {
             drafted_body:
               'Dear Customer,\n\nWe recently sent an email stating that your refund request was approved under a 90-day refund policy. That communication was sent in error due to an unverified policy update.\n\nOur official refund policy remains 30 days (per Finance Ops Policy Doc v3.0 (30-day window)). We sincerely apologize for any confusion. Please find our verified policy details attached.\n\nSincerely,\nAcme Support Operations',
             verified_policy_citation: 'Finance Ops Policy Doc v3.0 (30-day window)',
-            status: 'DISPATCHED',
+            status: 'APPROVED_PENDING_DELIVERY',
           };
         } else {
-          node.action.correction_notice.status = 'DISPATCHED';
+          node.action.correction_notice.status = 'APPROVED_PENDING_DELIVERY';
         }
       }
       for (const h of t.handoffs.values()) {
         if (h.context_root_id === id || (h.correction_notice && h.correction_notice.target_action_id === id)) {
           h.status = 'COMPLETED';
-          if (h.correction_notice) h.correction_notice.status = 'DISPATCHED';
+          if (h.correction_notice) h.correction_notice.status = 'APPROVED_PENDING_DELIVERY';
           t.emit('handoff_updated', { handoff: clone(h) }, rid);
         }
       }
-      t.emit('correction_dispatched', { action_id: id, status: 'DISPATCHED', notice: node.action?.correction_notice }, rid);
-      return ok({ status: 'DISPATCHED', action_id: id, notice: node.action?.correction_notice }, rid);
+      t.emit('correction_approved', { action_id: id, status: 'APPROVED_PENDING_DELIVERY', notice: node.action?.correction_notice }, rid);
+      return ok({ status: 'APPROVED_PENDING_DELIVERY', action_id: id, notice: node.action?.correction_notice }, rid);
     }
     if (get && path === 'agents') {
       return ok(t.nodes.has('fact_30d') ? AGENTS.map((a) => ({ ...a, last_active: Date.now() - 60_000 })) : [], rid);

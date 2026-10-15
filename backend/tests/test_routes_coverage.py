@@ -41,7 +41,7 @@ def _read_stream(tenant, last_id, until):
     from app.routes.events import sse_events
 
     async def run():
-        resp = await sse_events(last_event_id=None, query_last_id=last_id, auth=AuthContext(tenant=tenant, role="human", token="x"))
+        resp = await sse_events(last_event_id=None, query_last_id=last_id, auth=AuthContext(tenant=tenant, role="human", token=f"token_{tenant}_human"))
         seen = []
         try:
             async for chunk in resp.body_iterator:
@@ -80,7 +80,7 @@ def test_staging_and_executing_an_action_by_hand(tenant):
     aid = r.json()["id"]
     assert any(a["id"] == aid for a in client.get("/api/actions", headers=H(tenant)).json())
     bad = client.post("/api/actions/stage", json={"label": "x", "action_type": "refund", "reversibility": "COMPENSABLE", "parent_ids": ["nope"]}, headers=H(tenant))
-    assert bad.status_code == 409 and bad.json()["error"]["code"] == "CONFLICT"
+    assert bad.status_code == 404 and bad.json()["error"]["code"] == "NOT_FOUND"
     texts = [e["text"] for e in client.get("/api/audit", headers=H(tenant)).json()["events"]]
     assert any("staged in the console" in x for x in texts)
 

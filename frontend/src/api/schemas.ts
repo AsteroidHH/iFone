@@ -34,8 +34,8 @@ export const CompStatus = lenientEnum('compensation status', [
 export const CorrectionNotice = z
   .object({
     target_action_id: z.string(),
-    recipient: z.string(),
-    original_subject: z.string(),
+    recipient: z.string().nullish().transform((v) => v ?? "Human input required"),
+    original_subject: z.string().nullish().transform((v) => v ?? "Not recorded"),
     original_statement: z.string(),
     correction_subject: z.string(),
     drafted_body: z.string(),
@@ -290,6 +290,9 @@ export const CypherLog = z.array(
       request_id: z.string().nullish().transform((v) => v ?? undefined),
       name: z.string(),
       cypher: z.string(),
+      origin: z.enum(['falkordb', 'memory', 'illustrative']).catch('illustrative'),
+      outcome: z.enum(['success', 'failure']).catch('success'),
+      timing_boundary: z.string().optional(),
       ms: z.number(),
       rows: z.number(),
     })
@@ -425,7 +428,7 @@ export const SseEvent = z.discriminatedUnion('type', [
   ev(
     'epoch_changed',
     z
-      .object({ epoch: z.number(), reason: lenientEnum('epoch reason', ['quarantine', 'restore', 'supersede'] as const) })
+      .object({ epoch: z.number(), reason: lenientEnum('epoch reason', ['quarantine', 'restore', 'supersede', 'reset'] as const) })
       .passthrough(),
   ),
   ev('gate_blocked', z.object({ action_id: z.string(), handoff_id: z.string(), reason: z.string() }).passthrough()),

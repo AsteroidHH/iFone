@@ -59,7 +59,7 @@ export const copy = {
   errors: {
     unreachable: 'Can\'t reach Quorum at /api. Check that the backend is running, then retry.',
     schema: (endpoint: string, field: string) => `${endpoint} returned data this console can't read (${field}). Check the contract version.`,
-    unauthenticated: 'Sign-in needed. Add a token to /config.json and reload.',
+    unauthenticated: 'Sign-in needed. Paste your token on the sign-in screen.',
     forbiddenTenant: 'This token can\'t read that tenant\'s memory. That is the isolation working.',
     forbiddenRole: 'Only a person can decide this.',
     forbiddenRoleScenario: 'This role can\'t run scenario steps. Use an auditor or human token.',

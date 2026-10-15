@@ -30,3 +30,6 @@
 ## Reporting a problem
 
 Open a private security advisory on the repository, or email the maintainers listed in the repository profile. Please do not file public issues for vulnerabilities.
+
+
+Deployment boundaries: use one API writer with embedded MCP. Ad-hoc token parsing is always disabled in production, including with a conflicting ALLOW_DYNAMIC_TOKENS override. Member access to private derived data requires visibility of every private parent scope. Hidden IDs use non-disclosing responses. Public `/config.json` credentials are no longer loaded; use token sign-in. `/api/dev-config` only exposes built-in credentials in an explicitly enabled development demo and never configured service secrets.

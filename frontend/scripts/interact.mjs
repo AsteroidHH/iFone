@@ -489,7 +489,13 @@ check('Overview needs-attention card links to the log', (await page.locator('.ov
   }
   check('phone: no horizontal scroll on any of the ten views', wide.length === 0, wide.length ? `wide on ${wide.join(',')}` : '');
   const bar = await ph.evaluate(() => { const n = document.querySelector('.header .nav'); const r = n.getBoundingClientRect(); return { bottom: Math.round(innerHeight - r.bottom), fixed: getComputedStyle(n).position, tabs: n.querySelectorAll('.navbtn').length, visible: [...n.querySelectorAll('.navbtn')].every((b) => { const q = b.getBoundingClientRect(); return q.left >= 0 && q.right <= innerWidth + 1; }) }; });
-  check('phone: the navigation is a fixed bottom tab bar with every tab on screen', bar.fixed === 'fixed' && bar.bottom === 0 && bar.tabs === 10 && bar.visible, JSON.stringify(bar));
+  let allReachable = true;
+  for (const tab of await ph.locator('.header .nav .navbtn').all()) {
+    await tab.focus();
+    const box = await tab.boundingBox();
+    allReachable &&= box.x >= -1 && box.x + box.width <= 391;
+  }
+  check('phone: fixed bottom navigation keeps all ten tabs reachable by keyboard and scrolling', bar.fixed === 'fixed' && bar.bottom === 0 && bar.tabs === 10 && allReachable, JSON.stringify(bar));
   await ph.keyboard.press('1');
   await ph.waitForTimeout(800);
   const order = await ph.evaluate(() => { const g = document.querySelector('.col.center').getBoundingClientRect().top; const r = document.querySelector('.col.right').getBoundingClientRect().top; const l = document.querySelector('.col.left').getBoundingClientRect().top; return g < r && r < l; });

@@ -26,7 +26,7 @@ You cannot guarantee a backend that does not exist yet, so make drift impossible
    - Separately, the backend has Replay and Live agent modes (cached vs real LLM). `/meta.mode` says which; show it truthfully in the header.
 6. **Drift check.** `npm run contract:check` diffs the live `/openapi.json` against the checked-in snapshot and validates every fixture. Run it at the start of each day and before every merge to `main`.
 7. **Honesty.** Never compute, estimate or hard-code a figure the API did not send. Seeded values (procedure scores) carry `seeded: true` from the API and the UI labels them "seeded". Benchmark views show `generated_at` and run parameters.
-8. **Tenant and roles.** The tenant comes from the token, never from request bodies or URLs the UI builds. The UI uses a `human` token for review actions and an `auditor` or `human` token for scenario and quarantine controls. Tokens are read from runtime config (`/config.json` or env), never committed.
+8. **Tenant and roles.** The tenant comes from the token, never from request bodies or URLs the UI builds. The UI uses a `human` token for review actions and an `auditor` or `human` token for scenario and quarantine controls. Tokens are entered through the sign-in screen, never published in public config files or committed.
 9. **Same origin.** The frontend calls `/api/...` through the dev proxy and the compose reverse proxy; no hard-coded hosts, no CORS dependence.
 
 ## 5. Contract (proposed starting point; Janani and Aaditya confirm or amend)

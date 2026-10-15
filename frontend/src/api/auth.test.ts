@@ -81,12 +81,12 @@ describe('sign-in', () => {
     expect(c.tokenFor('human')).toBe('token_human');
   });
 
-  it('falls back to a config.json an operator deployed, but ignores an empty one', async () => {
+  it('ignores credentials published in a public config.json', async () => {
     hub({ '/config.json': () => ({ status: 200, body: { tokens: {}, tenants: [] } }) });
     expect(await c.resolveAuth()).toBe('needed');
     hub({ '/config.json': () => ({ status: 200, body: { tokens: { acme: { human: 'deployed' } }, tenants: ['acme'] } }) });
-    expect(await c.resolveAuth()).toBe('ok');
-    expect(c.tokenFor('human')).toBe('deployed');
+    expect(await c.resolveAuth()).toBe('needed');
+    expect(c.tokenFor('human')).toBeNull();
   });
 
   it('signing out forgets everything', async () => {

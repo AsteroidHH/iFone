@@ -13,6 +13,9 @@ from app.models.brain import (
 from app.graph.queries import get_graph_store
 from app.models.common import Status, NodeKind
 
+from app.services.workspace import viewer_for
+from app.services.access import node_for
+
 router = APIRouter()
 
 
@@ -23,13 +26,14 @@ def ask_brain(
 ):
     q = request.question.lower()
     store = get_graph_store(auth.tenant)
+    viewer = viewer_for(store, auth.member_id)
     now_ms = int(time.time() * 1000)
 
     with store._lock:
         # Search healthy facts with source provenance
         facts = [
             n for n in store.nodes.values()
-            if n.kind == NodeKind.FACT and n.status == Status.HEALTHY
+            if viewer.can_see(n) and n.kind == NodeKind.FACT and n.status == Status.HEALTHY
         ]
 
     # Look for refund policy matching keywords
@@ -48,7 +52,8 @@ def ask_brain(
             # Find connected or default source
             src_node = None
             if best_fact.source_ref:
-                src_node = store.nodes.get(best_fact.source_ref)
+                candidate = store.nodes.get(best_fact.source_ref)
+                src_node = candidate if candidate and viewer.can_see(candidate) else None
 
             citation = Citation(
                 source_title=src_node.source.title if src_node and src_node.source else "Refund policy",
@@ -79,10 +84,11 @@ def who_knows(
     auth: AuthContext = Depends(get_auth_context),
 ):
     store = get_graph_store(auth.tenant)
+    viewer = viewer_for(store, auth.member_id)
 
     # Aggregate expertise from graph
     with store._lock:
-        nodes = list(store.nodes.values())
+        nodes = [n for n in store.nodes.values() if viewer.can_see(n)]
 
     # Build leaderboard
     return [
@@ -113,11 +119,12 @@ def trace_decision(
     auth: AuthContext = Depends(get_auth_context),
 ):
     store = get_graph_store(auth.tenant)
-    node = store.nodes.get(decision_id)
+    viewer = viewer_for(store, auth.member_id)
+    node = node_for(store, auth, decision_id)
 
     if node:
         ancestors = store.get_ancestors(decision_id, edge_types=["LEADS_TO", "FROM_SOURCE"])
-        facts = [a for a in ancestors if a.kind in [NodeKind.FACT, NodeKind.SOURCE]]
+        facts = [a for a in ancestors if viewer.can_see(a) and a.kind in [NodeKind.FACT, NodeKind.SOURCE]]
         traces = []
         for f in facts:
             traces.append(DecisionTraceItem(

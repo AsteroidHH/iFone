@@ -1,17 +1,19 @@
+> **Supported deployment: one API writer process with embedded MCP.** Execute guards and handoff claims run under process locks. One FalkorDB checkpoint statement stores authoritative recovery state; graph projections are independent, replayable writes. Separate API workers/standalone MCP writers are unsupported. Historical helper benchmarks below are not production API latency guarantees. See [audit remediation notes](docs/AUDIT_REMEDIATION.md).
+
 # Quorum: Graph-Native Correctable Memory & Coordination for Multi-Agent Systems
 
 <div align="center">
 
 **Git revert for AI agent beliefs.**  
-*Quorum rolls back a poisoned fact and everything built on it, and no later retrieval can return it.*
+*Quorum quarantines a poisoned fact and its causal descendants. Healthy context excludes them until authorized restoration.*
 
-[![Backend Tests](https://img.shields.io/badge/pytest-223%20passed%20%C2%B7%2092%25%20coverage-brightgreen?style=flat-square)](backend/tests)
-[![Frontend Tests](https://img.shields.io/badge/vitest-103%20passed-brightgreen?style=flat-square)](frontend)
-[![Accessibility](https://img.shields.io/badge/axe--core-0%20violations%20(20%20screens)-brightgreen?style=flat-square)](frontend/scripts/a11y.mjs)
+[![Backend Tests](https://img.shields.io/badge/pytest-CI%20gate%20%E2%89%A590%25%20coverage-brightgreen?style=flat-square)](backend/tests)
+[![Frontend Tests](https://img.shields.io/badge/vitest-105%20passed-brightgreen?style=flat-square)](frontend)
+[![Accessibility](https://img.shields.io/badge/axe--core-0%20violations%20(22%20screens)-brightgreen?style=flat-square)](frontend/scripts/a11y.mjs)
 [![Types](https://img.shields.io/badge/mypy%20%2B%20ruff-clean-brightgreen?style=flat-square)](mypy.ini)
-[![Benchmark](https://img.shields.io/badge/throughput%20on%20FalkorDB-757.6%20ops%2Fsec-blue?style=flat-square)](bench/results.json)
-[![Containment](https://img.shields.io/badge/containment-0.4ms-success?style=flat-square)](docs/PROOF.md)
-[![Leakage](https://img.shields.io/badge/poison%20leakage-0.0%25-brightgreen?style=flat-square)](bench/results.json)
+[![Benchmark](https://img.shields.io/badge/historical%20helper%20throughput-757.6%20ops%2Fsec-blue?style=flat-square)](bench/results.json)
+[![Containment](https://img.shields.io/badge/historical%20helper%20traversal-0.4ms-blue?style=flat-square)](docs/PROOF.md)
+[![Leakage](https://img.shields.io/badge/historical%20dataset%20leakage-0.0%25-brightgreen?style=flat-square)](bench/results.json)
 [![Hackathon](https://img.shields.io/badge/Graph%20Hacks-Oct%2015--18%2C%202026-orange?style=flat-square)](docs/QUORUM_BRIEF.md)
 
 </div>
@@ -20,7 +22,7 @@
 
 ## In one minute
 
-Quorum is shared memory for AI agents where a wrong fact can be reverted, with everything built on it, in under a millisecond, and no later lookup can return it. Run `docker compose up -d`, open http://localhost:5173, and follow the **Get started** card on the Connect page. Who it is for, the story, and what the numbers do and do not say: [`docs/IMPACT.md`](docs/IMPACT.md). Security model: [`SECURITY.md`](SECURITY.md). A real deployment (password-protected FalkorDB, TLS, tokens, sign-in): [`docs/SETUP.md`](docs/SETUP.md#production-in-one-command).
+Quorum is shared memory for AI agents where a wrong fact and its causal descendants can be quarantined, excluding them from healthy context. Latency depends on graph size and persistence; historical helper traversal timings are not end-to-end API timings. Run `docker compose up -d`, open http://localhost:5173, and follow the **Get started** card on the Connect page. Who it is for, the story, and what the numbers do and do not say: [`docs/IMPACT.md`](docs/IMPACT.md). Security model: [`SECURITY.md`](SECURITY.md). A real deployment (password-protected FalkorDB, TLS, tokens, sign-in): [`docs/SETUP.md`](docs/SETUP.md#production-in-one-command).
 
 A fresh install is **empty on purpose** (no sample data). The guided poisoned-webhook story is opt-in: `QUORUM_DEMO=1 docker compose up -d`.
 
@@ -28,7 +30,7 @@ A fresh install is **empty on purpose** (no sample data). The guided poisoned-we
 
 When an autonomous agent ingests an erroneous or malicious fact, standard RAG architectures (flat vector stores and naïve graph search) permanently contaminate downstream memory. As agents derive conclusions, execute external actions, and coordinate across handoffs, the poisoned context cascades silently.
 
-**Quorum** solves this by storing all agent beliefs, derived conclusions, and staged actions inside a **causal Directed Acyclic Graph (DAG) on FalkorDB**. Every thought and action traces its provenance back to verifiable sources. When a root belief is invalidated, Quorum unleashes a **sub-millisecond Quarantine Red Wave** that traverses downstream edges, strips the bad beliefs from agent prompts, halts pending executions in a single atomic Cypher check-and-set, and automatically dispatches compensating actions via a transactional Outbox Saga.
+**Quorum** solves this by storing all agent beliefs, derived conclusions, and staged actions inside a **causal Directed Acyclic Graph (DAG) on FalkorDB**. Every thought and action traces its provenance back to verifiable sources. When a root belief is invalidated, Quorum traverses downstream edges, excludes quarantined beliefs from retrieval, guards pending executions in its single API process, and persists quarantine state with compensation intent in one FalkorDB statement. A lifecycle worker recovers delivery using expiring leases and stable idempotency keys; latency depends on graph size and persistence costs.
 
 ---
 
@@ -91,7 +93,7 @@ Quorum enforces four deterministic, non-LLM safety layers:
    - If uncorroborated, stale, or quarantined, the action is **BLOCKED** and routed to a human `REVIEW` handoff queue. Reversible/compensable actions are permitted.
 
 2. **GUARD (Layer 2 — Atomic Execute Guard & Tombstones):**
-   - A single atomic Cypher check-and-set (`execute_guard`) verifies in one transaction that the action is `HEALTHY`, gate `PASSED`, not yet executed, and has **zero non-healthy causal ancestors** across both `[:LEADS_TO|SUPPORTS*]` paths.
+   - The in-process lock around `execute_guard` verifies that the action is `HEALTHY`, gate `PASSED`, not yet executed, and has **zero non-healthy causal ancestors** across both `[:LEADS_TO|SUPPORTS*]` paths.
    - If an action races against a quarantine wave, it is aborted with zero rows returned.
    - If an external call was in flight, the **Helpdesk Tombstone Engine** records a tombstone for compensations arriving first; any subsequent late execution attempt is strictly rejected with `409 Conflict`.
 
@@ -149,7 +151,7 @@ Measured on FalkorDB 8.10.2, on one developer laptop, by the harness above. The 
 |---|---|---|---|
 | **Frontend Console & Landing** | `3000` / `5173` | HTTP (React + Vite + Cytoscape) | Dual interface: Landing page (`#/`) and Incident Command Room (`#/app`) |
 | **Backend REST & SSE** | `8000` | HTTP / Server-Sent Events | FastAPI core causal API, event streaming, scenario driver |
-| **MCP Server** (embedded in the backend; standalone only with `--profile standalone-mcp`) | `8000` (`/mcp`) / `8001` standalone | Streamable HTTP (`/mcp`) & Stdio | Model Context Protocol server exposing 15 agent, token-saving, and auditor tools |
+| **MCP Server** (embedded in the single backend writer; stdio through the bridge) | `8000` (`/mcp`) | Streamable HTTP (`/mcp`) & Stdio | Model Context Protocol server exposing 15 agent, token-saving, and auditor tools |
 | **Mock Helpdesk API** | `8002` | HTTP / JSON | External ticketing and refund API with atomic Tombstone protection |
 | **FalkorDB Graph Engine** | `6379` | Redis / Cypher | Graph database engine with vector indexing and per-tenant Redis ACLs |
 | **FalkorDB Web Browser** | `8080` | HTTP | Interactive FalkorDB graph visualizer |
@@ -229,7 +231,7 @@ cd frontend && npm ci && npm run build && npx vite preview --port 5173
 ### Tests
 
 ```bash
-python -m pytest backend/tests tests            # needs FalkorDB; the persistence and gate tests fail loudly without it
+python -m pytest backend/tests tests            # requires real FalkorDB; skipped database tests do not count as verification
 cd frontend && npm run verify                   # types, lint, unit tests, contrast, contract, builds
 cd frontend && npm run coverage                 # logic coverage gate (96% lines)
 cd frontend && npm run qa:a11y                  # axe-core on every screen at desktop and phone width

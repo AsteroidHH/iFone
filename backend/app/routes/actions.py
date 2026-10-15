@@ -1,7 +1,7 @@
 import uuid
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from app.auth import get_auth_context, AuthContext, require_role
 from app.graph.queries import get_graph_store
 from app.models.graph import GraphNode, ActionInfo, GraphEdge
@@ -15,6 +15,8 @@ from app.models.common import (
 )
 from app.services.gate import quorum_gate
 from app.services.executor import action_executor
+from app.services.access import inherited_scopes, node_for, creation_matches
+from app.services.workspace import viewer_for
 
 router = APIRouter()
 
@@ -27,12 +29,14 @@ class StageActionRequest(BaseModel):
     parent_ids: List[str]
     procedure_id: Optional[str] = None
     idempotency_key: Optional[str] = None
+    payload: Dict[str, Any] = Field(default_factory=dict)
 
 
 @router.get("/actions", response_model=List[GraphNode])
 def list_actions(auth: AuthContext = Depends(get_auth_context)):
     store = get_graph_store(tenant=auth.tenant)
-    actions = [n for n in store.nodes.values() if n.kind == NodeKind.ACTION]
+    viewer = viewer_for(store, auth.member_id)
+    actions = [n for n in store.nodes.values() if n.kind == NodeKind.ACTION and viewer.can_see(n)]
     return actions
 
 
@@ -45,8 +49,8 @@ def stage_action(
 
     with store._lock:
         # 1. Atomic derivation check: all parents must exist and be HEALTHY
-        parents = [p for p in (store.nodes.get(pid) for pid in req.parent_ids) if p is not None]
-        if len(parents) != len(req.parent_ids) or any(p.status != Status.HEALTHY for p in parents):
+        parents = [node_for(store, auth, pid) for pid in req.parent_ids]
+        if not parents or any(p.status != Status.HEALTHY or p.stale for p in parents):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
@@ -64,6 +68,8 @@ def stage_action(
             label=req.label[:60],
             status=Status.HEALTHY,
             stale=False,
+            scope_team=next((p.scope_team for p in parents if p.scope_team), None),
+            scope_teams=inherited_scopes(parents),
             action=ActionInfo(
                 type=req.action_type,
                 reversibility=req.reversibility,
@@ -71,12 +77,16 @@ def stage_action(
                 confirmed=False,
                 gate=GateStatus.PASSED,  # Evaluated by gate below
                 procedure_id=req.procedure_id,
+                payload=req.payload,
             ),
         )
         if req.idempotency_key and action_node.action is not None:
             action_node.action.idempotency_key = req.idempotency_key
 
         # Add node and causal edges
+        existing = store.nodes.get(action_id)
+        if existing and viewer_for(store, auth.member_id).can_see(existing) and creation_matches(store, existing, action_node, parents):
+            return existing
         store.add_node(action_node)
         for p in parents:
             store.add_edge(GraphEdge(
@@ -98,6 +108,7 @@ def execute_action_endpoint(
     auth: AuthContext = Depends(get_auth_context),
 ):
     store = get_graph_store(tenant=auth.tenant)
+    node_for(store, auth, action_id)
     return action_executor.execute(store, action_id, tenant=auth.tenant)
 
 
@@ -107,6 +118,7 @@ def approve_correction(
     auth: AuthContext = Depends(require_role(["human"])),
 ):
     store = get_graph_store(tenant=auth.tenant)
+    node_for(store, auth, action_id)
     from app.models.common import HandoffStatus
     from app.services.event_bus import event_bus
 
@@ -123,14 +135,14 @@ def approve_correction(
             from app.services.saga import generate_correction_notice
             notice = generate_correction_notice(action_node, store, tenant=auth.tenant)
 
-        notice["status"] = "DISPATCHED"
+        notice["status"] = "APPROVED_PENDING_DELIVERY"
         action_node.action.correction_notice = notice
         action_node.correction_notice = notice
 
         # Update alert memory node if present
         alert_node = store.nodes.get(f"alert_retraction_{action_id}")
         if alert_node:
-            alert_node.label = f"✅ Retraction Dispatched for {action_id}"
+            alert_node.label = f"Retraction approved, delivery pending: {action_id}"[:120]
             event_bus.publish(auth.tenant, "node_updated", {"node": alert_node.model_dump()})
 
     with store.handoff_lock:
@@ -138,23 +150,17 @@ def approve_correction(
             if h.context_root_id == action_id or (h.correction_notice and h.correction_notice.get("target_action_id") == action_id):
                 h.status = HandoffStatus.COMPLETED
                 if h.correction_notice:
-                    h.correction_notice["status"] = "DISPATCHED"
+                    h.correction_notice["status"] = "APPROVED_PENDING_DELIVERY"
                 event_bus.publish(auth.tenant, "handoff_updated", {"handoff": h.model_dump()})
-
-    try:
-        import graph.queries as falkor_queries
-        falkor_queries.approve_correction(auth.tenant, action_id)
-    except Exception:
-        pass
 
     event_bus.publish(
         auth.tenant,
-        "correction_dispatched",
-        {"action_id": action_id, "status": "DISPATCHED", "notice": notice},
+        "correction_approved",
+        {"action_id": action_id, "status": "APPROVED_PENDING_DELIVERY", "notice": notice},
     )
 
     return {
-        "status": "DISPATCHED",
+        "status": "APPROVED_PENDING_DELIVERY",
         "action_id": action_id,
         "notice": notice,
     }

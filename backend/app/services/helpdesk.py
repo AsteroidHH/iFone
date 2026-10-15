@@ -1,5 +1,8 @@
 import threading
 import time
+import os
+import hashlib
+import httpx
 from typing import Any, Dict, Optional
 
 
@@ -66,4 +69,52 @@ class MockHelpdeskService:
             self.tombstones.clear()
 
 
-helpdesk_service = MockHelpdeskService()
+class HTTPHelpdeskService:
+    """Configured HTTP integration; status is the HTTP result, never an invented success."""
+    def __init__(self, url: str, transport=None):
+        self.url = url.rstrip("/")
+        self.transport = transport
+
+    def _post(self, path: str, body: Dict[str, Any]) -> Dict[str, Any]:
+        with httpx.Client(timeout=10.0, transport=self.transport) as client:
+            response = client.post(f"{self.url}/api/helpdesk/{path}", json=body,
+                                   headers={"Idempotency-Key": body["idempotency_key"]})
+        try:
+            result = response.json()
+        except ValueError:
+            result = {"error": "Invalid JSON from helpdesk"}
+        return {**result, "status": response.status_code}
+
+    def execute_action(self, idempotency_key: str, action_type: str, payload=None):
+        payload = payload or {}
+        return self._post("execute", {"idempotency_key": idempotency_key, "action_type": action_type,
+                                      "details": payload, **{k: payload[k] for k in ("amount", "customer_id") if k in payload}})
+
+    def compensate_action(self, idempotency_key: str, action_id: str, action_type: str):
+        return self._post("compensate", {"idempotency_key": idempotency_key, "reason": f"Quarantined {action_type} action {action_id}"})
+
+
+def external_key(tenant: str, node) -> str:
+    """Freeze before first delivery; retries and compensation use precisely the same key."""
+    action = node.action
+    if action.external_key:
+        return action.external_key
+    raw = action.idempotency_key or f"key_{node.id}"
+    action.external_key = "qrm:" + hashlib.sha256(f"{tenant}\0{raw}".encode()).hexdigest()
+    return action.external_key
+
+
+def configured_helpdesk():
+    from app.config import settings
+
+    url = os.getenv("HELPDESK_URL", "").strip()
+    mode = os.getenv("QUORUM_HELPDESK_MODE", "http" if url else "mock" if settings.ENV != "production" else "http")
+    if mode == "mock" and settings.ENV != "production":
+        return MockHelpdeskService()
+    if mode != "http" or not url:
+        # Do not turn a production configuration mistake into fake external success.
+        return HTTPHelpdeskService("http://127.0.0.1:1")
+    return HTTPHelpdeskService(url)
+
+
+helpdesk_service = configured_helpdesk()

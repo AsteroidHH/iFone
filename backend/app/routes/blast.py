@@ -6,16 +6,21 @@ from app.graph.queries import get_graph_store
 from app.models.common import NodeKind, Reversibility
 from app.models.scenario import BlastPreviewResponse, BlastReportResponse, BlastActionsBreakdown
 
+from app.services.workspace import viewer_for
+from app.services.access import node_for
+
 router = APIRouter()
 
 
 @router.get("/blast/{node_id}/preview", response_model=BlastPreviewResponse)
 def blast_preview(node_id: str, auth: AuthContext = Depends(get_auth_context)):
     store = get_graph_store(auth.tenant)
+    viewer = viewer_for(store, auth.member_id)
+    node_for(store, auth, node_id)
     with store._lock:
         if node_id in store.nodes:
             descendants = store.get_descendants(node_id, edge_types=["LEADS_TO", "SUPPORTS"])
-            all_affected = [store.nodes[node_id]] + descendants
+            all_affected = [store.nodes[node_id]] + [n for n in descendants if viewer.can_see(n)]
             facts = sum(1 for n in all_affected if n.kind == NodeKind.FACT)
             conclusions = sum(1 for n in all_affected if n.kind == NodeKind.CONCLUSION)
             actions = [n for n in all_affected if n.kind == NodeKind.ACTION]
@@ -55,11 +60,13 @@ def blast_preview(node_id: str, auth: AuthContext = Depends(get_auth_context)):
 def blast_report(node_id: str, auth: AuthContext = Depends(get_auth_context)):
     now_ms = int(time.time() * 1000)
     store = get_graph_store(auth.tenant)
+    viewer = viewer_for(store, auth.member_id)
+    node_for(store, auth, node_id)
     with store._lock:
         if node_id in store.nodes:
             root_node = store.nodes[node_id]
             descendants = store.get_descendants(node_id, edge_types=["LEADS_TO", "SUPPORTS"])
-            all_affected = [root_node] + descendants
+            all_affected = [root_node] + [n for n in descendants if viewer.can_see(n)]
             facts = sum(1 for n in all_affected if n.kind == NodeKind.FACT)
             conclusions = sum(1 for n in all_affected if n.kind == NodeKind.CONCLUSION)
             actions = [n for n in all_affected if n.kind == NodeKind.ACTION]
@@ -74,7 +81,7 @@ def blast_report(node_id: str, auth: AuthContext = Depends(get_auth_context)):
                 curr = queue.pop(0)
                 curr_d = depth_map[curr]
                 for e in store.edges:
-                    if e.source == curr and e.type.value in ["LEADS_TO", "SUPPORTS"] and e.target in store.nodes:
+                    if e.source == curr and e.type.value in ["LEADS_TO", "SUPPORTS"] and e.target in store.nodes and viewer.can_see(store.nodes[e.target]):
                         if e.target not in depth_map:
                             depth_map[e.target] = curr_d + 1
                             queue.append(e.target)

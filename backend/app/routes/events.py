@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import StreamingResponse
 from app import db
-from app.auth import get_auth_context, AuthContext
+from app.auth import get_auth_context, AuthContext, resolve_token
 from app.config import settings
 from app.graph.queries import get_graph_store
 from app.services import workspace as ws
@@ -24,7 +24,11 @@ async def sse_events(
     effective_last_id = last_event_id if last_event_id is not None else query_last_id
     buf = event_bus.get_tenant_buffer(auth.tenant)
     store = get_graph_store(auth.tenant)
-    viewer = ws.viewer_for(store, auth.member_id)
+    def current_viewer():
+        info = resolve_token(auth.token)
+        if info is None or info.get("member_id") != auth.member_id:
+            return None
+        return ws.viewer_for(store, auth.member_id)
 
     async def event_generator():
         # Flush the response headers right away so clients can tell the stream is open before the first real event.
@@ -40,6 +44,9 @@ async def sse_events(
                     yield "event: resync_required\ndata: {}\n\n"
                     return
                 for ev in missed:
+                    viewer = current_viewer()
+                    if viewer is None:
+                        return
                     if not event_visible(store, viewer, ev):
                         continue
                     last_replayed_seq = max(last_replayed_seq, ev.seq)
@@ -50,10 +57,15 @@ async def sse_events(
                     ev = await asyncio.wait_for(queue.get(), timeout=15.0)
                     if ev.seq <= last_replayed_seq:
                         continue
+                    viewer = current_viewer()
+                    if viewer is None:
+                        return
                     if not event_visible(store, viewer, ev):
                         continue
                     yield f"id: {ev.seq}\nevent: {ev.type}\ndata: {json.dumps(ev.model_dump())}\n\n"
                 except asyncio.TimeoutError:
+                    if current_viewer() is None:
+                        return
                     if settings.PERSISTENCE == "falkordb" and not db.check_health()["up"]:
                         # Tell the console why, then end the stream; it reconnects and is blocked until FalkorDB is back.
                         yield 'event: error\ndata: {"code": "FALKORDB_UNAVAILABLE"}\n\n'

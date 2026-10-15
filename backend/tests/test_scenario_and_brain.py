@@ -93,10 +93,11 @@ def test_full_scenario_orchestration_flow(client):
 
     # Executed irreversible email action generated automated damage control retraction notice
     assert email.action.correction_notice is not None
-    assert email.action.correction_notice["status"] == "READY_FOR_HUMAN_APPROVAL"
-    assert email.action.correction_notice["recipient"] == "customer@acme.com"
-    assert "CORRECTION" in email.action.correction_notice["correction_subject"]
-    assert email.action.correction_notice["verified_policy_citation"] == "Finance Ops Policy Doc v3.0 (30-day window)"
+    assert email.action.correction_notice["status"] == "NEEDS_HUMAN_INPUT"
+    assert email.action.correction_notice["recipient"] is None
+    assert "recipient" in email.action.correction_notice["missing_information"]
+    assert email.action.correction_notice["correction_subject"].startswith("Correction:")
+    assert any(p["id"] == "fact_30d" for p in email.action.correction_notice["provenance"])
 
     # Verify ESCALATION handoff was created with correction notice payload
     handoffs_res = client.get("/api/handoffs", headers=headers)
@@ -191,6 +192,10 @@ def test_brain_endpoints(client):
     assert any(w["person"] == "Sarah Chen" for w in who_list)
 
     # 4. Decision Trace
+    # Missing IDs used to return a fabricated canonical trace. Only real decisions are traceable.
+    assert client.get("/api/decisions/conc_eligible_1042/trace", headers=headers).status_code == 404
+    from app.services.mcp_tools import derive
+    assert derive("A sourced decision", ["fact_30d"], token="token_agent_scout", id="conc_eligible_1042", is_decision=True)["success"]
     res_trace = client.get("/api/decisions/conc_eligible_1042/trace", headers=headers)
     assert res_trace.status_code == 200
     trace_items = res_trace.json()

@@ -15,6 +15,7 @@ from app.models.common import (
 from app.models.graph import GraphNode, GraphEdge, CompensationInfo
 from app.models.handoffs import Handoff
 from app.services.event_bus import event_bus
+from app.services.access import inherited_scopes
 
 
 class AuditorService:
@@ -38,7 +39,7 @@ class AuditorService:
         # Find existing healthy facts with same key
         conflicting_facts = [
             f for f in store.nodes.values()
-            if f.kind == NodeKind.FACT and f.status == Status.HEALTHY and f.id != new_fact.id and f.key == new_fact.key and f.value is not None and new_fact.value is not None and f.value != new_fact.value
+            if f.kind == NodeKind.FACT and f.status == Status.HEALTHY and set(inherited_scopes([f])) <= set(inherited_scopes([new_fact])) and f.id != new_fact.id and f.key == new_fact.key and f.value is not None and new_fact.value is not None and f.value != new_fact.value
         ]
 
         if not conflicting_facts:
@@ -101,7 +102,14 @@ class AuditorService:
 
         return False
 
-    def quarantine(
+    def quarantine(self, store: GraphStore, root_id: str, reason: str = "Invalidated", tenant: str = "acme", request_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        # The one persisted diff includes quarantine, epoch, notices and compensation intent.
+        with store._lock:
+            affected = self._quarantine(store, root_id, reason, tenant, request_id)
+            store.commit(request_id)
+            return affected
+
+    def _quarantine(
         self,
         store: GraphStore,
         root_id: str,
@@ -154,10 +162,13 @@ class AuditorService:
                         text=notice["drafted_body"],
                         status=Status.HEALTHY,
                         stale=False,
-                        owner_team="Support Ops",
+                        owner_team=node.owner_team,
+                        scope_team=node.scope_team,
+                        scope_teams=list(node.scope_teams),
                         valid_from=int(time.time() * 1000),
                     )
-                    store.add_node(alert_node, request_id=request_id)
+                    if alert_id not in store.nodes:
+                        store.add_node(alert_node, request_id=request_id)
                     store.add_edge(
                         GraphEdge(
                             id=f"e_{alert_id}",
@@ -184,6 +195,8 @@ class AuditorService:
                     event_bus.publish(tenant, "correction_notice_created", {"action_id": node.id, "notice": notice}, request_id=request_id)
                 else:
                     # Enqueue compensation
+                    if node.action.compensation is not None:
+                        continue
                     node.action.compensation = CompensationInfo(
                         status=CompensationStatus.PENDING_COMPENSATION,
                         attempts=0,

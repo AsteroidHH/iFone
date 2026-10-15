@@ -262,7 +262,10 @@ def test_delta_before_any_read_says_so(tenant):
 def test_context_preview_endpoint_matches_the_tools(tenant):
     _fill(tenant, 40)
     p = client.get("/api/context/preview?query=refund%20window&budget=300", headers=H(tenant)).json()
-    assert p["packed_tokens"] < p["top8_tokens"] < p["prose_tokens"] < p["raw_json_tokens"]
+    # New privacy metadata increases JSON size. Prose versus top-8 JSON has no
+    # universal ordering; compact context must beat both measured baselines.
+    assert p["packed_tokens"] < min(p["top8_tokens"], p["prose_tokens"])
+    assert max(p["top8_tokens"], p["prose_tokens"]) < p["raw_json_tokens"]
     assert p["map_tokens"] > 0 and "## areas" in p["map"]
 
 
@@ -304,6 +307,7 @@ def test_live_events_respect_team_scope(tenant):
     t.remember_fact("price_floor", "40", "Support-only pricing floor is 40 percent", a_token, id="f_priv", scope="team")
     store = queries.get_graph_store(tenant)
     node = store.nodes["f_priv"].model_dump(mode="json")
+    t.remember_fact("public", "1", "A public endpoint", a_token, id="other")
     vb = ws.viewer_for(store, b["id"])
     va = ws.viewer_for(store, a["id"])
     ev_node = SimpleNamespace(type="node_added", data={"node": node})
@@ -313,8 +317,10 @@ def test_live_events_respect_team_scope(tenant):
         assert event_visible(store, vb, ev) is False
         assert event_visible(store, va, ev) is True
     assert event_visible(store, ws.viewer_for(store, None), ev_node) is True  # an unscoped service token sees all
-    call = SimpleNamespace(type="mcp_call", data={"call": {"member_id": a["id"]}})
+    call = SimpleNamespace(type="mcp_call", data={"call": {"member_id": a["id"], "scope_teams": [a["team_id"]]}})
     assert event_visible(store, vb, call) is False and event_visible(store, va, call) is True
+    legacy_call = SimpleNamespace(type="mcp_call", data={"call": {"member_id": a["id"]}})
+    assert event_visible(store, va, legacy_call) is False
 
 
 def test_a_forged_member_token_cannot_create_a_tenant(monkeypatch):

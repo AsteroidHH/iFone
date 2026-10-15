@@ -253,6 +253,8 @@ def test_tombstone_race_prevents_late_execution(fresh_store):
     store.add_node(action)
 
     # 1. Compensation runs FIRST (e.g. timeout on in-flight action)
+    from app.services.helpdesk import external_key
+    idempotency_key = external_key("acme", action)
     comp_resp = helpdesk_service.compensate_action(idempotency_key, action.id, "refund")
     assert comp_resp["result"] == "tombstoned"
     assert idempotency_key in helpdesk_service.tombstones

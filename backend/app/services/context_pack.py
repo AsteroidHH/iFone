@@ -61,9 +61,10 @@ class Viewer:
     scoped: bool = False
 
     def can_see(self, n: GraphNode) -> bool:
-        if not self.scoped or not n.scope_team:
+        if not self.scoped:
             return True
-        return n.scope_team == self.team_id or n.scope_team in self.linked_teams
+        required = set(n.scope_teams) | ({n.scope_team} if n.scope_team else set())
+        return required <= ({self.team_id} | self.linked_teams)
 
 
 def _clip(s: str, n: int) -> str:

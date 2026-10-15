@@ -14,6 +14,7 @@ from app.models.common import (
 from app.models.graph import GraphNode, GraphEdge
 from app.models.handoffs import Handoff
 from app.services.event_bus import event_bus
+from app.services.access import inherited_scopes
 
 
 class QuorumGateService:
@@ -109,6 +110,8 @@ class QuorumGateService:
             if node.id == target_fact.id or node.kind != NodeKind.FACT or node.status != Status.HEALTHY or getattr(node, "stale", False):
                 continue
 
+            if not set(inherited_scopes([node])) <= set(inherited_scopes([target_fact])):
+                continue
             if node.key == target_fact.key and node.value == target_fact.value:
                 # Check different origin
                 if node.origin and target_fact.origin and node.origin != target_fact.origin:

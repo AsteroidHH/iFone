@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { API_MODE, tenants } from '../api/client';
+import { API_MODE, demoCredentials, tenants } from '../api/client';
 import { copy } from '../copy';
 import { getInvariants } from '../state/endpoints';
 import { switchTenant } from '../state/pipeline';
@@ -129,8 +129,9 @@ export function Header() {
       </button>
       <nav aria-label={copy.header.menu} className="nav" style={{ ["--tabs" as string]: shown.length }}>
         {VIEWS.filter((v) => shown.includes(v.id)).map((v) => (
-          <button key={v.id} className={`navbtn${view === v.id ? ' on' : ''}`} aria-current={view === v.id ? 'page' : undefined} aria-label={copy.nav[v.id]} title={copy.nav[v.id]} onClick={() => set({ view: v.id })}>
+          <button key={v.id} className={`navbtn${view === v.id ? ' on' : ''}`} aria-current={view === v.id ? 'page' : undefined} aria-label={copy.nav[v.id]} title={copy.nav[v.id]} onFocus={(e) => e.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' })} onClick={() => set({ view: v.id })}>
             <Icon name={v.icon} size={16} />
+            <span className="nav-tip" aria-hidden="true">{copy.nav[v.id]}</span>
             <span className="nav-label">
               <span className="nl-full">{copy.nav[v.id]}</span>
               <span className="nl-short" aria-hidden="true">{SHORT[v.id] ?? copy.nav[v.id]}</span>
@@ -142,6 +143,7 @@ export function Header() {
         <label className="tenant">
           <span className="sr">{copy.header.tenant}</span>
           <span className="tenant-dot" aria-hidden="true" />
+          {demoCredentials() && <span className="sandbox-label">Demo Sandbox Credentials</span>}
           <select value={tenant} onChange={(e) => void switchTenant(e.target.value)} aria-label={copy.header.tenant}>
             {(tenants().length ? tenants() : [tenant]).map((t) => (
               <option key={t} value={t}>

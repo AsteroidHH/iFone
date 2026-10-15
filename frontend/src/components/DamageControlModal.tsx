@@ -17,19 +17,20 @@ export function DamageControlModal({ notice, onClose }: DamageControlModalProps)
 
   const dispatchMutation = useMutation({
     mutationFn: () => approveCorrection(notice.target_action_id),
-    onSuccess: () => {
-      setCurrentStatus('DISPATCHED');
-      pushToast(`Retraction email approved and dispatched to ${notice.recipient}!`);
+    onSuccess: (result) => {
+      setCurrentStatus(result.status);
+      pushToast('Correction approved. Delivery is pending.');
       void queryClient.invalidateQueries({ queryKey: ['actions'] });
       void queryClient.invalidateQueries({ queryKey: ['handoffs'] });
       void queryClient.invalidateQueries({ queryKey: ['graph'] });
     },
     onError: (err) => {
-      pushToast(`Failed to dispatch retraction: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      pushToast(`Failed to approve correction: ${err instanceof Error ? err.message : 'Unknown error'}`);
     },
   });
 
   const isDispatched = currentStatus === 'DISPATCHED';
+  const isApproved = currentStatus === 'APPROVED_PENDING_DELIVERY';
 
   return (
     <div className="modal-back" onClick={onClose}>
@@ -53,7 +54,7 @@ export function DamageControlModal({ notice, onClose }: DamageControlModalProps)
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
               <span style={{ fontSize: '1.2rem' }}>⚠️</span>
               <h2 id="dc-modal-title" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: 'var(--warn, #e5a00d)' }}>
-                DAMAGE CONTROL: Retraction Notice Drafted
+                DAMAGE CONTROL: Correction Drafted
               </h2>
             </div>
             <p className="muted small" style={{ margin: 0 }}>
@@ -78,7 +79,7 @@ export function DamageControlModal({ notice, onClose }: DamageControlModalProps)
           }}
         >
           <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>
-            {isDispatched ? 'Status: DISPATCHED' : 'Status: READY FOR HUMAN APPROVAL'}
+            {`Status: ${currentStatus.replaceAll('_', ' ')}`}
           </span>
           <span
             style={{
@@ -90,7 +91,7 @@ export function DamageControlModal({ notice, onClose }: DamageControlModalProps)
               color: '#000',
             }}
           >
-            {isDispatched ? '✓ SENT' : 'ACTION REQUIRED'}
+            {isDispatched ? '✓ SENT' : isApproved ? 'DELIVERY PENDING' : 'ACTION REQUIRED'}
           </span>
         </div>
 
@@ -202,7 +203,7 @@ export function DamageControlModal({ notice, onClose }: DamageControlModalProps)
           <button className="btn" onClick={onClose}>
             Close
           </button>
-          {!isDispatched ? (
+          {!isDispatched && !isApproved ? (
             <button
               className="btn review"
               disabled={dispatchMutation.isPending}
@@ -215,11 +216,11 @@ export function DamageControlModal({ notice, onClose }: DamageControlModalProps)
                 padding: '8px 18px',
               }}
             >
-              {dispatchMutation.isPending ? 'Dispatching...' : 'Approve & Dispatch Retraction Email'}
+              {dispatchMutation.isPending ? 'Approving...' : 'Approve Correction'}
             </button>
           ) : (
             <button className="btn" disabled style={{ background: 'var(--good, #4caf50)', color: '#fff', border: 'none' }}>
-              ✓ Retraction Email Dispatched
+              {isDispatched ? 'Correction delivered' : 'Approved · delivery pending'}
             </button>
           )}
         </footer>

@@ -148,7 +148,7 @@ function Trace() {
   const nodes = useStore((s) => s.nodes);
   const decisions = Object.values(nodes).filter((n) => n.is_decision);
   const [id, setId] = useState('');
-  const current = id || decisions[0]?.id || '';
+  const current = decisions.some((decision) => decision.id === id) ? id : decisions[0]?.id || '';
   const q = useQuery({ queryKey: ['trace', current], queryFn: () => getTrace(current), enabled: !!current });
   return (
     <section className="card" aria-label={copy.brain.traceTitle}>

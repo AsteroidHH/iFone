@@ -21,6 +21,9 @@ class CypherLogItem(BaseModel):
     cypher: str
     ms: float
     rows: int
+    origin: str = "illustrative"
+    outcome: str = "success"
+    timing_boundary: str = "client_round_trip"
 
 
 class DeniedDemoResponse(BaseModel):

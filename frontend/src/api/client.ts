@@ -15,6 +15,9 @@ interface RuntimeConfig {
   tenants: string[];
 }
 
+let sandbox = API_MODE === 'mock';
+export const demoCredentials = () => sandbox;
+
 let config: RuntimeConfig = { tokens: {}, tenants: [] };
 export const session = { tenant: 'acme', role: 'human' as Role };
 
@@ -69,10 +72,11 @@ export type AuthResult = 'ok' | 'needed';
 
 /**
  * Finds a way to call the hub, in this order: the token this tab signed in with, the built-in demo tokens (the hub
- * offers them only in development), a config.json an operator deployed. If none works the console asks for a token.
+ * offers them only in a demo sandbox). If neither works the console asks for a token.
  */
 export async function resolveAuth(): Promise<AuthResult> {
   if (API_MODE === 'mock') {
+    sandbox = true;
     adopt(MOCK_CONFIG);
     return 'ok';
   }
@@ -80,6 +84,7 @@ export async function resolveAuth(): Promise<AuthResult> {
   if (stored) {
     const who = await whoami(stored);
     if (who) {
+      sandbox = false;
       adopt({ tokens: { [who.tenant]: { [who.role]: stored } }, tenants: [who.tenant] });
       session.tenant = who.tenant;
       return 'ok';
@@ -89,23 +94,12 @@ export async function resolveAuth(): Promise<AuthResult> {
   try {
     const res = await fetch('/api/dev-config', { cache: 'no-store' });
     if (res.ok) {
+      sandbox = true;
       adopt((await res.json()) as RuntimeConfig);
       return 'ok';
     }
   } catch {
     /* no hub answer here; the health gate reports it */
-  }
-  try {
-    const res = await fetch('/config.json', { cache: 'no-store' });
-    if (res.ok) {
-      const c = (await res.json()) as RuntimeConfig;
-      if (c.tokens && Object.keys(c.tokens).length) {
-        adopt(c);
-        return 'ok';
-      }
-    }
-  } catch {
-    /* ignore */
   }
   return 'needed';
 }
@@ -117,6 +111,7 @@ export async function signIn(token: string): Promise<{ ok: true } | { ok: false;
   const who = await whoami(t);
   if (!who) return { ok: false, message: 'The hub did not accept that token. It may be wrong, expired or revoked.' };
   writeStored(t);
+  sandbox = false;
   adopt({ tokens: { [who.tenant]: { [who.role]: t } }, tenants: [who.tenant] });
   session.tenant = who.tenant;
   session.role = who.role;

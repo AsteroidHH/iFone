@@ -4,7 +4,7 @@ from fastapi import HTTPException, status
 from app.graph.queries import GraphStore
 from app.models.common import ErrorCode
 from app.models.graph import GraphNode
-from app.services.helpdesk import helpdesk_service
+from app.services.helpdesk import helpdesk_service, external_key
 from app.services.event_bus import event_bus
 
 
@@ -30,7 +30,15 @@ class ActionExecutorService:
             )
 
         # 1. Atomic execute guard check-and-set
-        guard_passed = store.execute_guard(action_id, request_id=request_id)
+        with store._lock:
+            guard_passed = store.execute_guard(action_id, request_id=request_id)
+            if guard_passed:
+                idempotency_key = external_key(tenant, action)
+                action.action.executed_at = int(time.time() * 1000)
+                action.action.execution_attempts = 1
+                action.action.execution_lease_until = action.action.executed_at + 30000
+                # No external call until execution intent and stable key are durable.
+                store.commit(request_id)
         if not guard_passed:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -43,16 +51,23 @@ class ActionExecutorService:
             )
 
         # 2. Call external API (Helpdesk) with idempotency key
-        idempotency_key = getattr(action.action, "idempotency_key", None) or f"key_{action_id}"
-        resp = helpdesk_service.execute_action(
-            idempotency_key=idempotency_key,
-            action_type=action.action.type,
-            payload={},
-        )
+        try:
+            resp = helpdesk_service.execute_action(
+                idempotency_key=idempotency_key,
+                action_type=action.action.type,
+                payload=action.action.payload,
+            )
+        except Exception as exc:
+            action.action.delivery_error = type(exc).__name__
+            store.commit(request_id)
+            raise HTTPException(502, "External service unavailable; execution outcome requires reconciliation.") from exc
 
         if resp.get("status") == 200:
             action.action.confirmed = True
             action.action.executed_at = int(time.time() * 1000)
+            action.action.delivery_error = None
+            action.action.execution_lease_until = None
+            store.commit(request_id)
             event_bus.publish(
                 tenant,
                 "action_executed",

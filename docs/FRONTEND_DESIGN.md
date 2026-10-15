@@ -80,7 +80,7 @@ A "Sample data" chip sits in the header whenever the scripted in-browser backend
 ## Security and quality
 
 - Production builds carry a strict Content-Security-Policy (`script-src 'self'`, no inline scripts, `connect-src 'self'`, `object-src 'none'`); fonts are never inlined so `font-src 'self'` holds. The QA run fails on any CSP violation.
-- No tokens in the repo: the sample backend uses built-in throwaway tokens; live mode reads `/config.json` at deploy time (`public/config.example.json` shows the shape, `config.json` is git-ignored).
+- No tokens in the repo: the sample backend uses built-in throwaway tokens; live mode uses token sign-in; public config files must never carry bearer secrets.
 - Links that come from the API are only followed if they are http or https (`src/api/safeUrl.ts`).
 - Every response and event is validated at the boundary (zod); unknown enum values render neutrally; one failing component is caught by an error boundary instead of blanking the page.
 - ESLint (TypeScript, React hooks and compiler rules, no `any`, no stray `console.log`) runs as part of `npm run verify`.

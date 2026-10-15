@@ -79,7 +79,7 @@ export const landing = {
       {
         k: 'Guard',
         h: 'The atomic execute guard',
-        p: 'An action runs only if every ancestor is still healthy, checked in the same statement that marks it executed. Zero rows means nothing runs.',
+        p: 'An action runs only if every ancestor is still healthy. One API process checks and marks execution under a lock, then persists intent before contacting the external service.',
       },
       {
         k: 'Repair',

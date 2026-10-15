@@ -98,13 +98,14 @@ def test_quarantine_executed_irreversible_action_creates_correction_notice(clien
     notice = email_act.action.correction_notice
     assert notice is not None
     assert notice["target_action_id"] == "act_email_001"
-    assert notice["recipient"] == "customer@acme.com"
-    assert notice["original_subject"] == "Update: Your Refund Request is Approved"
+    assert notice["recipient"] is None
+    assert "recipient" in notice["missing_information"]
+    assert notice["original_subject"] is None
     assert "90-day policy" in notice["original_statement"]
-    assert notice["correction_subject"] == "CORRECTION: Important update regarding your refund request"
-    assert "Finance Ops Policy" in notice["drafted_body"]
-    assert "Finance Ops Policy Doc v3.0" in notice["verified_policy_citation"]
-    assert notice["status"] == "READY_FOR_HUMAN_APPROVAL"
+    assert notice["correction_subject"] == f"Correction: {email_act.label}"
+    assert "Human input required" in notice["drafted_body"]
+    assert "Finance Ops Policy Doc v3.0" not in notice["verified_policy_citation"]
+    assert notice["status"] == "NEEDS_HUMAN_INPUT"
 
     # Verify :Alert memory node was created in the graph
     alert_nodes = [n for n in store.nodes.values() if n.kind == NodeKind.ALERT or "alert_retraction" in n.id]
@@ -127,20 +128,20 @@ def test_quarantine_executed_irreversible_action_creates_correction_notice(clien
     res_approve = client.post("/api/actions/act_email_001/approve-correction", headers=human_headers)
     assert res_approve.status_code == 200
     res_data = res_approve.json()
-    assert res_data["status"] == "DISPATCHED"
+    assert res_data["status"] == "APPROVED_PENDING_DELIVERY"
     assert res_data["action_id"] == "act_email_001"
-    assert res_data["notice"]["status"] == "DISPATCHED"
+    assert res_data["notice"]["status"] == "APPROVED_PENDING_DELIVERY"
 
     # Verify action node and handoff updated to DISPATCHED / COMPLETED
-    assert email_act.action.correction_notice["status"] == "DISPATCHED"
+    assert email_act.action.correction_notice["status"] == "APPROVED_PENDING_DELIVERY"
     with _handoff_lock:
         updated_handoff = [h for h in _handoff_store if h.context_root_id == "act_email_001"][0]
         assert updated_handoff.status == HandoffStatus.COMPLETED
-        assert updated_handoff.correction_notice["status"] == "DISPATCHED"
+        assert updated_handoff.correction_notice["status"] == "APPROVED_PENDING_DELIVERY"
 
 
 def test_handoff_review_approval_dispatches_correction_notice(client):
-    """Asserts that reviewing and approving an escalation handoff with a correction notice marks it DISPATCHED."""
+    """Asserts that reviewing and approving an escalation handoff with a correction notice keeps delivery pending after approval."""
     human_headers = {"Authorization": "Bearer token_human"}
     store = get_graph_store("acme")
     with store._lock:
@@ -186,6 +187,6 @@ def test_handoff_review_approval_dispatches_correction_notice(client):
     )
     assert res.status_code == 200
     assert handoff.status == HandoffStatus.COMPLETED
-    assert handoff.correction_notice["status"] == "DISPATCHED"
-    assert email_act.action.correction_notice["status"] == "DISPATCHED"
+    assert handoff.correction_notice["status"] == "APPROVED_PENDING_DELIVERY"
+    assert email_act.action.correction_notice["status"] == "APPROVED_PENDING_DELIVERY"
 

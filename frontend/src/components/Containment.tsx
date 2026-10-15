@@ -70,7 +70,7 @@ export function Containment() {
   const q = useQuery({
     queryKey: ['report', root],
     queryFn: () => getReport(root as string),
-    enabled: !!root,
+    enabled: !!root && !!nodes[root],
   });
   const loaded = useStore((st) => st.loaded);
   const handoffs = useQuery({ queryKey: ['handoffs'], queryFn: getHandoffs, enabled: loaded });
@@ -82,7 +82,7 @@ export function Containment() {
     handoffs.data?.find((h) => h.correction_notice)?.correction_notice ??
     null;
 
-  if (!root) return null;
+  if (!root || !nodes[root]) return null;
   const d = q.data;
   const segs: Seg[] = d
     ? [
@@ -142,11 +142,11 @@ export function Containment() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                 <span style={{ fontSize: '1.2rem' }}>⚠️</span>
                 <strong style={{ fontSize: '0.88rem', color: 'var(--text)' }}>
-                  DAMAGE CONTROL ACTIVE: Retraction Email Drafted
+                  DAMAGE CONTROL ACTIVE: Correction Drafted
                 </strong>
               </div>
               <p className="muted small" style={{ margin: '0 0 10px 0', fontSize: '0.78rem', lineHeight: 1.4 }}>
-                Quarantined irreversible action (<span className="mono">{activeNotice.target_action_id}</span>) triggered automated harm mitigation. Retraction email prepared for <span className="mono">{activeNotice.recipient}</span>.
+                Quarantined irreversible action (<span className="mono">{activeNotice.target_action_id}</span>) requires human review. Check the draft, recipient and verified replacement facts before approval.
               </p>
               <button
                 className="btn review"
@@ -160,7 +160,7 @@ export function Containment() {
                 }}
                 onClick={() => setModalNotice(activeNotice)}
               >
-                Review & Dispatch Retraction Notice
+                Review Correction
               </button>
             </div>
           )}

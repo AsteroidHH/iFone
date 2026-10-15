@@ -7,6 +7,9 @@ from app.models.common import ErrorCode, HandoffStatus, HandoffKind
 from app.graph.queries import get_graph_store
 from app.services.event_bus import event_bus
 
+from app.services.access import handoff_visible
+from app.services.workspace import viewer_for
+
 router = APIRouter()
 
 
@@ -14,7 +17,7 @@ router = APIRouter()
 def list_handoffs(auth: AuthContext = Depends(get_auth_context)):
     store = get_graph_store(auth.tenant)
     with store.handoff_lock:
-        return list(store.handoffs)
+        return [h for h in store.handoffs if handoff_visible(store, viewer_for(store, auth.member_id), h)]
 
 
 @router.post("/handoffs/{handoff_id}/claim", response_model=Handoff)
@@ -25,7 +28,7 @@ def claim_handoff(
     store = get_graph_store(auth.tenant)
     with store.handoff_lock:
         target = next((h for h in store.handoffs if h.id == handoff_id), None)
-        if not target:
+        if not target or not handoff_visible(store, viewer_for(store, auth.member_id), target):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={"error": {"code": ErrorCode.NOT_FOUND.value, "message": f"Handoff '{handoff_id}' not found."}},
@@ -99,7 +102,7 @@ def review_handoff(
     with store._lock:
         with store.handoff_lock:
             target = next((h for h in store.handoffs if h.id == handoff_id), None)
-            if not target:
+            if not target or not handoff_visible(store, viewer_for(store, auth.member_id), target):
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail={"error": {"code": ErrorCode.NOT_FOUND.value, "message": f"Handoff '{handoff_id}' not found."}},
@@ -114,14 +117,14 @@ def review_handoff(
                     action_node.action.gate = GateStatus.PASSED
                     notice = action_node.action.correction_notice
                     if notice:
-                        notice["status"] = "DISPATCHED"
+                        notice["status"] = "APPROVED_PENDING_DELIVERY"
                         action_node.correction_notice = notice
                 if target.correction_notice:
-                    target.correction_notice["status"] = "DISPATCHED"
+                    target.correction_notice["status"] = "APPROVED_PENDING_DELIVERY"
 
                 alert_node = store.nodes.get(f"alert_retraction_{target.context_root_id}")
                 if alert_node:
-                    alert_node.label = f"✅ Retraction Dispatched for {target.context_root_id}"
+                    alert_node.label = f"Retraction approved, delivery pending: {target.context_root_id}"
                     event_bus.publish(auth.tenant, "node_updated", {"node": alert_node.model_dump()})
 
         event_bus.publish(

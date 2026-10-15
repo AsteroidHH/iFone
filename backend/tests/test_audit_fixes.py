@@ -293,14 +293,16 @@ def test_falkordb_cypher_cascade_and_path_finding():
     mock_persister.sync = MagicMock()
     store.persister = mock_persister
 
-    # 1. Test Cypher cascade_quarantine
-    affected = store.cascade_quarantine("root1")
-    assert any(q[0] == "cascade_quarantine" for q in executed_queries)
-    assert any("MATCH (root:QNode {id: $root_id})" in q[1] for q in executed_queries)
+    # 1. The production auditor traverses under its process lock and commits the
+    # complete diff, rather than executing a separate partial Cypher cascade.
+    from app.services.auditor import auditor_service
+    affected = auditor_service.quarantine(store, "root1", tenant=store.tenant)
+    mock_persister.sync.assert_called_once()
+    assert not any(q[0] == "cascade_quarantine" for q in executed_queries)
     assert store.nodes["root1"].status == Status.QUARANTINED
     assert store.nodes["child1"].status == Status.QUARANTINED
     assert len(affected) == 2
-    assert any(e.name == "cascade_quarantine" for e in store.query_log)
+    assert not any(e.name == "cascade_quarantine" for e in store.query_log)
 
     # 2. Test Cypher shortestPath via find_path
     res_path = cp.find_path(store, "root1", "child1")

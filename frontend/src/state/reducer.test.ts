@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyEvent, emptyCore, planEvents, type CoreState } from './reducer';
-import type { GraphNode, SseEvent } from '../api/schemas';
+import { SseEvent, type GraphNode } from '../api/schemas';
 
 const node = (id: string, over: Partial<GraphNode> = {}): GraphNode => ({
   id,
@@ -18,6 +18,14 @@ const ev = (type: SseEvent['type'], data: unknown, over: Partial<SseEvent> = {})
 const withNodes = (...ns: GraphNode[]): CoreState => ({
   ...emptyCore(),
   nodes: Object.fromEntries(ns.map((n) => [n.id, n])),
+});
+
+it('resyncs after reset instead of refetching a removed containment root', () => {
+  const parsed = SseEvent.parse(ev('epoch_changed', { epoch: 1, reason: 'reset' }));
+  const result = applyEvent(withNodes(node('removed')), parsed);
+  expect(result.effects).toContainEqual({ kind: 'resync' });
+  expect(result.effects.some((effect) => effect.kind === 'report')).toBe(false);
+  expect(result.state.cascade).toBeNull();
 });
 
 describe('planEvents', () => {

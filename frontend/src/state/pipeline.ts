@@ -48,6 +48,7 @@ function runEffects(effects: Effect[]) {
       case 'claim':
         break;
       case 'resync':
+        st.set({ reportRoot: null, selectedId: null });
         void resync();
         break;
     }
@@ -113,6 +114,8 @@ export async function loadGraph(): Promise<void> {
   const st = useStore.getState();
   useStore.setState({
     ...snapshotToCore(st, g),
+    reportRoot: st.reportRoot && g.nodes.some((n) => n.id === st.reportRoot) ? st.reportRoot : null,
+    selectedId: st.selectedId && g.nodes.some((n) => n.id === st.selectedId) ? st.selectedId : null,
     loaded: true,
     graphStale: false,
     loadError: null,
@@ -130,7 +133,10 @@ async function resync() {
     await loadGraph();
     const h = await getHandoffs().catch(() => []);
     useStore.setState({ handoffs: Object.fromEntries(h.map((x) => [x.id, x])) });
-    void queryClient.invalidateQueries();
+    const currentNodes = useStore.getState().nodes;
+    void queryClient.invalidateQueries({
+      predicate: (query) => !['report', 'node', 'trace'].includes(String(query.queryKey[0])) || !!currentNodes[String(query.queryKey[1])],
+    });
     st.set({ asOf: null, past: null });
   } catch (e) {
     useStore.setState({ resyncing: false, loadError: errorMessage(e) });

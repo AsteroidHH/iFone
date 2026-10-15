@@ -1,5 +1,7 @@
 """Write tools: remember_fact, observe, derive, stage_action, execute_action, claim_handoff, review_handoff."""
 import time
+import hashlib
+from fastapi import HTTPException
 import uuid
 from typing import Any, Dict, List, Optional
 
@@ -7,6 +9,7 @@ from app.config import settings
 from app.graph.queries import get_graph_store
 from app.models.common import EdgeType, GateStatus, HandoffKind, HandoffStatus, NodeKind, Reversibility, Status, Tier
 from app.models.graph import ActionInfo, AssertedBy, GraphEdge, GraphNode
+from app.services.access import inherited_scopes, handoff_visible, node_for, creation_matches
 from app.services import observer
 from app.services import roles
 from app.services.auditor import auditor_service
@@ -59,7 +62,14 @@ def remember_fact(
             tier=tier_val,
         ),
     )
-    store.add_node(fact)
+    try:
+        with store._lock:
+            existing = store.nodes.get(fact.id)
+            store.add_node(fact)
+            if existing is not None:
+                return {"epoch": store.epoch, "fact_id": existing.id, "status": existing.status.value, "verdict": None, "success": True}
+    except HTTPException:
+        return {"error": "Node ID unavailable; use a new ID or authorized restore.", "success": False}
     _emit(auth["tenant"], nodes=[fact])
 
     # Check contradiction with Auditor
@@ -81,17 +91,18 @@ def observe_text(auth: Dict[str, Any], text: str, source: str = "chat", dry_run:
         return {"error": "scope=team needs a member token that belongs to a team.", "success": False}
     if scope not in ("commons", "team"):
         return {"error": "scope must be commons or team.", "success": False}
+    viewer = _viewer(auth, store)
     cands = observer.candidates(text, settings.OBSERVER_MAX_FACTS)
     with store._lock:
         known = {
             observer.fingerprint(n.quote or n.text or ""): n.id
             for n in store.nodes.values()
-            if n.kind == NodeKind.FACT and (n.quote or n.text) and n.status != Status.QUARANTINED
+            if viewer.can_see(n) and n.kind == NodeKind.FACT and (n.quote or n.text) and n.status != Status.QUARANTINED
         }
         known.update({
             observer.fingerprint(n.text or ""): n.id
             for n in store.nodes.values()
-            if n.kind == NodeKind.FACT and n.text and n.status != Status.QUARANTINED
+            if viewer.can_see(n) and n.kind == NodeKind.FACT and n.text and n.status != Status.QUARANTINED
         })
     stored, duplicates, verdicts = [], [], []
     for c in cands:
@@ -102,10 +113,11 @@ def observe_text(auth: Dict[str, Any], text: str, source: str = "chat", dry_run:
         if dry_run:
             stored.append({**item, "id": None})
             continue
-        base_id = f"obs_{c['fingerprint'][:8]}"
+        namespace = hashlib.sha256(f"{auth.get('member_id')}:{scope}".encode()).hexdigest()[:12]
+        base_id = f"obs_{namespace}_{c['fingerprint'][:16]}"
         with store._lock:
             existing = store.nodes.get(base_id)
-            if existing and existing.status == Status.QUARANTINED:
+            if existing:
                 fact_id = f"{base_id}_{uuid.uuid4().hex[:4]}"
             else:
                 fact_id = base_id
@@ -192,7 +204,13 @@ def derive(
             text=text,
             owner_team=owner_team,
             scope_team=next((p.scope_team for p in parents if p.scope_team), None),
+            scope_teams=inherited_scopes(parents),
         )
+        existing = store.nodes.get(conc_id)
+        if existing:
+            if viewer.can_see(existing) and creation_matches(store, existing, conc, parents):
+                return {"epoch": store.epoch, "conclusion_id": existing.id, "status": existing.status.value, "success": True}
+            return {"error": "Node ID unavailable.", "success": False}
         store.add_node(conc)
 
         new_edges = []
@@ -224,6 +242,7 @@ def stage_action(
     id: Optional[str] = None,
     procedure_id: Optional[str] = None,
     idempotency_key: Optional[str] = None,
+    payload: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Stages an action node and passes through the Quorum Gate."""
     auth = _get_auth(token)
@@ -259,6 +278,7 @@ def stage_action(
             status=Status.HEALTHY,
             stale=False,
             scope_team=next((p.scope_team for p in parents if p.scope_team), None),
+            scope_teams=inherited_scopes(parents),
             action=ActionInfo(
                 type=action_type,
                 reversibility=rev_enum,
@@ -267,8 +287,15 @@ def stage_action(
                 gate=GateStatus.PASSED,
                 procedure_id=procedure_id,
                 idempotency_key=idempotency_key,
+                payload=payload or {},
             ),
         )
+        existing = store.nodes.get(act_id)
+        if existing:
+            if viewer.can_see(existing) and creation_matches(store, existing, action_node, parents):
+                return {"epoch": store.epoch, "action_id": existing.id, "status": existing.status.value,
+                        "gate": existing.action.gate.value, "blocked_reason": None, "handoff_id": None, "success": True}
+            return {"error": "Node ID unavailable.", "success": False}
         store.add_node(action_node)
 
         new_edges = []
@@ -304,6 +331,7 @@ def execute_action(id: str, token: str = "") -> Dict[str, Any]:
     store = get_graph_store(auth["tenant"])
 
     try:
+        node_for(store, auth, id)
         executed_node = action_executor.execute(store, id, tenant=auth["tenant"])
         act = executed_node.action
         return {
@@ -329,7 +357,7 @@ def claim_handoff(id: str, token: str = "") -> Dict[str, Any]:
 
     with store.handoff_lock:
         target = next((h for h in store.handoffs if h.id == id), None)
-        if not target:
+        if not target or not handoff_visible(store, _viewer(auth, store), target):
             return {"epoch": store.epoch, "error": f"Handoff '{id}' not found", "success": False}
 
         if auth["role"] == "agent" and target.kind != HandoffKind.TASK:
@@ -383,7 +411,7 @@ def review_handoff(id: str, decision: str, token: str = "", note: Optional[str] 
     store = get_graph_store(auth["tenant"])
     with store.handoff_lock:
         target = next((h for h in store.handoffs if h.id == id), None)
-        if not target:
+        if not target or not handoff_visible(store, _viewer(auth, store), target):
             return {"error": f"Handoff '{id}' not found.", "success": False}
 
         if note and hasattr(target, "note"):
@@ -397,14 +425,14 @@ def review_handoff(id: str, decision: str, token: str = "", note: Optional[str] 
                     action_node.action.gate = GateStatus.PASSED
                     notice = action_node.action.correction_notice
                     if notice:
-                        notice["status"] = "DISPATCHED"
+                        notice["status"] = "APPROVED_PENDING_DELIVERY"
                         action_node.correction_notice = notice
                 if target.correction_notice:
-                    target.correction_notice["status"] = "DISPATCHED"
+                    target.correction_notice["status"] = "APPROVED_PENDING_DELIVERY"
 
                 alert_node = store.nodes.get(f"alert_retraction_{target.context_root_id}")
                 if alert_node:
-                    alert_node.label = f"✅ Retraction Dispatched for {target.context_root_id}"
+                    alert_node.label = f"Retraction approved, delivery pending: {target.context_root_id}"
                     event_bus.publish(auth["tenant"], "node_updated", {"node": alert_node.model_dump()})
 
         event_bus.publish(
