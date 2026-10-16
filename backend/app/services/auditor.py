@@ -33,32 +33,34 @@ class AuditorService:
         tenant: str = "acme",
         request_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
-        if not new_fact.key or not new_fact.value:
-            return None
+        with store._lock:
+            if not new_fact.key or not new_fact.value:
+                return None
 
-        # Find existing healthy facts with same key
-        conflicting_facts = [
-            f for f in store.nodes.values()
-            if f.kind == NodeKind.FACT and f.status == Status.HEALTHY and set(inherited_scopes([f])) <= set(inherited_scopes([new_fact])) and f.id != new_fact.id and f.key == new_fact.key and f.value is not None and new_fact.value is not None and f.value != new_fact.value
-        ]
+            # Find existing healthy facts with same key
+            conflicting_facts = [
+                f for f in store.nodes.values()
+                if f.kind == NodeKind.FACT and f.status == Status.HEALTHY and set(inherited_scopes([f])) <= set(inherited_scopes([new_fact])) and f.id != new_fact.id and f.key == new_fact.key and f.value is not None and new_fact.value is not None and f.value != new_fact.value
+            ]
 
-        if not conflicting_facts:
-            return None
+            if not conflicting_facts:
+                return None
 
-        old_fact = conflicting_facts[0]
+            old_fact = conflicting_facts[0]
 
-        # Trust evaluation
-        old_tier = old_fact.asserted_by.tier if old_fact.asserted_by else Tier.NEW
-        new_tier = new_fact.asserted_by.tier if new_fact.asserted_by else Tier.NEW
+            # Trust evaluation
+            old_tier = old_fact.asserted_by.tier if old_fact.asserted_by else Tier.NEW
+            new_tier = new_fact.asserted_by.tier if new_fact.asserted_by else Tier.NEW
 
-        # Rule 1: Contradicting a root fact auto-quarantines the CHALLENGER (unless both are ROOT)
-        if old_tier == Tier.ROOT and new_tier != Tier.ROOT:
-            self.quarantine(store, new_fact.id, reason="Contradicts root-tier policy fact", tenant=tenant, request_id=request_id)
-            return {"verdict": "CHALLENGER_QUARANTINED", "quarantined_id": new_fact.id}
+            # Rule 1: Contradicting a root fact auto-quarantines the CHALLENGER (unless both are ROOT)
+            if old_tier == Tier.ROOT and new_tier != Tier.ROOT:
+                new_fact.status = Status.QUARANTINED
+                self.quarantine(store, new_fact.id, reason="Contradicts root-tier policy fact", tenant=tenant, request_id=request_id)
+                return {"verdict": "CHALLENGER_QUARANTINED", "quarantined_id": new_fact.id}
 
-        if new_tier == Tier.ROOT and old_tier != Tier.ROOT:
-            self.quarantine(store, old_fact.id, reason="Contradicted by root-tier assertion", tenant=tenant, request_id=request_id)
-            return {"verdict": "OLD_FACT_QUARANTINED", "quarantined_id": old_fact.id}
+            if new_tier == Tier.ROOT and old_tier != Tier.ROOT:
+                self.quarantine(store, old_fact.id, reason="Contradicted by root-tier assertion", tenant=tenant, request_id=request_id)
+                return {"verdict": "OLD_FACT_QUARANTINED", "quarantined_id": old_fact.id}
 
         # Rule 2: Compare tier weights
         tier_weights = {Tier.ROOT: 10.0, Tier.ESTABLISHED: 3.0, Tier.NEW: 0.5}
@@ -69,6 +71,7 @@ class AuditorService:
             self.quarantine(store, old_fact.id, reason="Weaker assertion superseded by higher tier", tenant=tenant, request_id=request_id)
             return {"verdict": "OLD_FACT_QUARANTINED", "quarantined_id": old_fact.id}
         elif old_weight >= 3 * new_weight:
+            new_fact.status = Status.QUARANTINED
             self.quarantine(store, new_fact.id, reason="Weaker assertion rejected by established fact", tenant=tenant, request_id=request_id)
             return {"verdict": "CHALLENGER_QUARANTINED", "quarantined_id": new_fact.id}
         else:

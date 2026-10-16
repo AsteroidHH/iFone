@@ -21,10 +21,12 @@ export function ScenarioControls() {
   const next = STORY.find((s) => !done.has(s));
 
   async function go(step: string) {
+    if (active || pending) return;
     setPending(step);
     try {
       await runStep(step);
     } catch (e) {
+      useStore.getState().setCore((c) => ({ ...c, scenario: { ...c.scenario, active: null, lastState: 'failed' } }));
       if (e instanceof ApiError && e.code === 'FORBIDDEN_ROLE') pushToast(copy.errors.forbiddenRoleScenario);
       else pushToast(copy.errors.generic(e instanceof ApiError ? e.code : 'ERROR', e instanceof ApiError ? e.message : 'Request failed'));
     } finally {
@@ -35,7 +37,7 @@ export function ScenarioControls() {
   const failed = !active && scenario.lastState === 'failed' && scenario.detail;
 
   return (
-    <section className="card scenario" aria-label={copy.scenario.title}>
+    <section className="card scenario autopilot-controls" aria-label={copy.scenario.title}>
       <header className="card-h">
         <h2>{copy.scenario.title}</h2>
         <span className="card-sub">{copy.scenario.subtitle}</span>

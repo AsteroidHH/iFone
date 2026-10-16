@@ -125,7 +125,7 @@ export function applyEvent(prev: CoreState, ev: SseEvent): { state: CoreState; e
   let s: CoreState = {
     ...prev,
     seq: Math.max(prev.seq, ev.seq),
-    epoch: ev.epoch,
+    epoch: Math.max(prev.epoch, ev.epoch),
     eventLog: [
       ...prev.eventLog,
       {
@@ -200,7 +200,12 @@ export function applyEvent(prev: CoreState, ev: SseEvent): { state: CoreState; e
         };
       } else if (d.status === 'HEALTHY' && n.status === 'QUARANTINED') {
         const c = s.cascade;
-        s = { ...s, cascade: c ? { ...c, ids: [...c.ids, d.id] } : { rootId: d.id, ids: [d.id], startedTs: ev.ts } };
+        s = {
+          ...s,
+          cascade: c
+            ? { ...c, ids: c.ids.includes(d.id) ? c.ids : [...c.ids, d.id] }
+            : { rootId: d.id, ids: [d.id], startedTs: ev.ts },
+        };
       } else if (d.status === 'SUPERSEDED') {
         s = pushFeed(s, ev, 'graph', 'warn', copy.history.superseded(n.label), d.id);
       } else if (d.stale === true && !n.stale) {

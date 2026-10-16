@@ -14,6 +14,7 @@ import { Skeleton } from './ui';
 import { fmt } from '../context/tokens';
 import { getTokenStats } from '../workspace/server';
 import { useLive } from '../workspace/live';
+import { startTour } from '../tour/tour';
 
 const VIEWS: { id: View; icon: string }[] = [
   { id: 'overview', icon: 'chart' },
@@ -29,7 +30,18 @@ const VIEWS: { id: View; icon: string }[] = [
 ];
 
 /** Tab-bar labels on a phone, where nine tabs share the width. */
-const SHORT: Partial<Record<View, string>> = {};
+const SHORT: Record<View, string> = {
+  overview: 'Over',
+  console: 'Graph',
+  memory: 'Mem',
+  brain: 'Brain',
+  tenants: 'Tenants',
+  benchmark: 'Bench',
+  context: 'Context',
+  connect: 'MCP',
+  team: 'Team',
+  activity: 'Logs',
+};
 
 function SavedPill() {
   const naive = useLive((s) => s.totals.naive);
@@ -64,7 +76,7 @@ function EpochBadge() {
     prev.current = epoch;
   }, [epoch]);
   return (
-    <span className={`pill epoch${pulse ? ' pulse' : ''}`} title="Increments on every quarantine, restore and replacement">
+    <span className={`pill epoch${pulse ? ' pulse' : ''}`} title="The memory version goes up by one every time a fact is quarantined, restored or replaced. Agents rebuild their context when it changes.">
       <Icon name="refresh" size={13} />
       {copy.epoch(epoch)}
     </span>
@@ -75,9 +87,12 @@ function InvariantLight() {
   const inv = useStore((s) => s.invariant);
   const open = useStore((s) => s.invariantsOpen);
   const set = useStore((s) => s.set);
-  const q = useQuery({ queryKey: ['invariants'], queryFn: getInvariants, enabled: open });
-  const state = inv ? (inv.ok ? 'ok' : 'bad') : 'unknown';
-  const text = inv ? (inv.ok ? copy.invariants.ok : copy.invariants.bad(inv.violations)) : copy.invariants.unknown;
+  // Ask for the result as soon as the console loads, so the pill says pass or fail instead of waiting to be opened.
+  const q = useQuery({ queryKey: ['invariants'], queryFn: getInvariants, refetchInterval: 30_000 });
+  const failing = q.data ? q.data.checks.filter((c) => !c.ok).length : 0;
+  const result = inv ?? (q.data ? { ok: failing === 0, violations: failing } : null);
+  const state = result ? (result.ok ? 'ok' : 'bad') : 'unknown';
+  const text = result ? (result.ok ? copy.invariants.ok : copy.invariants.bad(result.violations)) : copy.invariants.unknown;
   return (
     <div className="pop-wrap">
       <button className={`pill light ${state}`} aria-expanded={open} data-popover-trigger="invariants" onClick={() => set({ invariantsOpen: !open })}>
@@ -127,7 +142,7 @@ export function Header() {
         </span>
         <span className="brand-name">{copy.appName}</span>
       </button>
-      <nav aria-label={copy.header.menu} className="nav" style={{ ["--tabs" as string]: shown.length }}>
+      <nav aria-label={copy.header.menu} className="nav" data-count={shown.length} style={{ ["--tabs" as string]: shown.length }}>
         {VIEWS.filter((v) => shown.includes(v.id)).map((v) => (
           <button key={v.id} className={`navbtn${view === v.id ? ' on' : ''}`} aria-current={view === v.id ? 'page' : undefined} aria-label={copy.nav[v.id]} title={copy.nav[v.id]} onFocus={(e) => e.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' })} onClick={() => set({ view: v.id })}>
             <Icon name={v.icon} size={16} />
@@ -140,23 +155,29 @@ export function Header() {
         ))}
       </nav>
       <div className="status">
-        <label className="tenant">
+        <label className="tenant" title={demoCredentials() ? 'You are signed in with demo sandbox credentials. Nothing here is a real company.' : 'The company whose memory you are looking at'}>
           <span className="sr">{copy.header.tenant}</span>
           <span className="tenant-dot" aria-hidden="true" />
-          {demoCredentials() && <span className="sandbox-label">Demo Sandbox Credentials</span>}
           <select value={tenant} onChange={(e) => void switchTenant(e.target.value)} aria-label={copy.header.tenant}>
-            {(tenants().length ? tenants() : [tenant]).map((t) => (
+            {Array.from(new Set([...tenants(), tenant])).map((t) => (
               <option key={t} value={t}>
                 {t}
               </option>
             ))}
           </select>
         </label>
-        {API_MODE === 'mock' && (
+        {API_MODE === 'mock' ? (
           <span className="pill sample" title={copy.sampleHint}>
             <Icon name="sparkle" size={13} />
-            {copy.sampleData}
+            <span className="sample-w">{copy.sampleData}</span>
           </span>
+        ) : (
+          demoCredentials() && (
+            <span className="pill sample" title="Demo sandbox credentials active">
+              <Icon name="sparkle" size={13} />
+              <span className="sample-w">Demo</span>
+            </span>
+          )
         )}
         {story && (
           <span className={`pill mode ${mode}`} title={copy.modeHint[mode] ?? ''}>
@@ -181,6 +202,26 @@ export function Header() {
         </button>
         <button className="iconbtn" aria-pressed={presentation} aria-label={copy.presentationMode} title={`${copy.presentationMode} (P)`} onClick={() => set({ presentation: !presentation })}>
           <Icon name="present" size={17} />
+        </button>
+        <button
+          className="btn tour-btn"
+          aria-label="Take Product Tour"
+          title="Take Product Tour"
+          onClick={() => {
+            rememberFocus();
+            startTour();
+          }}
+        >
+          <Icon name="sparkle" size={14} />
+          <span>Tour</span>
+        </button>
+        <button className="btn guide-btn" aria-label="Open the guide: what the AI does here, and an A to Z glossary" title="Guide and A to Z glossary (G)" onClick={() => {
+            rememberFocus();
+            set({ helpOpen: true });
+          }}
+        >
+          <Icon name="help" size={15} />
+          <span>Guide</span>
         </button>
         <button className="iconbtn" aria-label={copy.shortcuts.title} title={copy.shortcuts.title} onClick={() => {
             rememberFocus();

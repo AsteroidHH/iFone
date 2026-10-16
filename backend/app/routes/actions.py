@@ -12,6 +12,8 @@ from app.models.common import (
     GateStatus,
     EdgeType,
     ErrorCode,
+    HandoffStatus,
+    HandoffKind,
 )
 from app.services.gate import quorum_gate
 from app.services.executor import action_executor
@@ -75,7 +77,7 @@ def stage_action(
                 reversibility=req.reversibility,
                 executed=False,
                 confirmed=False,
-                gate=GateStatus.PASSED,  # Evaluated by gate below
+                gate=GateStatus.BLOCKED,  # Evaluated by gate below
                 procedure_id=req.procedure_id,
                 payload=req.payload,
             ),
@@ -119,7 +121,6 @@ def approve_correction(
 ):
     store = get_graph_store(tenant=auth.tenant)
     node_for(store, auth, action_id)
-    from app.models.common import HandoffStatus
     from app.services.event_bus import event_bus
 
     with store._lock:
@@ -147,7 +148,7 @@ def approve_correction(
 
     with store.handoff_lock:
         for h in store.handoffs:
-            if h.context_root_id == action_id or (h.correction_notice and h.correction_notice.get("target_action_id") == action_id):
+            if (h.context_root_id == action_id or (h.correction_notice and h.correction_notice.get("target_action_id") == action_id)) and h.kind == HandoffKind.ESCALATION:
                 h.status = HandoffStatus.COMPLETED
                 if h.correction_notice:
                     h.correction_notice["status"] = "APPROVED_PENDING_DELIVERY"
@@ -158,6 +159,9 @@ def approve_correction(
         "correction_approved",
         {"action_id": action_id, "status": "APPROVED_PENDING_DELIVERY", "notice": notice},
     )
+
+    with store._lock:
+        store.commit()
 
     return {
         "status": "APPROVED_PENDING_DELIVERY",

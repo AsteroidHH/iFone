@@ -1,3 +1,4 @@
+import re
 import uuid
 from typing import Tuple, Optional
 from app.graph.queries import GraphStore
@@ -84,13 +85,18 @@ class QuorumGateService:
                 # Leaf failed both conditions -> Gate blocked!
                 action.action.gate = GateStatus.BLOCKED
                 reason = f"Blocked: Irreversible action rests on uncorroborated leaf fact '{leaf.id}' (origin: {leaf.origin or 'unknown'})."
-                handoff = self._create_review_handoff(store, action, reason, tenant)
+                handoff = self._create_review_handoff(store, action, reason, tenant, request_id=request_id)
                 return GateStatus.BLOCKED, reason, handoff
 
         # All leaf facts passed! Add SUPPORTS edges and pass gate
         action.action.gate = GateStatus.PASSED
+        seen_corroborators = set()
         for edge in corroborating_edges_to_add:
-            store.add_edge(edge, request_id)
+            if edge.source in seen_corroborators:
+                continue
+            seen_corroborators.add(edge.source)
+            if not any(e.source == edge.source and e.target == edge.target and e.type == edge.type for e in store.edges):
+                store.add_edge(edge, request_id)
 
         return GateStatus.PASSED, None, None
 
@@ -105,24 +111,43 @@ class QuorumGateService:
             return None
 
         target_tier = target_fact.asserted_by.tier if target_fact.asserted_by else Tier.NEW
+        target_val_norm = re.sub(r"\s+", " ", str(target_fact.value).strip().lower())
+        ref_node = store.nodes.get(target_fact.source_ref) if target_fact.source_ref else None
+        target_origin = target_fact.origin or getattr(ref_node, "origin", None) or target_fact.source_ref
 
-        for node in store.nodes.values():
+        with store._lock:
+            all_nodes = list(store.nodes.values())
+
+        for node in all_nodes:
             if node.id == target_fact.id or node.kind != NodeKind.FACT or node.status != Status.HEALTHY or getattr(node, "stale", False):
                 continue
 
             if not set(inherited_scopes([node])) <= set(inherited_scopes([target_fact])):
                 continue
-            if node.key == target_fact.key and node.value == target_fact.value:
+
+            node_val_norm = re.sub(r"\s+", " ", str(node.value).strip().lower()) if node.value else ""
+            if node.key == target_fact.key and node_val_norm == target_val_norm:
+                node_ref = store.nodes.get(node.source_ref) if node.source_ref else None
+                node_origin = node.origin or getattr(node_ref, "origin", None) or node.source_ref
                 # Check different origin
-                if node.origin and target_fact.origin and node.origin != target_fact.origin:
+                if node_origin and target_origin and node_origin != target_origin:
                     candidate_tier = node.asserted_by.tier if node.asserted_by else Tier.NEW
                     # Check at least one is established or root
-                    if target_tier in [Tier.ROOT, Tier.ESTABLISHED] or candidate_tier in [Tier.ROOT, Tier.ESTABLISHED]:
+                    if target_tier in [Tier.ROOT, Tier.ESTABLISHED, "root", "established"] or candidate_tier in [Tier.ROOT, Tier.ESTABLISHED, "root", "established"]:
                         return node
 
         return None
 
-    def _create_review_handoff(self, store: GraphStore, action: GraphNode, reason: str, tenant: str) -> Handoff:
+    def _create_review_handoff(self, store: GraphStore, action: GraphNode, reason: str, tenant: str, request_id: Optional[str] = None) -> Handoff:
+        # Check if an existing pending review handoff already exists for this action to guarantee idempotency
+        with store.handoff_lock:
+            existing = next(
+                (h for h in store.handoffs if h.context_root_id == action.id and h.kind == HandoffKind.REVIEW and h.status == HandoffStatus.PENDING),
+                None,
+            )
+            if existing:
+                return existing
+
         handoff = Handoff(
             id=f"hand_gate_{uuid.uuid4().hex[:6]}",
             kind=HandoffKind.REVIEW,
@@ -135,6 +160,7 @@ class QuorumGateService:
             tenant,
             "gate_blocked",
             {"action_id": action.id, "handoff_id": handoff.id, "reason": reason},
+            request_id=request_id,
         )
         return handoff
 

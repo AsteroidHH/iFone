@@ -1,7 +1,9 @@
+import { PageTag } from '../components/PageTag';
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { API_MODE } from '../api/client';
 import { Bars, Donut, EmptyGraphArt, Legend, StackBar, type Slice } from '../components/charts';
+import { AgentStrip } from '../components/AgentStrip';
 import { Icon } from '../components/Icon';
 import { fmt } from '../context/tokens';
 import { useStore, type View } from '../state/store';
@@ -85,9 +87,7 @@ export function Overview() {
   return (
     <div className="page ov" tabIndex={0}>
       <header className="page-head">
-        <p className="page-tag">
-          <span>[00]</span> Overview
-        </p>
+        <PageTag view="overview">Overview</PageTag>
         <h1>{empty ? 'Welcome. Your memory is empty.' : 'Your shared memory at a glance'}</h1>
         <p>{empty ? 'Nothing here is sample data. Add a person, connect their AI, and what it learns appears on this page.' : 'What your agents know, who is connected, and what needs a person.'}</p>
       </header>
@@ -101,6 +101,8 @@ export function Overview() {
           <Icon name="link" size={14} /> Connect an AI
         </Go>
       </section>
+
+      <AgentStrip rows={5} />
 
       {empty ? (
         <section className="ov-empty card wide" aria-label="Get started">

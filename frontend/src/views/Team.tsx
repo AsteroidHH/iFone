@@ -1,3 +1,4 @@
+import { PageTag } from '../components/PageTag';
 import { useMemo, useState } from 'react';
 import { Icon } from '../components/Icon';
 import { fmt } from '../context/tokens';
@@ -222,7 +223,7 @@ function Members({ ws }: { ws: Ws }) {
                 <tr key={m.id}>
                   <th scope="row">
                     <div className="tm-who">
-                      <span className="avatar">{m.name.slice(0, 1)}</span>
+                      <span className="avatar">{[...m.name][0] ?? ''}</span>
                       <span>{m.name}</span>
                       <small className="muted">
                         {levelName(m.role)} · {m.device}
@@ -486,7 +487,7 @@ function Mesh({ ws }: { ws: Ws }) {
               <g key={m.id} transform={`translate(${p.x} ${p.y})`}>
                 <circle r="19" className={`tm-n g${(gOf.get(m.id) ?? 0) % 4}`} />
                 <text y="5" textAnchor="middle" className="tm-n-t">
-                  {m.name.slice(0, 1)}
+                  {[...m.name][0] ?? ''}
                 </text>
                 <circle cx="14" cy="-14" r="5" className={`tm-pres ${m.status === 'unknown' ? 'offline' : m.status}`} />
                 <text y="34" textAnchor="middle" className="tm-n-l">
@@ -579,9 +580,7 @@ export function Team() {
   return (
     <div className="page tm" tabIndex={0}>
       <header className="page-head">
-        <p className="page-tag">
-          <span>[08]</span> Team
-        </p>
+        <PageTag view="team">Team</PageTag>
         <h1>One company, many teams, many AIs</h1>
         <p>Choose a plan, split people into teams, give each person their own token and AI, then link them so context flows between laptops without anyone pasting anything.</p>
       </header>

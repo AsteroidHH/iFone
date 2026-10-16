@@ -7,6 +7,7 @@ import { fetchHealth, type HealthResult } from './api/health';
 import { BlockScreen } from './components/BlockScreen';
 import { SignIn } from './components/SignIn';
 import { Header } from './components/Header';
+import { Guide } from './components/Guide';
 import { Banners, DevConsole, LoadError, Shortcuts, Toasts, VersionBlock } from './components/Overlays';
 import { ContextMenu } from './components/ContextMenu';
 import { focusTrigger, rememberFocus } from './components/focus';
@@ -59,6 +60,10 @@ function useShortcuts() {
         return;
       }
       if (e.key === 'Escape') {
+        if (st.helpOpen) {
+          st.set({ helpOpen: false });
+          return;
+        }
         if (st.paletteOpen) return;
         if (st.ctxMenu) {
           st.set({ ctxMenu: null });
@@ -101,6 +106,11 @@ function useShortcuts() {
         case '?':
           rememberFocus();
           st.set({ shortcutsOpen: true });
+          break;
+        case 'g':
+        case 'G':
+          rememberFocus();
+          st.set({ helpOpen: true });
           break;
         default: {
           const target = viewForKey(e.key, st.story);
@@ -201,6 +211,7 @@ function Shell() {
         <LoadError />
         <Toasts />
         <Shortcuts />
+        <Guide />
         {paletteOpen && (
           <Suspense fallback={null}>
             <CommandPalette />

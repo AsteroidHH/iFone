@@ -1,3 +1,4 @@
+import { PageTag } from '../components/PageTag';
 import { useEffect, useMemo, useState } from 'react';
 import { API_MODE } from '../api/client';
 import { GettingStarted } from '../components/GettingStarted';
@@ -237,7 +238,7 @@ function Row({ a }: { a: Activity }) {
   const saved = a.naive > 0 ? a.naive - a.used : 0;
   return (
     <li className="cn-row">
-      <span className="avatar">{a.member.slice(0, 1)}</span>
+      <span className="avatar">{[...a.member][0] ?? ''}</span>
       <div className="cn-row-main">
         <p>
           <b>{a.member}</b> <code className="cn-tool mono">{a.tool}</code>
@@ -506,9 +507,7 @@ export function Connect() {
   return (
     <div className="page cn" tabIndex={0}>
       <header className="page-head">
-        <p className="page-tag">
-          <span>[07]</span> Connect
-        </p>
+        <PageTag view="connect">Connect</PageTag>
         <h1>Plug any AI into one memory</h1>
         <p>Run one MCP server, paste a snippet into Claude, Cursor, VS Code or anything else that speaks MCP, and every agent reads and writes the same graph.</p>
       </header>
